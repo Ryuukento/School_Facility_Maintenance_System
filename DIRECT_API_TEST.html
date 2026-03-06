@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Direct API Test</title>
+    <style>
+        body { font-family: monospace; background: #0d1117; color: #e6edf3; padding: 20px; }
+        .container { max-width: 1000px; margin: 0 auto; }
+        h1 { color: #58a6ff; }
+        .button { background: #238636; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; margin: 10px 5px 10px 0; }
+        .button:hover { background: #2ea043; }
+        .output { background: #161b22; border: 1px solid #30363d; padding: 20px; border-radius: 6px; margin-top: 20px; }
+        .output pre { background: #0d1117; padding: 15px; border-radius: 4px; overflow-x: auto; }
+        .success { border-color: #3fb950; }
+        .error { border-color: #f85149; }
+        .info-box { background: #161b22; border: 1px solid #30363d; padding: 15px; border-radius: 6px; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔬 Direct API Endpoint Test</h1>
+        
+        <div class="info-box">
+            <h3>📌 Instructions:</h3>
+            <ol>
+                <li>First, make sure you're logged in to the system</li>
+                <li>Then click the buttons below to test the API directly</li>
+                <li>The results will show what the frontend is receiving</li>
+            </ol>
+        </div>
+        
+        <div>
+            <button class="button" onclick="testDebug()">1. Test Debug Endpoint</button>
+            <button class="button" onclick="testReportsList()">2. Test Reports List</button>
+            <button class="button" onclick="testReportsStats()">3. Test Reports Stats</button>
+            <button class="button" onclick="testCheckSession()">4. Check Session</button>
+            <button class="button" onclick="clearOutput()">Clear Output</button>
+        </div>
+        
+        <div id="output" class="output" style="display:none;">
+            <h2>Response:</h2>
+            <pre id="response"></pre>
+        </div>
+    </div>
+
+    <script>
+        const baseURL = '/School_Facility_Maintenance_System/backend/api';
+        
+        function showOutput(title, data, isError = false) {
+            const output = document.getElementById('output');
+            const response = document.getElementById('response');
+            
+            let html = title + '\n\n';
+            if (typeof data === 'string') {
+                html += data;
+            } else {
+                html += JSON.stringify(data, null, 2);
+            }
+            
+            response.textContent = html;
+            output.style.display = 'block';
+            output.classList.toggle('error', isError);
+            output.classList.toggle('success', !isError);
+        }
+        
+        function clearOutput() {
+            document.getElementById('output').style.display = 'none';
+        }
+        
+        async function testDebug() {
+            try {
+                showOutput('Testing: /backend/api/debug-reports.php\n\nLoading...');
+                const response = await fetch(`${baseURL}/debug-reports.php`, {
+                    credentials: 'include'
+                });
+                const data = await response.json();
+                showOutput('✅ DEBUG ENDPOINT RESPONSE', data, !data.success);
+            } catch (error) {
+                showOutput('❌ ERROR in debug test', error.message, true);
+            }
+        }
+        
+        async function testReportsList() {
+            try {
+                showOutput('Testing: /backend/api/reports.php?action=list\n\nLoading...');
+                const response = await fetch(`${baseURL}/reports.php?action=list`, {
+                    credentials: 'include'
+                });
+                const data = await response.json();
+                
+                if (data.success && data.data && data.data.reports) {
+                    showOutput(`✅ REPORTS LIST (${data.data.reports.length} reports)`, data);
+                } else {
+                    showOutput('⚠️ REPORTS LIST RESPONSE', data, !data.success);
+                }
+            } catch (error) {
+                showOutput('❌ ERROR in list test', error.message, true);
+            }
+        }
+        
+        async function testReportsStats() {
+            try {
+                showOutput('Testing: /backend/api/reports.php?action=stats\n\nLoading...');
+                const response = await fetch(`${baseURL}/reports.php?action=stats`, {
+                    credentials: 'include'
+                });
+                const data = await response.json();
+                showOutput('✅ REPORTS STATS RESPONSE', data, !data.success);
+            } catch (error) {
+                showOutput('❌ ERROR in stats test', error.message, true);
+            }
+        }
+        
+        async function testCheckSession() {
+            try {
+                showOutput('Testing: /backend/api/auth.php?action=check\n\nLoading...');
+                const response = await fetch(`${baseURL}/auth.php?action=check`, {
+                    credentials: 'include'
+                });
+                const data = await response.json();
+                showOutput('✅ SESSION CHECK RESPONSE', data);
+            } catch (error) {
+                showOutput('❌ ERROR in session check', error.message, true);
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Database Setup - School Facility Maintenance System</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0a0e1a 0%, #1a1f2e 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 600px;
+            width: 100%;
+            background: #1a1f2e;
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        
+        h1 {
+            color: #e6eef8;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+        
+        .subtitle {
+            color: #9aa3b2;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        
+        .info-box {
+            background: rgba(74, 158, 255, 0.1);
+            border: 1px solid rgba(74, 158, 255, 0.3);
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 24px;
+            color: #9aa3b2;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+        
+        .checklist {
+            margin-bottom: 30px;
+        }
+        
+        .checklist-item {
+            display: flex;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            color: #9aa3b2;
+            font-size: 14px;
+        }
+        
+        .checklist-item:last-child {
+            border-bottom: none;
+        }
+        
+        .check-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: #2d9d78;
+            color: white;
+            font-weight: bold;
+            margin-right: 12px;
+            flex-shrink: 0;
+        }
+        
+        .error-icon {
+            background: #8b2020;
+            color: #ffcccc;
+        }
+        
+        .status-text {
+            flex: 1;
+        }
+        
+        .setup-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: 30px;
+        }
+        
+        .btn {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-decoration: none;
+            display: inline-block;
+            text-align: center;
+        }
+        
+        .btn-primary {
+            background: #4a9eff;
+            color: white;
+            grid-column: 1 / -1;
+        }
+        
+        .btn-primary:hover {
+            background: #3277e6;
+        }
+        
+        .btn-secondary {
+            background: rgba(255,255,255,0.05);
+            color: #9aa3b2;
+        }
+        
+        .btn-secondary:hover {
+            background: rgba(255,255,255,0.1);
+            color: #e6eef8;
+        }
+        
+        .success-message {
+            background: rgba(45, 157, 120, 0.1);
+            border: 1px solid rgba(45, 157, 120, 0.3);
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 24px;
+            color: #9be0b7;
+            font-size: 13px;
+            display: none;
+        }
+        
+        .success-message.show {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Database Setup</h1>
+        <p class="subtitle">Initialize your School Facility Maintenance System database</p>
+        
+        <div class="success-message" id="successMsg">
+            ✓ Database setup completed successfully! Redirecting...
+        </div>
+        
+        <div class="info-box">
+            This will create the necessary tables in your database:
+            <br>• <strong>buildings</strong> - Store building information
+            <br>• <strong>floors</strong> - Store floors belonging to buildings
+            <br>• <strong>rooms</strong> - Store room information linked to floors (and buildings)
+            <br>• <strong>items</strong> - Inventory/equipment inside rooms
+        </div>
+        
+        <div class="checklist">
+            <div class="checklist-item">
+                <div class="check-icon" id="dbCheck">?</div>
+                <div class="status-text">
+                    <strong>Database Connection</strong>
+                    <br><small id="dbStatus">Checking...</small>
+                </div>
+            </div>
+            <div class="checklist-item">
+                <div class="check-icon" id="tableCheck">?</div>
+                <div class="status-text">
+                    <strong>Tables Status</strong>
+                    <br><small id="tableStatus">Checking...</small>
+                </div>
+            </div>
+        </div>
+        
+        <div class="setup-buttons">
+            <button class="btn btn-primary" onclick="setupDatabase()" id="setupBtn">
+                Create/Update Tables
+            </button>
+            <a href="/School_Facility_Maintenance_System/frontend/pages/dashboard.php" class="btn btn-secondary">
+                Skip for Now
+            </a>
+        </div>
+    </div>
+
+    <script>
+        // Check database status on page load
+        async function checkDatabaseStatus() {
+            try {
+                const response = await fetch('/School_Facility_Maintenance_System/backend/api/buildings.php?action=list');
+                const data = await response.json();
+                
+                document.getElementById('dbCheck').innerHTML = '✓';
+                document.getElementById('dbCheck').style.background = '#2d9d78';
+                document.getElementById('dbStatus').innerHTML = 'Connected';
+                
+                document.getElementById('tableCheck').innerHTML = '✓';
+                document.getElementById('tableCheck').style.background = '#2d9d78';
+                document.getElementById('tableStatus').innerHTML = 'Tables exist';
+                
+            } catch (error) {
+                document.getElementById('dbCheck').innerHTML = '!';
+                document.getElementById('dbCheck').classList.add('error-icon');
+                document.getElementById('dbStatus').innerHTML = 'Tables may not exist - click Setup button';
+                
+                document.getElementById('tableCheck').innerHTML = '!';
+                document.getElementById('tableCheck').classList.add('error-icon');
+                document.getElementById('tableStatus').innerHTML = 'Run setup to create tables';
+            }
+        }
+        
+        async function setupDatabase() {
+            const setupBtn = document.getElementById('setupBtn');
+            setupBtn.disabled = true;
+            setupBtn.textContent = 'Setting up...';
+            
+            try {
+                const response = await fetch('/School_Facility_Maintenance_System/backend/setup-database.php');
+                document.getElementById('successMsg').classList.add('show');
+                
+                setTimeout(() => {
+                    window.location.href = '/School_Facility_Maintenance_System/frontend/pages/dashboard.php';
+                }, 2000);
+            } catch (error) {
+                alert('Error setting up database: ' + error);
+                setupBtn.disabled = false;
+                setupBtn.textContent = 'Create/Update Tables';
+            }
+        }
+        
+        // Check status when page loads
+        document.addEventListener('DOMContentLoaded', checkDatabaseStatus);
+    </script>
+</body>
+</html>
