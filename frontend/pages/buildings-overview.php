@@ -78,27 +78,6 @@ $user = $_SESSION['user'];
     </div>
 </div>
 
-<div id="editFloorModal" class="modal">
-    <div class="modal-content">
-        <div class="modal-header">
-            <h2>Edit Floor</h2>
-            <span class="modal-close" onclick="closeEditFloorModal()">&times;</span>
-        </div>
-        <div class="modal-body">
-            <form id="editFloorForm">
-                <div class="form-group">
-                    <label for="editFloorNameInput">Floor Name *</label>
-                    <input type="text" id="editFloorNameInput" class="form-control" required>
-                </div>
-            </form>
-        </div>
-        <div class="modal-footer">
-            <button class="btn btn-secondary" onclick="closeEditFloorModal()">Cancel</button>
-            <button class="btn btn-primary" onclick="saveEditFloor()">Save Changes</button>
-        </div>
-    </div>
-</div>
-
 <div id="itemModal" class="modal">
     <div class="modal-content">
         <div class="modal-header">
@@ -173,8 +152,6 @@ let currentBuildingName = '';
 let currentFloorId = null;
 let currentFloorName = '';
 let currentRoomId = null;
-let currentEditFloorId = null;
-let floorsCache = {};
 let currentEditBuildingId = null;
 let buildingsCache = {};
 
@@ -242,7 +219,6 @@ async function loadFloors(buildingId, buildingName) {
     currentLevel = 'floor'; currentBuildingId = buildingId; currentBuildingName = buildingName;
     currentFloorId = null; currentFloorName = '';
     currentRoomId = null;
-    floorsCache = {};
     document.getElementById('overviewTitle').textContent = 'Floors of ' + buildingName;
     document.getElementById('overviewSubtitle').textContent = 'Select a floor to view rooms';
     clearActions();
@@ -265,7 +241,6 @@ async function loadFloors(buildingId, buildingName) {
         const data = await res.json();
         if (data.success) {
             data.floors.forEach(f => {
-                floorsCache[f.id] = f;
                 const card = createEntityCard(f.name, '', '📐', 'floor', f.id);
                 card.onclick = () => loadRooms(f.id, f.name);
                 container.appendChild(card);
@@ -358,27 +333,58 @@ function createEntityCard(title, subtitle = '', icon = '', type = null, id = nul
         div.dataset.type = type;
         div.dataset.id = id;
     }
-    let html = `<div class="summary-card-content">
-                        <h3 class="summary-card-title">${title}</h3>`;
-    if (subtitle) html += `<p class="summary-card-desc">${subtitle}</p>`;
-    html += '</div>';
-    if (icon) html += `<div class="summary-card-icon">${icon}</div>`;
+    const content = document.createElement('div');
+    content.className = 'summary-card-content';
+    const titleEl = document.createElement('h3');
+    titleEl.className = 'summary-card-title';
+    titleEl.textContent = title;
+    content.appendChild(titleEl);
+    if (subtitle) {
+        const desc = document.createElement('p');
+        desc.className = 'summary-card-desc';
+        desc.textContent = subtitle;
+        content.appendChild(desc);
+    }
+    div.appendChild(content);
+    if (icon) {
+        const iconEl = document.createElement('div');
+        iconEl.className = 'summary-card-icon';
+        iconEl.textContent = icon;
+        div.appendChild(iconEl);
+    }
     if (type && id) {
         if (type === 'building') {
-            html += `<div class="card-actions">
-                        <button class="btn btn-secondary" onclick="event.stopPropagation(); openEditBuildingModal(${id});">Edit</button>
-                        <button class="btn btn-danger" onclick="event.stopPropagation(); deleteEntity('${type}', ${id});">Delete</button>
-                     </div>`;
-        } else if (type === 'floor') {
-            html += `<div class="card-actions">
-                        <button class="btn btn-secondary" onclick="event.stopPropagation(); openEditFloorModal(${id});">Edit</button>
-                        <button class="btn btn-danger" onclick="event.stopPropagation(); deleteEntity('${type}', ${id});">Delete</button>
-                     </div>`;
+            const actions = document.createElement('div');
+            actions.className = 'card-actions';
+            const editBtn = document.createElement('button');
+            editBtn.className = 'btn btn-secondary';
+            editBtn.textContent = 'Edit';
+            editBtn.onclick = (event) => {
+                event.stopPropagation();
+                openEditBuildingModal(id);
+            };
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'btn btn-danger';
+            deleteBtn.textContent = 'Delete';
+            deleteBtn.onclick = (event) => {
+                event.stopPropagation();
+                deleteEntity(type, id);
+            };
+            actions.appendChild(editBtn);
+            actions.appendChild(deleteBtn);
+            div.appendChild(actions);
         } else {
-            html += `<div class="card-delete" onclick="event.stopPropagation(); deleteEntity('${type}', ${id});" title="Delete">&#128465;</div>`;
+            const del = document.createElement('div');
+            del.className = 'card-delete';
+            del.title = 'Delete';
+            del.textContent = '🗑️';
+            del.onclick = (event) => {
+                event.stopPropagation();
+                deleteEntity(type, id);
+            };
+            div.appendChild(del);
         }
     }
-    div.innerHTML = html;
     return div;
 }
 
@@ -551,5 +557,6 @@ async function saveItemData() {
 // initialize on load
 window.addEventListener('DOMContentLoaded', initOverview);
 </script>
+
 
 
