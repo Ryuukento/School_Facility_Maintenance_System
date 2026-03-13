@@ -15,14 +15,19 @@ include __DIR__ . '/../includes/header.php';
                 <h2>Maintenance Reports</h2>
                 <p class="text-muted mb-0">View and manage all maintenance reports</p>
             </div>
-            <a href="/School_Facility_Maintenance_System/frontend/pages/create-report.php" class="btn btn-primary" style="height: fit-content; margin-top: 0;">
-                + New Report
-            </a>
+            <div class="d-flex gap-sm align-center" style="flex-wrap: wrap;">
+                <a href="/School_Facility_Maintenance_System/frontend/pages/reports.php?last_month=1" id="last-month-report-link" class="btn btn-secondary" style="height: fit-content; margin-top: 0; display: inline-flex; align-items: center; gap: 8px;">
+                    <span>📅</span> Last Month Reports
+                </a>
+                <a href="/School_Facility_Maintenance_System/frontend/pages/create-report.php" class="btn btn-primary" style="height: fit-content; margin-top: 0;">
+                    + New Report
+                </a>
+            </div>
         </div>
         
         <div class="card-body">
             <!-- Filters -->
-            <div class="d-flex gap-sm mb-md">
+            <div class="d-flex gap-sm mb-md" style="flex-wrap: wrap; align-items: center;">
                 <select id="filter-status" class="form-control" style="max-width: 200px;">
                     <option value="">All Status</option>
                     <option value="submitted">Submitted</option>
@@ -39,6 +44,10 @@ include __DIR__ . '/../includes/header.php';
                     <option value="high">High</option>
                     <option value="urgent">Urgent</option>
                 </select>
+
+                <input type="date" id="filter-date-from" class="form-control" style="max-width: 180px;" title="From date">
+                <input type="date" id="filter-date-to" class="form-control" style="max-width: 180px;" title="To date">
+                <button id="clear-date-filters" class="btn btn-secondary" type="button">Clear Date</button>
             </div>
             
             <!-- Reports Table -->
@@ -89,28 +98,69 @@ include __DIR__ . '/../includes/header.php';
 
 <?php include __DIR__ . '/../includes/footer.php'; ?>
 
+<script src="/School_Facility_Maintenance_System/frontend/assets/js/utils.js"></script>
+<script src="/School_Facility_Maintenance_System/frontend/assets/js/api.js"></script>
+
 <script>
 let allReports = [];
+let lastMonthOnly = false;
+const REPORTS_API = '/School_Facility_Maintenance_System/backend/api/maintenance-reports-api.php';
+
+function getLastMonthDateRange() {
+    const today = new Date();
+    const lastMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0);
+    const lastMonthStart = new Date(lastMonthEnd.getFullYear(), lastMonthEnd.getMonth(), 1);
+
+    return {
+        start: lastMonthStart,
+        end: lastMonthEnd
+    };
+}
+
+function formatLocalDate(date) {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+}
+
+function extractReportDateKey(createdAt) {
+    if (!createdAt) return null;
+
+    // MySQL DATETIME usually comes as "YYYY-MM-DD HH:MM:SS"
+    const raw = String(createdAt).trim();
+    const directMatch = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+    if (directMatch) {
+        return directMatch[1];
+    }
+
+    // Fallback parser for other possible formats.
+    const normalized = raw.replace(' ', 'T');
+    const parsed = new Date(normalized);
+    if (Number.isNaN(parsed.getTime())) return null;
+    return formatLocalDate(parsed);
+}
 
 // Load all reports
-async function loadReports() {
+async function loadReports(filters = {}) {
     try {
-        console.log('🔄 Loading reports...');
-        console.log('API object available:', typeof API !== 'undefined');
-        console.log('API.getReports available:', typeof API?.getReports === 'function');
-        
-        if (typeof API === 'undefined' || typeof API.getReports !== 'function') {
-            throw new Error('API object not properly initialized');
-        }
-        
-        const response = await API.getReports();
+        const params = new URLSearchParams({
+            action: 'list',
+            per_page: 200,
+            ...filters
+        });
+
+        const res = await fetch(`${REPORTS_API}?${params.toString()}`, {
+            credentials: 'include'
+        });
+        const response = await res.json();
         console.log('✅ API Response:', response);
         
         if (!response.success) {
             throw new Error(response.message || 'Failed to fetch reports');
         }
         
-        if (!response.data || !response.data.reports) {
+        if (!response.data || !Array.isArray(response.data.reports)) {
             console.warn('⚠️ Unexpected response format:', response);
             throw new Error('Invalid response format - missing reports array');
         }
@@ -299,40 +349,93 @@ function getStatusColor(status) {
 function filterReports() {
     const status = document.getElementById('filter-status').value;
     const priority = document.getElementById('filter-priority').value;
-    
-    let filtered = allReports;
-    
-    if (status) {
-        filtered = filtered.filter(r => r.status === status);
+    const dateFrom = document.getElementById('filter-date-from').value;
+    const dateTo = document.getElementById('filter-date-to').value;
+    const hasManualDateRange = Boolean(dateFrom || dateTo);
+    const filters = {};
+
+    // Quick mode applies only when date inputs are blank.
+    if (lastMonthOnly && !hasManualDateRange) {
+        const range = getLastMonthDateRange();
+        filters.date_from = formatLocalDate(range.start);
+        filters.date_to = formatLocalDate(range.end);
+    } else {
+        if (dateFrom) filters.date_from = dateFrom;
+        if (dateTo) filters.date_to = dateTo;
     }
-    
-    if (priority) {
-        filtered = filtered.filter(r => r.priority === priority);
-    }
-    
-    displayReports(filtered);
+
+    if (status) filters.status = status;
+    if (priority) filters.priority = priority;
+
+    loadReports(filters);
 }
 
 // Event listeners
 document.getElementById('filter-status').addEventListener('change', filterReports);
 document.getElementById('filter-priority').addEventListener('change', filterReports);
+document.getElementById('filter-date-from').addEventListener('change', () => {
+    // Manual date range should take priority over quick last-month mode.
+    if (document.getElementById('filter-date-from').value || document.getElementById('filter-date-to').value) {
+        lastMonthOnly = false;
+        const nextUrl = new URL(window.location.href);
+        nextUrl.searchParams.delete('last_month');
+        window.history.replaceState({}, '', nextUrl.toString());
+    }
+    filterReports();
+});
+document.getElementById('filter-date-to').addEventListener('change', () => {
+    // Manual date range should take priority over quick last-month mode.
+    if (document.getElementById('filter-date-from').value || document.getElementById('filter-date-to').value) {
+        lastMonthOnly = false;
+        const nextUrl = new URL(window.location.href);
+        nextUrl.searchParams.delete('last_month');
+        window.history.replaceState({}, '', nextUrl.toString());
+    }
+    filterReports();
+});
+document.getElementById('last-month-report-link').addEventListener('click', (event) => {
+    event.preventDefault();
+    lastMonthOnly = true;
+    const range = getLastMonthDateRange();
+    document.getElementById('filter-date-from').value = formatLocalDate(range.start);
+    document.getElementById('filter-date-to').value = formatLocalDate(range.end);
+    filterReports();
+
+    const nextUrl = new URL(window.location.href);
+    nextUrl.searchParams.set('last_month', '1');
+    window.history.replaceState({}, '', nextUrl.toString());
+});
+
+document.getElementById('clear-date-filters').addEventListener('click', () => {
+    document.getElementById('filter-date-from').value = '';
+    document.getElementById('filter-date-to').value = '';
+    lastMonthOnly = false;
+
+    const nextUrl = new URL(window.location.href);
+    nextUrl.searchParams.delete('last_month');
+    window.history.replaceState({}, '', nextUrl.toString());
+
+    filterReports();
+});
 
 // Initialize - ensure API is available
 function initializeReportsPage() {
-    console.log('🚀 Initializing reports page...');
-    console.log('API object:', typeof API);
-    console.log('API.getReports function:', typeof API?.getReports);
-    
-    if (typeof API !== 'undefined' && typeof API.getReports === 'function') {
-        console.log('✅ API is ready, loading reports now');
-        loadReports();
-    } else {
-        console.warn('⏳ API not ready yet, retrying in 100ms...');
-        setTimeout(initializeReportsPage, 100);
-    }
+    // Match maintenance dashboard behavior: always use server-side filters.
+    filterReports();
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('last_month') === '1') {
+        lastMonthOnly = true;
+        const range = getLastMonthDateRange();
+        document.getElementById('filter-date-from').value = formatLocalDate(range.start);
+        document.getElementById('filter-date-to').value = formatLocalDate(range.end);
+        const btn = document.getElementById('last-month-report-link');
+        btn.classList.remove('btn-secondary');
+        btn.classList.add('btn-primary');
+    }
+
     console.log('📄 DOM Content Loaded - starting initialization');
     initializeReportsPage();
 });

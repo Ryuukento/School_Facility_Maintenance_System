@@ -252,35 +252,37 @@ function createReport() {
         $newStmt->execute([$reportId]);
         $newReport = $newStmt->fetch(PDO::FETCH_ASSOC);
 
-        // ── Notify all super admins (in-app notification + Gmail) ──────────
+        // ── Notify all active admin roles (in-app notification + Gmail) ───
         try {
             require_once __DIR__ . '/../models/Notification.php';
             require_once __DIR__ . '/../services/EmailService.php';
 
             $notification = new Notification($pdo);
 
-            // Get all active super admins (with email for Gmail notification)
-            $adminStmt = $pdo->prepare("SELECT user_id, email, full_name FROM users WHERE role = 'super_admin' AND status = 'active'");
-            $adminStmt->execute();
-            $superAdmins = $adminStmt->fetchAll(PDO::FETCH_ASSOC);
+            // Get all admin recipients, with super admin fallback safety.
+            $adminRecipients = fetchAdminNotificationRecipients($pdo);
 
             $submitterName = $_SESSION['full_name'] ?? $_SESSION['user']['full_name'] ?? 'A staff member';
 
-            foreach ($superAdmins as $admin) {
+            foreach ($adminRecipients as $admin) {
                 // 1. In-app bell notification
-                $notification->create([
+                $created = $notification->create([
                     'user_id'   => $admin['user_id'],
                     'report_id' => $reportId,
                     'title'     => 'New Maintenance Report Submitted',
                     'message'   => $submitterName . ' submitted a new report: ' . $title
                 ]);
+
+                if (!$created) {
+                    error_log('[createReport] Failed to insert notification for user_id=' . (int)$admin['user_id']);
+                }
             }
 
             // 2. Gmail email notification (batch)
             if (class_exists('EmailService')) {
                 EmailService::sendNewReportNotification(
                     array_merge($newReport ?? [], ['submitted_by' => $submitterName]),
-                    $superAdmins
+                    $adminRecipients
                 );
             }
         } catch (Exception $notifEx) {
@@ -478,3 +480,47 @@ function sendResponse($success, $message, $data = null) {
     echo json_encode($response);
     exit;
 }
+
+/**
+ * Resolve notification recipients for report events.
+ * Prefers active admin roles and always includes super admins as fallback.
+ */
+function fetchAdminNotificationRecipients(PDO $pdo): array {
+    $recipientsById = [];
+
+    $primaryStmt = $pdo->prepare(
+        "SELECT user_id, email, full_name
+         FROM users
+                 WHERE role IN ('super_admin', 'admin', 'maintenance_admin', 'department_admin')
+           AND status = 'active'"
+    );
+    $primaryStmt->execute();
+
+    foreach ($primaryStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $uid = (int)($row['user_id'] ?? 0);
+        if ($uid > 0) {
+            $recipientsById[$uid] = $row;
+        }
+    }
+
+    $superStmt = $pdo->prepare(
+        "SELECT user_id, email, full_name
+         FROM users
+            WHERE role IN ('super_admin', 'admin')"
+    );
+    $superStmt->execute();
+
+    foreach ($superStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $uid = (int)($row['user_id'] ?? 0);
+        if ($uid > 0) {
+            $recipientsById[$uid] = $row;
+        }
+    }
+
+    return array_values($recipientsById);
+}
+
+/**
+ * Normalize incoming date filter to Y-m-d.
+ */
+

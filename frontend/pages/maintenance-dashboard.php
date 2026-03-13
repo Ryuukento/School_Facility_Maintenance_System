@@ -39,13 +39,6 @@ $pdo = getDBConnection();
     <!-- Page Header -->
     <div class="page-header mb-lg">
         <h1 style="margin: 0;">Maintenance Dashboard</h1>
-        <p class="text-muted" style="margin: 5px 0 0 0;">Track and manage facility maintenance reports</p>
-        <p style="margin: 8px 0 0 0; font-size: 0.95em;">
-            Logged in as <strong><?php echo htmlspecialchars($user['full_name']); ?></strong>
-            <span class="badge badge-secondary" style="text-transform: capitalize; margin-left: 5px;">
-                <?php echo htmlspecialchars(str_replace('_', ' ', $user['role'])); ?>
-            </span>
-        </p>
     </div>
 
     <!-- Statistics Cards -->
@@ -126,16 +119,6 @@ $pdo = getDBConnection();
                 <p class="stat-meta text-muted">Days to complete</p>
             </div>
         </div>
-    </div>
-
-    <!-- Quick Actions -->
-    <div class="quick-actions mb-lg">
-        <a href="/School_Facility_Maintenance_System/frontend/pages/maintenance-create-report.php" class="btn btn-primary" style="display: inline-flex; align-items: center; gap: 8px;">
-            <span>➕</span> Create New Report
-        </a>
-        <a href="/School_Facility_Maintenance_System/frontend/pages/maintenance-reports-list.php" class="btn btn-secondary" style="display: inline-flex; align-items: center; gap: 8px;">
-            <span>📋</span> View All Reports
-        </a>
     </div>
 
     <!-- Charts Section -->

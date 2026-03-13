@@ -217,13 +217,20 @@ main {
 .user-profile {
     display: flex;
     align-items: center;
-    justify-content: center;
+    gap: 10px;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.user-avatar-wrap {
     width: 40px;
     height: 40px;
     border-radius: 50%;
     background-color: rgba(255, 255, 255, 0.15);
-    cursor: pointer;
-    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
 }
 
 .avatar-img {
@@ -245,6 +252,32 @@ main {
     font-size: 14px;
 }
 
+.user-profile-meta {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.user-name {
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: 600;
+    max-width: 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.user-title {
+    color: rgba(255, 255, 255, 0.78);
+    font-size: 11px;
+    line-height: 1.2;
+    max-width: 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 /* Responsive adjustment for main on mobile */
 @media (max-width: 768px) {
     .navbar {
@@ -257,6 +290,10 @@ main {
     
     .nav-links {
         gap: 12px;
+    }
+
+    .user-profile-meta {
+        display: none;
     }
 }
 
@@ -853,3 +890,4 @@ main {
         grid-template-columns: 1fr;
     }
 }
+

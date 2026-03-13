@@ -23,19 +23,10 @@ $stmt = $pdo->query("SELECT * FROM departments WHERE status = 'active' ORDER BY 
 $departments = $stmt->fetchAll();
 
 $user = $_SESSION['user'];
+$pageTitle = 'Create Report - SFMS';
+include __DIR__ . '/../includes/header.php';
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Create Report - School Facility Maintenance System</title>
-    <link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/styles.css">
-    <link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/color-scheme.css">
-</head>
-<body>
-
-<main class="container">
+<main class="container" style="margin-top: 20px;">
     <div class="card" style="max-width: 800px; margin: 0 auto;">
         <div class="card-header">
             <h2>Create New Maintenance Report</h2>
@@ -109,9 +100,6 @@ $user = $_SESSION['user'];
         </div>
     </div>
 </main>
-
-<script src="/School_Facility_Maintenance_System/frontend/assets/js/utils.js"></script>
-<script src="/School_Facility_Maintenance_System/frontend/assets/js/api.js"></script>
 
 <script>
 // Ensure API and Session are defined globally
@@ -196,5 +184,4 @@ document.getElementById('report-form').addEventListener('submit', async (e) => {
 });
 </script>
 
-</body>
-</html>
+<?php include __DIR__ . '/../includes/footer.php'; ?>

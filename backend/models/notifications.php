@@ -8,12 +8,16 @@ if (class_exists('SessionMiddleware')) {
 
 header('Content-Type: application/json');
 
-if (!isset($_SESSION['user'])) {
+if (!isset($_SESSION['user_id']) && !isset($_SESSION['user']['user_id'])) {
     http_response_code(401);
     die(json_encode(['success' => false, 'message' => 'Unauthorized']));
 }
 
-$user = $_SESSION['user'];
+$userId = (int)($_SESSION['user_id'] ?? $_SESSION['user']['user_id'] ?? 0);
+if ($userId <= 0) {
+    http_response_code(401);
+    die(json_encode(['success' => false, 'message' => 'Unauthorized']));
+}
 
 // Allow all authenticated users to access notifications
 // if ($user['role'] !== 'super_admin') {
@@ -30,7 +34,7 @@ try {
     switch ($action) {
         case 'getUnread':
             $limit = $_GET['limit'] ?? 10;
-            $unread = $notification->getUnread($user['user_id'], (int)$limit);
+            $unread = $notification->getUnread($userId, (int)$limit);
             echo json_encode([
                 'success' => true,
                 'data' => [
@@ -43,8 +47,8 @@ try {
         case 'getAll':
             $limit = $_GET['limit'] ?? 50;
             $offset = $_GET['offset'] ?? 0;
-            $all = $notification->getAll($user['user_id'], (int)$limit, (int)$offset);
-            $count = $notification->countUnread($user['user_id']);
+            $all = $notification->getAll($userId, (int)$limit, (int)$offset);
+            $count = $notification->countUnread($userId);
             echo json_encode([
                 'success' => true,
                 'data' => [
@@ -64,7 +68,7 @@ try {
             break;
             
         case 'markAllAsRead':
-            $notification->markAllAsRead($user['user_id']);
+            $notification->markAllAsRead($userId);
             echo json_encode(['success' => true, 'message' => 'All marked as read']);
             break;
             
@@ -78,7 +82,7 @@ try {
             break;
             
         case 'count':
-            $count = $notification->countUnread($user['user_id']);
+            $count = $notification->countUnread($userId);
             echo json_encode([
                 'success' => true,
                 'data' => ['count' => $count]

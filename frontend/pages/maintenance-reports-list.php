@@ -45,9 +45,23 @@ $pdo = getDBConnection();
         </div>
         
         <div class="card-body">
+            <!-- Filter Buttons -->
+            <div style="margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap;">
+                <button id="last-month-btn" class="btn btn-primary" style="display: inline-flex; align-items: center; gap: 8px;">
+                    <span>📅</span> Last Month Reports
+                </button>
+                <button id="clear-date-filters" class="btn btn-secondary" style="display: inline-flex; align-items: center; gap: 8px;">
+                    <span>🔄</span> Clear Date Filter
+                </button>
+            </div>
+
             <!-- Filters -->
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 20px;">
                 <input type="text" id="search" placeholder="Search title..." class="form-control" style="min-width: 200px;">
+                
+                <input type="date" id="filter-date-from" placeholder="From Date" class="form-control">
+                
+                <input type="date" id="filter-date-to" placeholder="To Date" class="form-control">
                 
                 <select id="filter-status" class="form-control">
                     <option value="">All Status</option>
@@ -67,7 +81,7 @@ $pdo = getDBConnection();
                     <option value="critical">Critical</option>
                 </select>
 
-                <button id="clear-filters" class="btn btn-secondary" style="justify-self: start;">Clear Filters</button>
+                <button id="clear-filters" class="btn btn-secondary" style="justify-self: start;">Clear All Filters</button>
             </div>
             
             <!-- Reports Table -->
@@ -93,6 +107,18 @@ let currentPage = 1;
 let currentFilters = {};
 
 const API_BASE = '/School_Facility_Maintenance_System/backend/api/maintenance-reports-api.php';
+
+// Helper function to get last month date range
+function getLastMonthDateRange() {
+    const today = new Date();
+    const lastMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0); // Last day of previous month
+    const lastMonthStart = new Date(lastMonthEnd.getFullYear(), lastMonthEnd.getMonth(), 1); // First day of previous month
+    
+    return {
+        start: lastMonthStart.toISOString().split('T')[0],
+        end: lastMonthEnd.toISOString().split('T')[0]
+    };
+}
 
 window.UI = window.UI || {
     getPriorityBadge(priority) {
@@ -193,7 +219,9 @@ function applyFilters() {
     currentFilters = {
         search: document.getElementById('search').value,
         status: document.getElementById('filter-status').value,
-        priority: document.getElementById('filter-priority').value
+        priority: document.getElementById('filter-priority').value,
+        date_from: document.getElementById('filter-date-from').value,
+        date_to: document.getElementById('filter-date-to').value
     };
     
     // Remove empty filters
@@ -208,17 +236,45 @@ function applyFilters() {
 document.getElementById('search').addEventListener('keyup', applyFilters);
 document.getElementById('filter-status').addEventListener('change', applyFilters);
 document.getElementById('filter-priority').addEventListener('change', applyFilters);
+document.getElementById('filter-date-from').addEventListener('change', applyFilters);
+document.getElementById('filter-date-to').addEventListener('change', applyFilters);
 
 document.getElementById('clear-filters').addEventListener('click', () => {
     document.getElementById('search').value = '';
     document.getElementById('filter-status').value = '';
     document.getElementById('filter-priority').value = '';
+    document.getElementById('filter-date-from').value = '';
+    document.getElementById('filter-date-to').value = '';
     currentFilters = {};
     loadReports(1);
 });
 
+// Last Month button handler
+document.getElementById('last-month-btn').addEventListener('click', () => {
+    const dateRange = getLastMonthDateRange();
+    document.getElementById('filter-date-from').value = dateRange.start;
+    document.getElementById('filter-date-to').value = dateRange.end;
+    applyFilters();
+});
+
+// Clear date filters button
+document.getElementById('clear-date-filters').addEventListener('click', () => {
+    document.getElementById('filter-date-from').value = '';
+    document.getElementById('filter-date-to').value = '';
+    applyFilters();
+});
+
 // Initialize
-document.addEventListener('DOMContentLoaded', () => loadReports(1));
+document.addEventListener('DOMContentLoaded', () => {
+    // Check if coming from "Last Month" button
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('last_month') === '1') {
+        const dateRange = getLastMonthDateRange();
+        document.getElementById('filter-date-from').value = dateRange.start;
+        document.getElementById('filter-date-to').value = dateRange.end;
+    }
+    loadReports(1);
+});
 </script>
 
 </body>

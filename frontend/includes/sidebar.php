@@ -88,12 +88,26 @@ $current_page = basename($_SERVER['PHP_SELF']);
                     <span class="nav-text">User Management</span>
                 </a>
             </li>
+
+            <?php if (!empty($user) && in_array($user['role'], ['super_admin', 'maintenance_admin'], true)): ?>
+            <!-- Settings (for Super Admin and Maintenance Admin) -->
+            <li class="nav-item">
+                <a href="settings.php" class="nav-link <?php echo ($current_page === 'settings.php') ? 'active' : ''; ?>" data-page="settings">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path d="M12 1V3M12 21V23M4.22 4.22L5.64 5.64M18.36 18.36L19.78 19.78M1 12H3M21 12H23M4.22 19.78L5.64 18.36M18.36 5.64L19.78 4.22"></path>
+                    </svg>
+                    <span class="nav-text">Settings</span>
+                </a>
+            </li>
+            <?php endif; ?>
         </ul>
     </nav>
 
     <!-- Sidebar Footer -->
     <div class="sidebar-footer">
         <ul class="nav-menu">
+            <?php if (empty($user) || !in_array($user['role'], ['super_admin', 'maintenance_admin'], true)): ?>
             <!-- Settings -->
             <li class="nav-item">
                 <a href="settings.php" class="nav-link <?php echo ($current_page === 'settings.php') ? 'active' : ''; ?>" data-page="settings">
@@ -104,18 +118,8 @@ $current_page = basename($_SERVER['PHP_SELF']);
                     <span class="nav-text">Settings</span>
                 </a>
             </li>
+            <?php endif; ?>
 
-            <!-- Logout -->
-            <li class="nav-item">
-                <a href="logout.php" class="nav-link">
-                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M9 21H5C3.9 21 3 20.1 3 19V5C3 3.9 3.9 3 5 3H9"></path>
-                        <polyline points="16 17 21 12 16 7"></polyline>
-                        <line x1="21" y1="12" x2="9" y2="12"></line>
-                    </svg>
-                    <span class="nav-text">Logout</span>
-                </a>
-            </li>
         </ul>
     </div>
     <style>

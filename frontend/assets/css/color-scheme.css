@@ -1,6 +1,6 @@
 /* ===================================================================
    School Facility Maintenance Reporting System
-   Professional Violet & White Color Scheme
+    Professional Violet & White Color Scheme
    =================================================================== */
 
 :root {
@@ -468,26 +468,26 @@
 
 /* LOW - Violet background with violet text */
 .badge-low {
-    background-color: #F3E9FF;
-    color: #8A2BE2;
-    border: 1px solid #E0D9FF;
+    background-color: #F8E5FF;
+    color: #BF00FF;
+    border: 1px solid #E9CCFF;
 }
 
 .badge-low:hover {
     background-color: #E8DFFF;
-    color: #6A1BBE;
+    color: #8F00CC;
 }
 
 /* SUBMITTED - Violet background with dark violet text */
 .badge-submitted {
-    background-color: #F3E9FF;
-    color: #6A1BBE;
-    border: 1px solid #D0BAFF;
+    background-color: #F8E5FF;
+    color: #8F00CC;
+    border: 1px solid #DDB3FF;
 }
 
 .badge-submitted:hover {
-    background-color: #D0BAFF;
-    color: #5A0BAE;
+    background-color: #DDB3FF;
+    color: #7300A3;
 }
 
 /* ASSIGNED - Amber background with amber text */
@@ -1134,3 +1134,4 @@ a:focus {
         page-break-inside: avoid;
     }
 }
+

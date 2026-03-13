@@ -31,6 +31,16 @@ $user = $_SESSION['user'];
                     <div class="summary-card-icon">📄</div>
                 </div>
 
+                <!-- Reports Today Card -->
+                <div class="summary-card">
+                    <div class="summary-card-content">
+                        <h3 class="summary-card-title">Reports Today</h3>
+                        <div class="summary-card-value" id="stat-today">-</div>
+                        <p class="summary-card-desc">Submitted today</p>
+                    </div>
+                    <div class="summary-card-icon">📅</div>
+                </div>
+
                 <!-- Low Stock Items Card -->
                 <div class="summary-card summary-card-alert">
                     <div class="summary-card-content">
@@ -76,11 +86,21 @@ $user = $_SESSION['user'];
             <div class="dashboard-bottom mt-md">
                 <div class="card chart-card">
                     <div class="card-header">
-                        <h2>Reports Overview</h2>
-                        <p class="text-muted mb-0">A summary of report statuses.</p>
+                        <h2>Reports by Status</h2>
+                        <p class="text-muted mb-0">Current distribution of report statuses.</p>
                     </div>
                     <div class="card-body">
-                        <canvas id="reportsChart" class="chart-canvas"></canvas>
+                        <canvas id="reportsStatusChart" class="chart-canvas"></canvas>
+                    </div>
+                </div>
+
+                <div class="card chart-card">
+                    <div class="card-header">
+                        <h2>Reports by Priority</h2>
+                        <p class="text-muted mb-0">Priority levels across all reports.</p>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="reportsPriorityChart" class="chart-canvas"></canvas>
                     </div>
                 </div>
 
@@ -304,6 +324,9 @@ $user = $_SESSION['user'];
 </style>
 
 <script>
+
+let reportsStatusChart;
+let reportsPriorityChart;
 // Modal Functions
 function openBuildingModal() {
     document.getElementById('buildingModal').classList.add('show');
@@ -516,68 +539,225 @@ window.addEventListener('click', function(event) {
 
 <script>
 
+function buildStatsFromReports(reports) {
+    const stats = {
+        total: 0,
+        reports_today: 0,
+        submitted: 0,
+        assigned: 0,
+        in_progress: 0,
+        completed: 0,
+        closed: 0,
+        cancelled: 0,
+        by_priority: {
+            low: 0,
+            medium: 0,
+            high: 0,
+            urgent: 0,
+            critical: 0
+        }
+    };
+
+    const now = new Date();
+    const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+    reports.forEach((report) => {
+        const status = (report.status || '').toLowerCase();
+        const priority = (report.priority || '').toLowerCase();
+        const createdAt = (report.created_at || '').toString().slice(0, 10);
+
+        stats.total += 1;
+
+        if (createdAt === todayKey) {
+            stats.reports_today += 1;
+        }
+
+        if (Object.prototype.hasOwnProperty.call(stats, status)) {
+            stats[status] += 1;
+        }
+
+        if (Object.prototype.hasOwnProperty.call(stats.by_priority, priority)) {
+            stats.by_priority[priority] += 1;
+        }
+    });
+
+    return stats;
+}
+
+async function fetchDashboardStats() {
+    // Primary source: dedicated stats endpoint
+    const statsResp = await fetch('/School_Facility_Maintenance_System/backend/api/reports.php?action=stats', {
+        credentials: 'include'
+    });
+    const statsJson = await statsResp.json();
+
+    if (statsJson.success && statsJson.data && statsJson.data.stats) {
+        const stats = statsJson.data.stats;
+
+        // Add reports_today and fill extended priority fields from list endpoint.
+        try {
+            const reportsResp = await fetch('/School_Facility_Maintenance_System/backend/api/reports.php?action=list', {
+                credentials: 'include'
+            });
+            const reportsJson = await reportsResp.json();
+            if (reportsJson.success && reportsJson.data && Array.isArray(reportsJson.data.reports)) {
+                const derived = buildStatsFromReports(reportsJson.data.reports);
+                stats.reports_today = derived.reports_today;
+                stats.by_priority = {
+                    low: stats.by_priority?.low ?? derived.by_priority.low,
+                    medium: stats.by_priority?.medium ?? derived.by_priority.medium,
+                    high: stats.by_priority?.high ?? derived.by_priority.high,
+                    urgent: stats.by_priority?.urgent ?? derived.by_priority.urgent,
+                    critical: stats.by_priority?.critical ?? derived.by_priority.critical
+                };
+            }
+        } catch (deriveErr) {
+            console.error('Could not derive reports_today from list endpoint:', deriveErr);
+            stats.reports_today = stats.reports_today || 0;
+            stats.by_priority = stats.by_priority || { low: 0, medium: 0, high: 0, urgent: 0, critical: 0 };
+        }
+
+        return stats;
+    }
+
+    // Fallback source: compute from report list endpoint
+    const reportsResp = await fetch('/School_Facility_Maintenance_System/backend/api/reports.php?action=list', {
+        credentials: 'include'
+    });
+    const reportsJson = await reportsResp.json();
+
+    if (reportsJson.success && reportsJson.data && Array.isArray(reportsJson.data.reports)) {
+        return buildStatsFromReports(reportsJson.data.reports);
+    }
+
+    return {
+        total: 0,
+        reports_today: 0,
+        submitted: 0,
+        assigned: 0,
+        in_progress: 0,
+        completed: 0,
+        closed: 0,
+        cancelled: 0,
+        by_priority: {
+            low: 0,
+            medium: 0,
+            high: 0,
+            urgent: 0,
+            critical: 0
+        }
+    };
+}
+
 // Populate stats and chart
 async function initDashboard() {
     try {
-        const statsResp = await API.getStats();
-        const stats = statsResp.data.stats || {};
+        const stats = await fetchDashboardStats();
 
-        // Fill stats cards (fallback to sample numbers if undefined)
-        const total = stats.total || 4;
-        const submitted = stats.submitted || 1;
-        const inProgress = stats.in_progress || 2;
-        const completed = stats.completed || 1;
-        const lowStock = stats.low_stock || 2;
+        // Fill stats cards with real data
+        const total      = stats.total       || 0;
+        const todayCount = stats.reports_today || 0;
+        const submitted  = stats.submitted   || 0;
+        const assigned   = stats.assigned    || 0;
+        const inProgress = stats.in_progress || 0;
+        const completed  = stats.completed   || 0;
+        const closed     = stats.closed      || 0;
+        const cancelled  = stats.cancelled   || 0;
+        const priorityLow = stats.by_priority?.low || 0;
+        const priorityMedium = stats.by_priority?.medium || 0;
+        const priorityHigh = stats.by_priority?.high || 0;
+        const priorityUrgent = stats.by_priority?.urgent || 0;
+        const priorityCritical = stats.by_priority?.critical || 0;
 
         document.getElementById('stat-total').textContent = total;
-        document.getElementById('stat-low').textContent = lowStock;
+        document.getElementById('stat-today').textContent = todayCount;
+        const lowEl = document.getElementById('stat-low');
+        lowEl.textContent = (stats.low_stock !== undefined) ? stats.low_stock : '—';
 
-        // Prepare chart data as fractions (0-1)
-        const sum = submitted + inProgress + completed + (stats.cancelled || 0);
-        const pendingVal = (submitted / (sum || 1));
-        const ongoingVal = (inProgress / (sum || 1));
-        const fixedVal = (completed / (sum || 1));
-        const cancelledVal = ((stats.cancelled || 0) / (sum || 1));
-
-        const ctx = document.getElementById('reportsChart').getContext('2d');
-        window.reportsChart = new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: ['Pending', 'Ongoing', 'Fixed', 'Cancelled'],
-                datasets: [{
-                    label: 'Status',
-                    data: [pendingVal, ongoingVal, fixedVal, cancelledVal],
-                    backgroundColor: ['#d4a574', '#4a9eff', '#2d9d78', '#8b9aaf'],
-                    borderRadius: 6,
-                    barThickness: 36
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    y: {
-                        min: 0,
-                        max: 1,
-                        ticks: {
-                            stepSize: 0.25,
-                            color: getComputedStyle(document.documentElement).getPropertyValue('--muted-text') || '#9aa3b2'
+        // Render chart separately so card values do not fail if chart has issues.
+        try {
+            if (typeof Chart !== 'undefined') {
+                const statusCanvas = document.getElementById('reportsStatusChart');
+                if (statusCanvas) {
+                    const statusCtx = statusCanvas.getContext('2d');
+                    if (reportsStatusChart) reportsStatusChart.destroy();
+                    reportsStatusChart = new Chart(statusCtx, {
+                        type: 'doughnut',
+                        data: {
+                            labels: ['Submitted', 'Assigned', 'In Progress', 'Completed', 'Closed', 'Cancelled'],
+                            datasets: [{
+                                data: [submitted, assigned, inProgress, completed, closed, cancelled],
+                                backgroundColor: ['#3b82f6', '#f59e0b', '#8b5cf6', '#10b981', '#6b7280', '#ef4444'],
+                                borderColor: '#ffffff',
+                                borderWidth: 2
+                            }]
                         },
-                        grid: { color: 'rgba(255,255,255,0.03)' }
-                    },
-                    x: {
-                        ticks: { color: getComputedStyle(document.documentElement).getPropertyValue('--muted-text') || '#9aa3b2' },
-                        grid: { display: false }
-                    }
-                },
-                plugins: {
-                    legend: { display: false }
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: {
+                                    position: 'bottom'
+                                }
+                            }
+                        }
+                    });
+                }
+
+                const priorityCanvas = document.getElementById('reportsPriorityChart');
+                if (priorityCanvas) {
+                    const priorityCtx = priorityCanvas.getContext('2d');
+                    if (reportsPriorityChart) reportsPriorityChart.destroy();
+                    reportsPriorityChart = new Chart(priorityCtx, {
+                        type: 'bar',
+                        data: {
+                            labels: ['Low', 'Medium', 'High', 'Urgent', 'Critical'],
+                            datasets: [{
+                                label: 'Reports',
+                                data: [priorityLow, priorityMedium, priorityHigh, priorityUrgent, priorityCritical],
+                                backgroundColor: ['#94a3b8', '#3b82f6', '#f59e0b', '#ef4444', '#991b1b'],
+                                borderRadius: 6,
+                                barThickness: 36
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    ticks: {
+                                        precision: 0,
+                                        color: getComputedStyle(document.documentElement).getPropertyValue('--muted-text') || '#9aa3b2'
+                                    },
+                                    grid: { color: 'rgba(255,255,255,0.05)' }
+                                },
+                                x: {
+                                    ticks: { color: getComputedStyle(document.documentElement).getPropertyValue('--muted-text') || '#9aa3b2' },
+                                    grid: { display: false }
+                                }
+                            },
+                            plugins: {
+                                legend: { display: false },
+                                tooltip: {
+                                    callbacks: {
+                                        label: c => ` ${c.parsed.y} report${c.parsed.y !== 1 ? 's' : ''}`
+                                    }
+                                }
+                            }
+                        }
+                    });
                 }
             }
-        });
+        } catch (chartErr) {
+            console.error('Chart render error:', chartErr);
+        }
 
     } catch (err) {
         console.error('Error initializing dashboard:', err);
+        document.getElementById('stat-total').textContent = '0';
+        const todayEl = document.getElementById('stat-today');
+        if (todayEl) todayEl.textContent = '0';
     }
 
     await renderRecentActivity();
@@ -692,15 +872,6 @@ async function addRoom() {
 </script>
 
 <?php include __DIR__ . '/../includes/footer.php'; ?>
-
-<script>
-// Initialize dashboard after api.js is loaded
-document.addEventListener('DOMContentLoaded', () => {
-    initDashboard();
-    loadBuildingsForDropdown();
-});
-</script>
-
 
 <script>
 // Initialize dashboard after api.js is loaded

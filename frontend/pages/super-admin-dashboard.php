@@ -37,7 +37,7 @@ $pageTitle = 'System Administration Dashboard';
         }
 
         .system-dashboard h1 {
-            color: #1e3a5f;
+            color: #8F00CC;
             margin-bottom: 10px;
             font-size: 28px;
             font-weight: 700;
@@ -61,7 +61,7 @@ $pageTitle = 'System Administration Dashboard';
             padding: 25px;
             border-radius: 10px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            border-left: 5px solid #1e3a5f;
+            border-left: 5px solid #8F00CC;
             display: flex;
             flex-direction: column;
             justify-content: space-between;
@@ -101,7 +101,7 @@ $pageTitle = 'System Administration Dashboard';
         }
 
         .stat-value {
-            color: #1e3a5f;
+            color: #8F00CC;
             font-size: 32px;
             font-weight: 700;
             margin-bottom: 5px;
@@ -130,7 +130,7 @@ $pageTitle = 'System Administration Dashboard';
         }
 
         .chart-title {
-            color: #1e3a5f;
+            color: #8F00CC;
             font-size: 16px;
             font-weight: 700;
             margin-bottom: 15px;
@@ -159,7 +159,7 @@ $pageTitle = 'System Administration Dashboard';
         }
 
         .overview-title {
-            color: #1e3a5f;
+            color: #8F00CC;
             font-size: 16px;
             font-weight: 700;
             margin-bottom: 15px;
@@ -187,13 +187,13 @@ $pageTitle = 'System Administration Dashboard';
         }
 
         .overview-list .name {
-            color: #1e3a5f;
+            color: #8F00CC;
             font-weight: 500;
         }
 
         .overview-list .count {
             background: #e5e7eb;
-            color: #1e3a5f;
+            color: #8F00CC;
             padding: 3px 10px;
             border-radius: 20px;
             font-size: 12px;
@@ -209,7 +209,7 @@ $pageTitle = 'System Administration Dashboard';
         }
 
         .recent-activity-title {
-            color: #1e3a5f;
+            color: #8F00CC;
             font-size: 16px;
             font-weight: 700;
             margin-bottom: 15px;
@@ -237,7 +237,7 @@ $pageTitle = 'System Administration Dashboard';
         }
 
         .activity-badge {
-            background: #1e3a5f;
+            background: #8F00CC;
             color: white;
             padding: 4px 8px;
             border-radius: 4px;
@@ -252,7 +252,7 @@ $pageTitle = 'System Administration Dashboard';
         }
 
         .activity-user {
-            color: #1e3a5f;
+            color: #8F00CC;
             font-weight: 600;
             margin-bottom: 2px;
         }
@@ -280,7 +280,7 @@ $pageTitle = 'System Administration Dashboard';
             height: 20px;
             margin-left: 10px;
             border: 3px solid #e5e7eb;
-            border-top-color: #1e3a5f;
+            border-top-color: #8F00CC;
             border-radius: 50%;
             animation: spin 0.8s linear infinite;
             vertical-align: middle;
@@ -321,8 +321,17 @@ $pageTitle = 'System Administration Dashboard';
     <?php include '../includes/header.php'; ?>
     
     <div class="system-dashboard">
-        <h1>System Administration Dashboard</h1>
-        <p class="dashboard-subtitle">System-wide overview and statistics</p>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
+            <div>
+                <h1>System Administration Dashboard</h1>
+                <p class="dashboard-subtitle">System-wide overview and statistics</p>
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <a href="/School_Facility_Maintenance_System/frontend/pages/maintenance-reports-list.php?last_month=1" class="btn btn-primary" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; text-decoration: none; border-radius: 6px; background: #8F00CC; color: white; font-weight: 500; white-space: nowrap;">
+                    <span>ðŸ“…</span> Last Month Reports
+                </a>
+            </div>
+        </div>
 
         <!-- Statistics Cards -->
         <div class="dashboard-grid" id="statsContainer">
@@ -357,6 +366,16 @@ $pageTitle = 'System Administration Dashboard';
             </div>
         </div>
 
+        <!-- Reports Overview Section -->
+        <div class="overview-section" style="margin-bottom: 30px;">
+            <div class="overview-card" style="grid-column: 1 / -1;">
+                <div class="overview-title">ðŸ“Š Reports Overview by Status</div>
+                <div id="reportsOverviewContainer" style="display: flex; flex-wrap: wrap; gap: 12px; padding-top: 5px;">
+                    <div class="loading">Loading reports overview...</div>
+                </div>
+            </div>
+        </div>
+
         <!-- Overview Section -->
         <div class="overview-section">
             <div class="overview-card">
@@ -380,31 +399,71 @@ $pageTitle = 'System Administration Dashboard';
                 <li><div class="loading">Loading activity...</div></li>
             </ul>
         </div>
+
+        <!-- Last Month Reports Section -->
+        <div class="recent-activity-section">
+            <div class="recent-activity-title">ðŸ“… Last Month Reports</div>
+            
+            <!-- Filter Options -->
+            <div style="margin-bottom: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px;">
+                <select id="last-month-status-filter" class="form-control" style="padding: 8px 12px; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 14px;">
+                    <option value="">All Status</option>
+                    <option value="submitted">Submitted</option>
+                    <option value="assigned">Assigned</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="completed">Completed</option>
+                    <option value="closed">Closed</option>
+                </select>
+                
+                <select id="last-month-priority-filter" class="form-control" style="padding: 8px 12px; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 14px;">
+                    <option value="">All Priority</option>
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                    <option value="urgent">Urgent</option>
+                    <option value="critical">Critical</option>
+                </select>
+
+                <input type="date" id="last-month-date-from" class="form-control" style="padding: 8px 12px; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 14px;">
+
+                <input type="date" id="last-month-date-to" class="form-control" style="padding: 8px 12px; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 14px;">
+
+                <input type="text" id="last-month-search" placeholder="Search title..." class="form-control" style="padding: 8px 12px; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 14px;">
+                
+                <button id="last-month-clear-filters" class="btn btn-secondary" style="padding: 8px 12px; background: #6b7280; color: white; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; font-weight: 500;">Clear Filters</button>
+            </div>
+
+            <!-- Reports Table -->
+            <div id="lastMonthReportsContainer" style="overflow-x: auto;">
+                <div class="loading">Loading last month reports...</div>
+            </div>
+        </div>
     </div>
 
     <script>
         let statusChart, priorityChart, departmentChart, trendChart;
+        const APP_BASE = '/School_Facility_Maintenance_System';
 
         // Load all dashboard data
         async function loadDashboardData() {
             try {
                 // Load statistics
-                const statsResponse = await fetch('/backend/api/super-admin-dashboard-api.php?action=getDashboardStats');
+                const statsResponse = await fetch(`${APP_BASE}/backend/api/super-admin-dashboard-api.php?action=getDashboardStats`);
                 const statsData = await statsResponse.json();
                 renderStatistics(statsData);
 
                 // Load chart data
-                const chartResponse = await fetch('/backend/api/super-admin-dashboard-api.php?action=getChartData');
+                const chartResponse = await fetch(`${APP_BASE}/backend/api/super-admin-dashboard-api.php?action=getChartData`);
                 const chartData = await chartResponse.json();
                 renderCharts(chartData);
 
                 // Load system overview
-                const overviewResponse = await fetch('/backend/api/super-admin-dashboard-api.php?action=getSystemOverview');
+                const overviewResponse = await fetch(`${APP_BASE}/backend/api/super-admin-dashboard-api.php?action=getSystemOverview`);
                 const overviewData = await overviewResponse.json();
                 renderOverview(overviewData);
 
                 // Load recent activity
-                const activityResponse = await fetch('/backend/api/super-admin-dashboard-api.php?action=getRecentActivity');
+                const activityResponse = await fetch(`${APP_BASE}/backend/api/super-admin-dashboard-api.php?action=getRecentActivity`);
                 const activityData = await activityResponse.json();
                 renderActivity(activityData);
 
@@ -414,7 +473,10 @@ $pageTitle = 'System Administration Dashboard';
         }
 
         function renderStatistics(data) {
-            if (!data.success) return;
+            if (!data.success) {
+                document.getElementById('statsContainer').innerHTML = '<div style="color: #ef4444; padding: 20px;">Failed to load statistics. Please refresh the page.</div>';
+                return;
+            }
 
             const container = document.getElementById('statsContainer');
             container.innerHTML = `
@@ -432,7 +494,10 @@ $pageTitle = 'System Administration Dashboard';
                     <div class="stat-label">Total Reports</div>
                     <div class="stat-value">${data.totalReports}</div>
                     <div class="stat-detail">
-                        Completed: ${data.statusBreakdown.completed || 0}
+                        Completed: ${data.statusBreakdown.completed || 0} &nbsp;|&nbsp;
+                        In Progress: ${data.inProgressReports || 0}<br>
+                        Submitted: ${data.statusBreakdown.submitted || 0} &nbsp;|&nbsp;
+                        Assigned: ${data.statusBreakdown.assigned || 0}
                     </div>
                 </div>
 
@@ -448,7 +513,7 @@ $pageTitle = 'System Administration Dashboard';
                     <div class="stat-label">Pending Reports</div>
                     <div class="stat-value">${data.pendingReports}</div>
                     <div class="stat-detail">
-                        Need assignment or action
+                        Submitted + Assigned â€” needs action
                     </div>
                 </div>
 
@@ -456,7 +521,7 @@ $pageTitle = 'System Administration Dashboard';
                     <div class="stat-label">Overdue Reports</div>
                     <div class="stat-value">${data.overdueReports}</div>
                     <div class="stat-detail">
-                        Past due date, not completed
+                        Past due date, not yet completed
                     </div>
                 </div>
 
@@ -468,6 +533,51 @@ $pageTitle = 'System Administration Dashboard';
                     </div>
                 </div>
             `;
+
+            // Render reports overview badges
+            renderReportsOverview(data);
+        }
+
+        function renderReportsOverview(data) {
+            const container = document.getElementById('reportsOverviewContainer');
+            if (!container) return;
+
+            const statusConfig = [
+                { key: 'submitted',   label: 'Submitted',   color: '#3b82f6', icon: 'ðŸ“‹' },
+                { key: 'assigned',    label: 'Assigned',    color: '#f59e0b', icon: 'ðŸ‘¤' },
+                { key: 'in_progress', label: 'In Progress', color: '#8b5cf6', icon: 'ðŸ”§' },
+                { key: 'completed',   label: 'Completed',   color: '#10b981', icon: 'âœ…' },
+                { key: 'closed',      label: 'Closed',      color: '#6b7280', icon: 'ðŸ”’' },
+                { key: 'cancelled',   label: 'Cancelled',   color: '#ef4444', icon: 'âŒ' }
+            ];
+
+            const totalReports = data.totalReports || 0;
+
+            container.innerHTML = statusConfig.map(s => {
+                const count = data.statusBreakdown[s.key] || 0;
+                const pct = totalReports > 0 ? Math.round((count / totalReports) * 100) : 0;
+                return `
+                    <div style="
+                        background: white;
+                        border: 1.5px solid ${s.color}33;
+                        border-left: 4px solid ${s.color};
+                        border-radius: 8px;
+                        padding: 14px 20px;
+                        min-width: 150px;
+                        flex: 1;
+                        box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+                    ">
+                        <div style="font-size: 12px; color: #6b7280; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;">
+                            ${s.icon} ${s.label}
+                        </div>
+                        <div style="font-size: 28px; font-weight: 700; color: ${s.color}; line-height: 1;">${count}</div>
+                        <div style="font-size: 12px; color: #9ca3af; margin-top: 5px;">${pct}% of total</div>
+                        <div style="margin-top: 8px; background: #e5e7eb; border-radius: 99px; height: 5px; overflow: hidden;">
+                            <div style="background: ${s.color}; width: ${pct}%; height: 100%; border-radius: 99px; transition: width 0.6s ease;"></div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
         }
 
         function renderCharts(data) {
@@ -527,8 +637,8 @@ $pageTitle = 'System Administration Dashboard';
                     datasets: [{
                         label: 'Number of Reports',
                         data: data.departmentChart.data,
-                        backgroundColor: '#1e3a5f',
-                        borderColor: '#1e3a5f',
+                        backgroundColor: '#8F00CC',
+                        borderColor: '#8F00CC',
                         borderWidth: 1
                     }]
                 },
@@ -558,13 +668,13 @@ $pageTitle = 'System Administration Dashboard';
                     datasets: [{
                         label: 'Reports Created',
                         data: data.trendChart.data,
-                        borderColor: '#1e3a5f',
-                        backgroundColor: 'rgba(30, 58, 95, 0.1)',
+                        borderColor: '#8F00CC',
+                        backgroundColor: 'rgba(143, 0, 204, 0.1)',
                         borderWidth: 2,
                         fill: true,
                         tension: 0.4,
                         pointRadius: 5,
-                        pointBackgroundColor: '#1e3a5f',
+                        pointBackgroundColor: '#8F00CC',
                         pointBorderColor: '#ffffff',
                         pointBorderWidth: 2
                     }]
@@ -592,25 +702,33 @@ $pageTitle = 'System Administration Dashboard';
 
             // Department users
             const deptList = document.getElementById('departmentUsersList');
-            deptList.innerHTML = data.departmentUsers
-                .map(dept => `
-                    <li>
-                        <span class="name">${dept.name}</span>
-                        <span class="count">${dept.count || 0} users</span>
-                    </li>
-                `)
-                .join('');
+            if (data.departmentUsers && data.departmentUsers.length > 0) {
+                deptList.innerHTML = data.departmentUsers
+                    .map(dept => `
+                        <li>
+                            <span class="name">${dept.name}</span>
+                            <span class="count">${dept.count || 0} user${dept.count != 1 ? 's' : ''}</span>
+                        </li>
+                    `)
+                    .join('');
+            } else {
+                deptList.innerHTML = '<li><span style="color: #9ca3af;">No department data available</span></li>';
+            }
 
             // Active staff
             const staffList = document.getElementById('activeStaffList');
-            staffList.innerHTML = data.activeStaff.length ? data.activeStaff
-                .map(staff => `
-                    <li>
-                        <span class="name">${staff.full_name}</span>
-                        <span class="count">${staff.assigned_count} assigned</span>
-                    </li>
-                `)
-                .join('') : '<li><span style="color: #9ca3af;">No staff data available</span></li>';
+            if (data.activeStaff && data.activeStaff.length > 0) {
+                staffList.innerHTML = data.activeStaff
+                    .map(staff => `
+                        <li>
+                            <span class="name">${staff.full_name}</span>
+                            <span class="count">${staff.assigned_count} assigned</span>
+                        </li>
+                    `)
+                    .join('');
+            } else {
+                staffList.innerHTML = '<li><span style="color: #9ca3af;">No staff data available</span></li>';
+            }
         }
 
         function renderActivity(data) {
@@ -659,10 +777,191 @@ $pageTitle = 'System Administration Dashboard';
         }
 
         // Load data when page loads
-        document.addEventListener('DOMContentLoaded', loadDashboardData);
+        document.addEventListener('DOMContentLoaded', function() {
+            const defaultRange = getLastMonthDateRange();
+            const fromInput = document.getElementById('last-month-date-from');
+            const toInput = document.getElementById('last-month-date-to');
+            if (fromInput && toInput) {
+                fromInput.value = defaultRange.start;
+                toInput.value = defaultRange.end;
+                lastMonthFilters.date_from = defaultRange.start;
+                lastMonthFilters.date_to = defaultRange.end;
+            }
+
+            loadDashboardData();
+            loadLastMonthReports();
+        });
 
         // Refresh every 5 minutes
         setInterval(loadDashboardData, 5 * 60 * 1000);
+        setInterval(loadLastMonthReports, 5 * 60 * 1000);
+
+        // ========== LAST MONTH REPORTS SECTION ==========
+        let lastMonthFilters = {};
+
+        function formatLocalDate(date) {
+            const y = date.getFullYear();
+            const m = String(date.getMonth() + 1).padStart(2, '0');
+            const d = String(date.getDate()).padStart(2, '0');
+            return `${y}-${m}-${d}`;
+        }
+
+        // Helper function to get last month date range
+        function getLastMonthDateRange() {
+            const today = new Date();
+            const lastMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0); // Last day of previous month
+            const lastMonthStart = new Date(lastMonthEnd.getFullYear(), lastMonthEnd.getMonth(), 1); // First day of previous month
+            
+            return {
+                start: formatLocalDate(lastMonthStart),
+                end: formatLocalDate(lastMonthEnd)
+            };
+        }
+
+        // Load last month reports
+        async function loadLastMonthReports() {
+            try {
+                const defaultRange = getLastMonthDateRange();
+                const dateFrom = lastMonthFilters.date_from || defaultRange.start;
+                const dateTo = lastMonthFilters.date_to || defaultRange.end;
+                
+                const params = new URLSearchParams({
+                    action: 'list',
+                    per_page: 100,
+                    date_from: dateFrom,
+                    date_to: dateTo,
+                    ...lastMonthFilters
+                });
+
+                const response = await fetch(`${APP_BASE}/backend/api/maintenance-reports-api.php?${params}`);
+                const data = await response.json();
+
+                if (data.success && data.data.reports) {
+                    displayLastMonthReports(data.data.reports);
+                } else {
+                    document.getElementById('lastMonthReportsContainer').innerHTML = '<p class="text-muted text-center">No reports found for last month</p>';
+                }
+            } catch (error) {
+                console.error('Error loading last month reports:', error);
+                document.getElementById('lastMonthReportsContainer').innerHTML = '<p class="text-danger text-center">Failed to load reports</p>';
+            }
+        }
+
+        // Display last month reports in table format
+        function displayLastMonthReports(reports) {
+            const container = document.getElementById('lastMonthReportsContainer');
+            
+            if (reports.length === 0) {
+                container.innerHTML = '<p class="text-muted text-center" style="padding: 20px;">No reports found for last month</p>';
+                return;
+            }
+
+            // Helper functions for badges
+            function getPriorityColor(priority) {
+                const colors = {
+                    'low': '#3b82f6',
+                    'medium': '#f59e0b',
+                    'high': '#ef4444',
+                    'urgent': '#dc2626',
+                    'critical': '#991b1b'
+                };
+                return colors[priority] || '#6b7280';
+            }
+
+            function getStatusColor(status) {
+                const colors = {
+                    'submitted': '#3b82f6',
+                    'assigned': '#f59e0b',
+                    'in_progress': '#8b5cf6',
+                    'completed': '#10b981',
+                    'closed': '#6b7280',
+                    'draft': '#94a3b8'
+                };
+                return colors[status] || '#6b7280';
+            }
+
+            function formatDate(date) {
+                return new Date(date).toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric'
+                });
+            }
+
+            let html = '<table style="width: 100%; border-collapse: collapse; font-size: 14px;">';
+            html += '<thead>';
+            html += '<tr style="background: #f3f4f6; border-bottom: 2px solid #e5e7eb;">';
+            html += '<th style="padding: 12px; text-align: left; font-weight: 600; color: #8F00CC;">ID</th>';
+            html += '<th style="padding: 12px; text-align: left; font-weight: 600; color: #8F00CC;">Title</th>';
+            html += '<th style="padding: 12px; text-align: left; font-weight: 600; color: #8F00CC;">Location</th>';
+            html += '<th style="padding: 12px; text-align: left; font-weight: 600; color: #8F00CC;">Priority</th>';
+            html += '<th style="padding: 12px; text-align: left; font-weight: 600; color: #8F00CC;">Status</th>';
+            html += '<th style="padding: 12px; text-align: left; font-weight: 600; color: #8F00CC;">Assigned To</th>';
+            html += '<th style="padding: 12px; text-align: left; font-weight: 600; color: #8F00CC;">Created</th>';
+            html += '<th style="padding: 12px; text-align: left; font-weight: 600; color: #8F00CC;">Action</th>';
+            html += '</tr>';
+            html += '</thead><tbody>';
+
+            reports.forEach((report, idx) => {
+                const priorityColor = getPriorityColor(report.priority);
+                const statusColor = getStatusColor(report.status);
+                const createdDate = formatDate(report.created_at);
+                const bgColor = idx % 2 === 0 ? '#ffffff' : '#f9fafb';
+
+                html += `<tr style="background: ${bgColor}; border-bottom: 1px solid #e5e7eb;">`;
+                html += `<td style="padding: 12px; color: #8F00CC; font-weight: 500;">#${report.report_id}</td>`;
+                html += `<td style="padding: 12px; color: #8F00CC; font-weight: 500;">${report.title}</td>`;
+                html += `<td style="padding: 12px; color: #6b7280;">${report.location}</td>`;
+                html += `<td style="padding: 12px;"><span style="background: ${priorityColor}; color: white; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600;">${report.priority.toUpperCase()}</span></td>`;
+                html += `<td style="padding: 12px;"><span style="background: ${statusColor}; color: white; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600;">${report.status.replace('_', ' ').toUpperCase()}</span></td>`;
+                html += `<td style="padding: 12px; color: #6b7280;">${report.assigned_name || 'Unassigned'}</td>`;
+                html += `<td style="padding: 12px; color: #6b7280;">${createdDate}</td>`;
+                html += `<td style="padding: 12px;"><a href="/School_Facility_Maintenance_System/frontend/pages/maintenance-report-detail.php?id=${report.report_id}" style="color: #8F00CC; text-decoration: none; font-weight: 500; border: 1px solid #8F00CC; padding: 4px 12px; border-radius: 4px; display: inline-block;">View</a></td>`;
+                html += '</tr>';
+            });
+
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        }
+
+        // Apply last month filters
+        function applyLastMonthFilters() {
+            lastMonthFilters = {
+                status: document.getElementById('last-month-status-filter').value,
+                priority: document.getElementById('last-month-priority-filter').value,
+                search: document.getElementById('last-month-search').value,
+                date_from: document.getElementById('last-month-date-from').value,
+                date_to: document.getElementById('last-month-date-to').value
+            };
+
+            // Remove empty filters
+            Object.keys(lastMonthFilters).forEach(key => {
+                if (!lastMonthFilters[key]) delete lastMonthFilters[key];
+            });
+
+            loadLastMonthReports();
+        }
+
+        // Event listeners for last month filters
+        document.getElementById('last-month-status-filter')?.addEventListener('change', applyLastMonthFilters);
+        document.getElementById('last-month-priority-filter')?.addEventListener('change', applyLastMonthFilters);
+        document.getElementById('last-month-date-from')?.addEventListener('change', applyLastMonthFilters);
+        document.getElementById('last-month-date-to')?.addEventListener('change', applyLastMonthFilters);
+        document.getElementById('last-month-search')?.addEventListener('keyup', applyLastMonthFilters);
+
+        document.getElementById('last-month-clear-filters')?.addEventListener('click', () => {
+            document.getElementById('last-month-status-filter').value = '';
+            document.getElementById('last-month-priority-filter').value = '';
+            document.getElementById('last-month-search').value = '';
+            const dateRange = getLastMonthDateRange();
+            document.getElementById('last-month-date-from').value = dateRange.start;
+            document.getElementById('last-month-date-to').value = dateRange.end;
+            lastMonthFilters = {
+                date_from: dateRange.start,
+                date_to: dateRange.end
+            };
+            loadLastMonthReports();
+        });
     </script>
 
     <?php include '../includes/footer.php'; ?>

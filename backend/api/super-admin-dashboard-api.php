@@ -106,9 +106,17 @@ function getDashboardStats() {
         SELECT COUNT(*) as count 
         FROM maintenance_reports 
         WHERE due_date < CURDATE() 
-        AND status NOT IN ('completed', 'cancelled')
+        AND status NOT IN ('completed', 'closed', 'cancelled')
     ")->fetch();
     $overdueReports = $overdue['count'];
+
+    // In progress reports
+    $inProgress = $pdo->query("
+        SELECT COUNT(*) as count 
+        FROM maintenance_reports 
+        WHERE status = 'in_progress'
+    ")->fetch();
+    $inProgressReports = $inProgress['count'];
 
     return [
         'success' => true,
@@ -118,6 +126,7 @@ function getDashboardStats() {
         'completedThisMonth' => (int)$completedThisMonth['count'],
         'pendingReports' => (int)$pendingReports,
         'overdueReports' => (int)$overdueReports,
+        'inProgressReports' => (int)$inProgressReports,
         'roleBreakdown' => $roleBreakdown,
         'statusBreakdown' => $statusBreakdown
     ];
@@ -172,10 +181,10 @@ function getChartData() {
 
     // 3. Department Report Volume Chart
     $deptData = $pdo->query("
-        SELECT d.name, COUNT(mr.id) as count 
+        SELECT d.name, COUNT(mr.report_id) as count 
         FROM departments d 
-        LEFT JOIN maintenance_reports mr ON d.id = mr.department_id 
-        GROUP BY d.id 
+        LEFT JOIN maintenance_reports mr ON d.department_id = mr.department_id 
+        GROUP BY d.department_id 
         ORDER BY count DESC 
         LIMIT 6
     ")->fetchAll();
@@ -245,19 +254,20 @@ function getSystemOverview() {
 
     // Users by department
     $deptUsers = $pdo->query("
-        SELECT d.name, COUNT(u.id) as count 
+        SELECT d.name, COUNT(u.user_id) as count 
         FROM departments d 
-        LEFT JOIN users u ON d.id = u.department_id AND u.status = 'active'
-        GROUP BY d.id
+        LEFT JOIN users u ON d.department_id = u.department_id AND u.status = 'active'
+        GROUP BY d.department_id
+        ORDER BY count DESC
     ")->fetchAll();
 
     // Most active maintenance staff
     $activeStaff = $pdo->query("
-        SELECT u.full_name, COUNT(mr.id) as assigned_count
+        SELECT u.full_name, COUNT(mr.report_id) as assigned_count
         FROM users u
-        LEFT JOIN maintenance_reports mr ON u.id = mr.assigned_to
+        LEFT JOIN maintenance_reports mr ON u.user_id = mr.assigned_to
         WHERE u.role = 'maintenance_staff' AND u.status = 'active'
-        GROUP BY u.id
+        GROUP BY u.user_id
         ORDER BY assigned_count DESC
         LIMIT 5
     ")->fetchAll();

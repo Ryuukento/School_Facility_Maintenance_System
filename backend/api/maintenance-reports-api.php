@@ -100,25 +100,36 @@ function listReports() {
     AuthMiddleware::protect();
     
     $userId = $_SESSION['user_id'];
+    $role = $_SESSION['user']['role'] ?? $_SESSION['role'] ?? null;
     global $pdo;
     
     try {
         $status = $_GET['status'] ?? null;
         $priority = $_GET['priority'] ?? null;
         $search = $_GET['search'] ?? null;
-        $dateFrom = $_GET['date_from'] ?? null;
-        $dateTo = $_GET['date_to'] ?? null;
+        $dateFrom = normalizeFilterDate($_GET['date_from'] ?? null);
+        $dateTo = normalizeFilterDate($_GET['date_to'] ?? null);
         $page = (int)($_GET['page'] ?? 1);
         $perPage = (int)($_GET['per_page'] ?? 20);
         $offset = ($page - 1) * $perPage;
         
         $sql = "SELECT r.report_id, r.title, r.priority, r.status, r.location, 
-                       r.created_at, r.assigned_to, u.full_name as assigned_name
-                FROM maintenance_reports r
-                LEFT JOIN users u ON r.assigned_to = u.user_id
-                WHERE (r.created_by = ? OR r.assigned_to = ?)";
+                   r.created_at, r.assigned_to, u.full_name as assigned_name,
+                   c.full_name as creator_name
+            FROM maintenance_reports r
+            LEFT JOIN users u ON r.assigned_to = u.user_id
+            LEFT JOIN users c ON r.created_by = c.user_id";
         
-        $params = [$userId, $userId];
+        $params = [];
+
+        // Super admin can view all reports; other roles are scoped to own/assigned.
+        if ($role !== 'super_admin') {
+            $sql .= " WHERE (r.created_by = ? OR r.assigned_to = ?)";
+            $params[] = $userId;
+            $params[] = $userId;
+        } else {
+            $sql .= " WHERE 1=1";
+        }
         
         if ($status) {
             $sql .= " AND r.status = ?";
@@ -176,20 +187,29 @@ function getReport($reportId) {
     AuthMiddleware::protect();
     
     $userId = $_SESSION['user_id'];
+    $role = $_SESSION['user']['role'] ?? $_SESSION['role'] ?? null;
     global $pdo;
     
     try {
         $sql = "SELECT r.*, u.full_name as creator_name, u.email as creator_email,
-                       a.full_name as assigned_name, a.email as assigned_email,
-                       d.name as department_name
-                FROM maintenance_reports r
-                LEFT JOIN users u ON r.created_by = u.user_id
-                LEFT JOIN users a ON r.assigned_to = a.user_id
-                LEFT JOIN departments d ON r.department_id = d.department_id
-                WHERE r.report_id = ? AND (r.created_by = ? OR r.assigned_to = ?)";
+                   a.full_name as assigned_name, a.email as assigned_email,
+                   d.name as department_name
+            FROM maintenance_reports r
+            LEFT JOIN users u ON r.created_by = u.user_id
+            LEFT JOIN users a ON r.assigned_to = a.user_id
+            LEFT JOIN departments d ON r.department_id = d.department_id
+            WHERE r.report_id = ?";
+
+        $params = [$reportId];
+
+        if ($role !== 'super_admin') {
+            $sql .= " AND (r.created_by = ? OR r.assigned_to = ?)";
+            $params[] = $userId;
+            $params[] = $userId;
+        }
         
         $stmt = $pdo->prepare($sql);
-        $stmt->execute([$reportId, $userId, $userId]);
+        $stmt->execute($params);
         $report = $stmt->fetch(PDO::FETCH_ASSOC);
         
         if (!$report) {
@@ -245,7 +265,7 @@ function createReport($data) {
         
         Logger::info('Report created', ['report_id' => $reportId, 'user_id' => $userId]);
         
-        // ── Notify super admins for ANY role that creates a report ────────
+        // ── Notify active admin roles when a new report is created ────────
         try {
             require_once dirname(__DIR__) . '/services/EmailService.php';
 
@@ -256,28 +276,33 @@ function createReport($data) {
             $rStmt->execute([$reportId]);
             $fullReport = $rStmt->fetch(PDO::FETCH_ASSOC);
 
-            // Get all active super admins (email included for Gmail)
-            $stmt = $pdo->prepare("SELECT user_id, email, full_name FROM users WHERE role = 'super_admin' AND status = 'active'");
-            $stmt->execute();
-            $superAdmins = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            // Get all admin recipients, with super admin fallback safety.
+            $adminRecipients = fetchAdminNotificationRecipients($pdo);
 
             $submitterName = $_SESSION['user']['full_name'] ?? 'Staff';
 
-            foreach ($superAdmins as $admin) {
+            foreach ($adminRecipients as $admin) {
                 // 1. In-app bell notification
-                $notification->create([
+                $created = $notification->create([
                     'user_id'   => $admin['user_id'],
                     'report_id' => $reportId,
                     'title'     => 'New Maintenance Report Submitted',
                     'message'   => $submitterName . ' submitted a new report: ' . $data['title']
                 ]);
+
+                if (!$created) {
+                    Logger::error('Failed to insert notification row', [
+                        'recipient_user_id' => $admin['user_id'],
+                        'report_id' => $reportId
+                    ]);
+                }
             }
 
             // 2. Gmail email notification
             if (class_exists('EmailService') && $fullReport) {
                 EmailService::sendNewReportNotification(
                     array_merge($fullReport, ['submitted_by' => $submitterName]),
-                    $superAdmins
+                    $adminRecipients
                 );
             }
         } catch (Exception $notifEx) {
@@ -291,6 +316,45 @@ function createReport($data) {
         Logger::error('Error creating report', ['error' => $e->getMessage()]);
         Response::error('Failed to create report', [], Response::HTTP_INTERNAL_ERROR);
     }
+}
+
+/**
+ * Resolve notification recipients for report events.
+ * Prefers active admin roles and always includes super admins as fallback.
+ */
+function fetchAdminNotificationRecipients(PDO $pdo): array {
+    $recipientsById = [];
+
+    $primaryStmt = $pdo->prepare(
+        "SELECT user_id, email, full_name
+         FROM users
+                 WHERE role IN ('super_admin', 'admin', 'maintenance_admin', 'department_admin')
+           AND status = 'active'"
+    );
+    $primaryStmt->execute();
+
+    foreach ($primaryStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $uid = (int)($row['user_id'] ?? 0);
+        if ($uid > 0) {
+            $recipientsById[$uid] = $row;
+        }
+    }
+
+    $superStmt = $pdo->prepare(
+        "SELECT user_id, email, full_name
+         FROM users
+            WHERE role IN ('super_admin', 'admin')"
+    );
+    $superStmt->execute();
+
+    foreach ($superStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $uid = (int)($row['user_id'] ?? 0);
+        if ($uid > 0) {
+            $recipientsById[$uid] = $row;
+        }
+    }
+
+    return array_values($recipientsById);
 }
 
 /**
@@ -428,4 +492,33 @@ function formatReportDates($report) {
     }
     
     return $report;
+}
+
+/**
+ * Normalize incoming date filter to Y-m-d.
+ */
+function normalizeFilterDate($value) {
+    if (!$value) {
+        return null;
+    }
+
+    $value = trim((string)$value);
+
+    // Already in expected HTML date input format.
+    if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) {
+        return $value;
+    }
+
+    // Handle dd/mm/yyyy fallback from non-date-input browsers.
+    if (preg_match('/^(\d{2})\/(\d{2})\/(\d{4})$/', $value, $m)) {
+        return $m[3] . '-' . $m[2] . '-' . $m[1];
+    }
+
+    // Last-resort parse for other valid date strings.
+    $ts = strtotime($value);
+    if ($ts === false) {
+        return null;
+    }
+
+    return date('Y-m-d', $ts);
 }

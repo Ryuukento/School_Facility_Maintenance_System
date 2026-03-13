@@ -79,17 +79,18 @@ if (isset($_SESSION['user'])) {
 
         /* Floating card with shadow and rounded corners */
         .login-container .card {
-            background: transparent;
+            background: #ffffff;
             border-radius: 16px;
             overflow: hidden;
-            box-shadow: none;
+            box-shadow: 0 18px 40px rgba(17, 24, 39, 0.28);
+            border: 1px solid rgba(255, 255, 255, 0.55);
             animation: slideUp 0.5s ease-out;
             transition: transform 0.3s ease, box-shadow 0.3s ease;
         }
 
         .login-container .card:hover {
             transform: none;
-            box-shadow: none;
+            box-shadow: 0 18px 40px rgba(17, 24, 39, 0.28);
         }
 
         @keyframes slideUp {
@@ -103,7 +104,7 @@ if (isset($_SESSION['user'])) {
             }
         }
 
-        /* Card header with purple gradient theme */
+        /* Card header */
         .card-header {
             background: linear-gradient(135deg, #6608be 0%, #7d1beb 100%);
             color: #ffffff;
@@ -113,6 +114,7 @@ if (isset($_SESSION['user'])) {
             align-items: center;
             text-align: center;
             gap: 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.3);
         }
 
         .card-header .login-logo {
@@ -120,9 +122,9 @@ if (isset($_SESSION['user'])) {
             height: 120px;
             border-radius: 50%;
             background-color: #ffffff;
-            padding: 6px;
+            padding: 8px;
             object-fit: contain;
-            box-shadow: 0 4px 15px rgba(102, 8, 190, 0.2);
+            box-shadow: 0 6px 16px rgba(102, 8, 190, 0.35);
         }
 
         .card-header h2 {
@@ -131,20 +133,22 @@ if (isset($_SESSION['user'])) {
             font-weight: 600;
             letter-spacing: -0.5px;
             color: #ffffff;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
         }
 
         .card-header p {
             margin: 0;
             font-size: 0.95em;
-            opacity: 0.95;
+            opacity: 1;
             font-weight: 300;
+            color: #6b7280;
         }
 
         /* Card body styling */
         .card-body {
             padding: 40px 35px;
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
+            background: #ffffff;
+            backdrop-filter: none;
             border-radius: 0px;
             margin-top: 0;
         }
@@ -193,31 +197,31 @@ if (isset($_SESSION['user'])) {
             display: block;
             margin-bottom: 8px;
             font-weight: 500;
-            color: #ffffff;
+            color: #374151;
             font-size: 0.95em;
         }
 
         .form-group input {
             width: 100%;
             padding: 12px 14px;
-            border: 1.5px solid rgba(255, 255, 255, 0.3);
+            border: 1.5px solid #d1d5db;
             border-radius: 8px;
             font-size: 0.95em;
             font-family: inherit;
             transition: all 0.3s ease;
-            background-color: rgba(255, 255, 255, 0.15);
-            color: #ffffff;
+            background-color: #ffffff;
+            color: #111827;
         }
 
         .form-group input::placeholder {
-            color: rgba(255, 255, 255, 0.6);
+            color: #9ca3af;
         }
 
         .form-group input:focus {
             outline: none;
             border-color: #7d1beb;
             box-shadow: 0 0 0 3px rgba(125, 27, 235, 0.2);
-            background-color: rgba(255, 255, 255, 0.2);
+            background-color: #ffffff;
         }
 
         /* Button styling */
@@ -454,3 +458,4 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
 
 </body>
 </html>
+

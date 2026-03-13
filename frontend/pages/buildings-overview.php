@@ -53,6 +53,52 @@ $user = $_SESSION['user'];
     </div>
 </div>
 
+<div id="editBuildingModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Edit Building</h2>
+            <span class="modal-close" onclick="closeEditBuildingModal()">&times;</span>
+        </div>
+        <div class="modal-body">
+            <form id="editBuildingForm">
+                <div class="form-group">
+                    <label for="editBuildingNameInput">Building Name *</label>
+                    <input type="text" id="editBuildingNameInput" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label for="editBuildingDescInput">Description</label>
+                    <textarea id="editBuildingDescInput" class="form-control" rows="3"></textarea>
+                </div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeEditBuildingModal()">Cancel</button>
+            <button class="btn btn-primary" onclick="saveEditBuilding()">Save Changes</button>
+        </div>
+    </div>
+</div>
+
+<div id="editFloorModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Edit Floor</h2>
+            <span class="modal-close" onclick="closeEditFloorModal()">&times;</span>
+        </div>
+        <div class="modal-body">
+            <form id="editFloorForm">
+                <div class="form-group">
+                    <label for="editFloorNameInput">Floor Name *</label>
+                    <input type="text" id="editFloorNameInput" class="form-control" required>
+                </div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeEditFloorModal()">Cancel</button>
+            <button class="btn btn-primary" onclick="saveEditFloor()">Save Changes</button>
+        </div>
+    </div>
+</div>
+
 <div id="itemModal" class="modal">
     <div class="modal-content">
         <div class="modal-header">
@@ -108,6 +154,16 @@ $user = $_SESSION['user'];
 }
 .card-delete:hover { opacity: 1; }
 .summary-card { position: relative; }
+.card-actions {
+    position: absolute;
+    right: 10px;
+    bottom: 10px;
+    display: flex;
+    gap: 8px;
+}
+.card-actions .btn { padding: 4px 10px; font-size: 12px; }
+.btn-danger { background: #c0392b; color: #fff; }
+.btn-danger:hover { background: #a93226; }
 </style>
 
 <script>
@@ -117,6 +173,10 @@ let currentBuildingName = '';
 let currentFloorId = null;
 let currentFloorName = '';
 let currentRoomId = null;
+let currentEditFloorId = null;
+let floorsCache = {};
+let currentEditBuildingId = null;
+let buildingsCache = {};
 
 async function initOverview() {
     loadBuildings();
@@ -139,6 +199,7 @@ async function loadBuildings() {
     currentBuildingId = null; currentBuildingName = '';
     currentFloorId = null; currentFloorName = '';
     currentRoomId = null;
+    buildingsCache = {};
     document.getElementById('overviewTitle').textContent = 'Buildings';
     document.getElementById('overviewSubtitle').textContent = 'Select a building to view floors';
     clearActions();
@@ -162,6 +223,7 @@ async function loadBuildings() {
         const data = await res.json();
         if (data.success) {
             data.buildings.forEach(b => {
+                buildingsCache[b.id] = b;
                 const card = createEntityCard(b.name, `Floors: ${b.floor_count}, Rooms: ${b.room_count}`, '🏢', 'building', b.id);
                 card.onclick = () => loadFloors(b.id, b.name);
                 container.appendChild(card);
@@ -180,6 +242,7 @@ async function loadFloors(buildingId, buildingName) {
     currentLevel = 'floor'; currentBuildingId = buildingId; currentBuildingName = buildingName;
     currentFloorId = null; currentFloorName = '';
     currentRoomId = null;
+    floorsCache = {};
     document.getElementById('overviewTitle').textContent = 'Floors of ' + buildingName;
     document.getElementById('overviewSubtitle').textContent = 'Select a floor to view rooms';
     clearActions();
@@ -202,6 +265,7 @@ async function loadFloors(buildingId, buildingName) {
         const data = await res.json();
         if (data.success) {
             data.floors.forEach(f => {
+                floorsCache[f.id] = f;
                 const card = createEntityCard(f.name, '', '📐', 'floor', f.id);
                 card.onclick = () => loadRooms(f.id, f.name);
                 container.appendChild(card);
@@ -300,7 +364,19 @@ function createEntityCard(title, subtitle = '', icon = '', type = null, id = nul
     html += '</div>';
     if (icon) html += `<div class="summary-card-icon">${icon}</div>`;
     if (type && id) {
-        html += `<div class="card-delete" onclick="event.stopPropagation(); deleteEntity('${type}', ${id});" title="Delete">🗑️</div>`;
+        if (type === 'building') {
+            html += `<div class="card-actions">
+                        <button class="btn btn-secondary" onclick="event.stopPropagation(); openEditBuildingModal(${id});">Edit</button>
+                        <button class="btn btn-danger" onclick="event.stopPropagation(); deleteEntity('${type}', ${id});">Delete</button>
+                     </div>`;
+        } else if (type === 'floor') {
+            html += `<div class="card-actions">
+                        <button class="btn btn-secondary" onclick="event.stopPropagation(); openEditFloorModal(${id});">Edit</button>
+                        <button class="btn btn-danger" onclick="event.stopPropagation(); deleteEntity('${type}', ${id});">Delete</button>
+                     </div>`;
+        } else {
+            html += `<div class="card-delete" onclick="event.stopPropagation(); deleteEntity('${type}', ${id});" title="Delete">&#128465;</div>`;
+        }
     }
     div.innerHTML = html;
     return div;
@@ -317,11 +393,14 @@ async function deleteEntity(type, id) {
         case 'item': endpoint = '/School_Facility_Maintenance_System/backend/api/items.php?action=delete'; break;
     }
     try {
+        const isJsonDelete = (type === 'building' || type === 'room');
         const resp = await fetch(endpoint, {
             method: 'POST',
             credentials: 'same-origin',
-            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-            body: 'id=' + encodeURIComponent(id)
+            headers: {
+                'Content-Type': isJsonDelete ? 'application/json' : 'application/x-www-form-urlencoded'
+            },
+            body: isJsonDelete ? JSON.stringify({ id }) : ('id=' + encodeURIComponent(id))
         });
         const data = await resp.json();
         if (data.success) {
@@ -338,6 +417,56 @@ async function deleteEntity(type, id) {
     } catch (e) {
         console.error('Delete error', e);
         alert('An error occurred while deleting. See console.');
+    }
+}
+
+function openEditBuildingModal(buildingId) {
+    const building = buildingsCache[buildingId];
+    if (!building) {
+        alert('Building not found. Please refresh the list.');
+        return;
+    }
+    currentEditBuildingId = buildingId;
+    document.getElementById('editBuildingNameInput').value = building.name || '';
+    document.getElementById('editBuildingDescInput').value = building.description || '';
+    document.getElementById('editBuildingModal').classList.add('show');
+    document.getElementById('editBuildingNameInput').focus();
+}
+
+function closeEditBuildingModal() {
+    document.getElementById('editBuildingModal').classList.remove('show');
+    document.getElementById('editBuildingForm').reset();
+    currentEditBuildingId = null;
+}
+
+async function saveEditBuilding() {
+    const name = document.getElementById('editBuildingNameInput').value.trim();
+    const description = document.getElementById('editBuildingDescInput').value.trim();
+    if (!currentEditBuildingId) {
+        alert('No building selected for edit.');
+        return;
+    }
+    if (!name) {
+        alert('Please enter building name');
+        return;
+    }
+    try {
+        const res = await fetch('/School_Facility_Maintenance_System/backend/api/buildings.php?action=update', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: currentEditBuildingId, name, description })
+        });
+        const data = await res.json();
+        if (data.success) {
+            closeEditBuildingModal();
+            loadBuildings();
+        } else {
+            alert(data.message || 'Failed to update building');
+        }
+    } catch (err) {
+        console.error('Error updating building', err);
+        alert('Error updating building. Check console for details.');
     }
 }
 
@@ -422,3 +551,5 @@ async function saveItemData() {
 // initialize on load
 window.addEventListener('DOMContentLoaded', initOverview);
 </script>
+
+
