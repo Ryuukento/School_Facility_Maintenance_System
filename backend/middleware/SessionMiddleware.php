@@ -23,7 +23,20 @@ class SessionMiddleware {
     }
     
     public static function isAuthenticated() {
-        return isset($_SESSION['user_id']) && !empty($_SESSION['user_id']);
+        if (!empty($_SESSION['user_id'])) {
+            return true;
+        }
+
+        $fallbackUserId = $_SESSION['user']['user_id']
+            ?? $_SESSION['auth_user']['user_id']
+            ?? null;
+
+        if (!empty($fallbackUserId)) {
+            $_SESSION['user_id'] = $fallbackUserId;
+            return true;
+        }
+
+        return false;
     }
     
     public static function checkTimeout() {

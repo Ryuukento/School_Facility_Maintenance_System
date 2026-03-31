@@ -6,17 +6,13 @@
 
 require_once dirname(__DIR__) . '/bootstrap.php';
 
-// Get action from query string
 $action = $_GET['action'] ?? null;
-
-// Get request body
 $input = json_decode(file_get_contents('php://input'), true) ?? [];
 
 try {
-    // Initialize session to check authentication
     SessionMiddleware::initialize();
     AuthMiddleware::protect();
-    
+
     switch ($action) {
         case 'list':
             handleGetUsers();
@@ -25,12 +21,28 @@ try {
         case 'update_profile':
             handleUpdateProfile();
             break;
-        
+
         case 'delete':
-            RoleMiddleware::requireRole([ROLE_SUPER_ADMIN, ROLE_DEPARTMENT_ADMIN]);
-            handleDeleteUser($input);
+        case 'deactivate':
+            RoleMiddleware::requireRole([ROLE_SUPER_ADMIN]);
+            handleDeactivateUser($input);
             break;
-        
+
+        case 'activate':
+            RoleMiddleware::requireRole([ROLE_SUPER_ADMIN]);
+            handleActivateUser($input);
+            break;
+
+        case 'approve':
+            RoleMiddleware::requireRole([ROLE_SUPER_ADMIN]);
+            handleApproveUser($input);
+            break;
+
+        case 'reject':
+            RoleMiddleware::requireRole([ROLE_SUPER_ADMIN]);
+            handleRejectUser($input);
+            break;
+
         default:
             Response::error('Invalid action', [], Response::HTTP_BAD_REQUEST);
     }
@@ -39,88 +51,150 @@ try {
     Response::error($e->getMessage(), [], Response::HTTP_INTERNAL_ERROR);
 }
 
-/**
- * Get all users
- */
 function handleGetUsers() {
     global $pdo;
-    
+
     try {
-        $query = "SELECT user_id, full_name, email, role, status, created_at 
-                  FROM users 
-                  ORDER BY created_at DESC";
-        
+        $query = "SELECT user_id, full_name, email, role, status, created_at FROM users WHERE role <> ? ORDER BY created_at DESC";
         $stmt = $pdo->prepare($query);
-        $stmt->execute();
-        $users = $stmt->fetchAll();
-        
+        $stmt->execute([ROLE_SUPER_ADMIN]);
+        $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
         Response::success('Users retrieved', ['users' => $users]);
     } catch (Exception $e) {
         Response::error('Failed to retrieve users', [], Response::HTTP_INTERNAL_ERROR);
     }
 }
 
-/**
- * Delete a user
- */
-function handleDeleteUser($input) {
+function handleDeactivateUser($input) {
     global $pdo;
-    
+
     $userId = $input['user_id'] ?? null;
-    
+
     if (!$userId) {
         Response::error('User ID is required', [], Response::HTTP_BAD_REQUEST);
         return;
     }
-    
-    // Prevent deleting yourself
-    if ($userId == $_SESSION['user_id']) {
-        Response::error('Cannot delete your own account', [], Response::HTTP_BAD_REQUEST);
+
+    if ($userId == ($_SESSION['user_id'] ?? null)) {
+        Response::error('Cannot set your own account to inactive', [], Response::HTTP_BAD_REQUEST);
         return;
     }
-    
+
     try {
-        // Check if user exists
-        $stmt = $pdo->prepare("SELECT user_id FROM users WHERE user_id = ?");
+        $stmt = $pdo->prepare("SELECT user_id, role, status FROM users WHERE user_id = ?");
         $stmt->execute([$userId]);
-        if (!$stmt->fetch()) {
+        $targetUser = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$targetUser) {
             Response::error('User not found', [], Response::HTTP_NOT_FOUND);
             return;
         }
-        
-        // Delete user
-        $stmt = $pdo->prepare("DELETE FROM users WHERE user_id = ?");
-        $result = $stmt->execute([$userId]);
-        
+
+        if (strtolower(trim((string)($targetUser['role'] ?? ''))) === ROLE_SUPER_ADMIN) {
+            Response::error('Super Admin accounts cannot be changed here', [], Response::HTTP_BAD_REQUEST);
+            return;
+        }
+
+        if (strtolower(trim((string)($targetUser['status'] ?? ''))) === STATUS_INACTIVE) {
+            Response::success('User is already inactive');
+            return;
+        }
+
+        $stmt = $pdo->prepare("UPDATE users SET status = ?, updated_at = NOW() WHERE user_id = ?");
+        $result = $stmt->execute([STATUS_INACTIVE, $userId]);
+
         if ($result) {
-            // Insert audit record into activity_logs
             try {
                 $logStmt = $pdo->prepare("INSERT INTO activity_logs (user_id, action, entity_type, entity_id, details, ip_address) VALUES (?, ?, ?, ?, ?, ?)");
                 $logStmt->execute([
                     $_SESSION['user_id'],
-                    'DELETE_USER',
+                    'INACTIVATE_USER',
                     'user',
                     $userId,
-                    "Deleted user #$userId",
+                    "Set user #$userId to inactive",
                     $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1'
                 ]);
             } catch (Exception $e) {
                 Logger::error('Activity log insert failed', ['error' => $e->getMessage()]);
             }
 
-            Response::success('User deleted successfully');
+            Response::success('User set to inactive successfully');
         } else {
-            Response::error('Failed to delete user', [], Response::HTTP_INTERNAL_ERROR);
+            Response::error('Failed to set user inactive', [], Response::HTTP_INTERNAL_ERROR);
         }
     } catch (Exception $e) {
-        Logger::error('Delete user error', ['user_id' => $userId, 'error' => $e->getMessage()]);
-        Response::error('Failed to delete user', [], Response::HTTP_INTERNAL_ERROR);
+        Logger::error('Deactivate user error', ['user_id' => $userId, 'error' => $e->getMessage()]);
+        Response::error('Failed to set user inactive', [], Response::HTTP_INTERNAL_ERROR);
     }
 }
 
-/**
- * Update own profile details and optional avatar image.
- */
+function handleApproveUser($input) {
+    global $pdo;
+
+    $userId = isset($input['user_id']) ? (int)$input['user_id'] : 0;
+    $role = strtolower(trim((string)($input['role'] ?? '')));
+
+    if ($userId <= 0 || $role === '') {
+        Response::error('User ID and role are required', [], Response::HTTP_BAD_REQUEST);
+        return;
+    }
+
+    $allowedRoles = [ROLE_MAINTENANCE_ADMIN, ROLE_MAINTENANCE_STAFF, ROLE_USER];
+    if (!in_array($role, $allowedRoles, true)) {
+        Response::error('Invalid role selected for approval', [], Response::HTTP_BAD_REQUEST);
+        return;
+    }
+
+    try {
+        ensurePendingStatusSupported($pdo);
+
+        $stmt = $pdo->prepare("SELECT user_id, status FROM users WHERE user_id = ? LIMIT 1");
+        $stmt->execute([$userId]);
+        $targetUser = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$targetUser) {
+            Response::error('User not found', [], Response::HTTP_NOT_FOUND);
+            return;
+        }
+
+        if (($targetUser['status'] ?? '') === STATUS_ACTIVE) {
+            Response::error('User is already approved', [], Response::HTTP_BAD_REQUEST);
+            return;
+        }
+
+        $updateStmt = $pdo->prepare("UPDATE users SET role = ?, status = ?, updated_at = NOW() WHERE user_id = ?");
+        $updated = $updateStmt->execute([$role, STATUS_ACTIVE, $userId]);
+
+        if (!$updated) {
+            Response::error('Failed to approve user', [], Response::HTTP_INTERNAL_ERROR);
+            return;
+        }
+
+        try {
+            $logStmt = $pdo->prepare("INSERT INTO activity_logs (user_id, action, entity_type, entity_id, details, ip_address) VALUES (?, ?, ?, ?, ?, ?)");
+            $logStmt->execute([
+                $_SESSION['user_id'],
+                'APPROVE_USER',
+                'user',
+                $userId,
+                "Approved user #{$userId} and assigned role {$role}",
+                $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1'
+            ]);
+        } catch (Exception $e) {
+            Logger::error('Activity log insert failed', ['error' => $e->getMessage()]);
+        }
+
+        Response::success('User approved successfully', [
+            'user_id' => $userId,
+            'role' => $role,
+            'status' => STATUS_ACTIVE
+        ]);
+    } catch (Exception $e) {
+        Logger::error('Approve user error', ['user_id' => $userId, 'error' => $e->getMessage()]);
+        Response::error('Failed to approve user', [], Response::HTTP_INTERNAL_ERROR);
+    }
+}
+
 function handleUpdateProfile() {
     global $pdo;
 
@@ -138,7 +212,7 @@ function handleUpdateProfile() {
     try {
         ensureAvatarColumn($pdo);
 
-        $stmt = $pdo->prepare("SELECT user_id, full_name, email, role, department_id, status, avatar FROM users WHERE user_id = ? LIMIT 1");
+        $stmt = $pdo->prepare("SELECT user_id, full_name, email, password, role, department_id, status, avatar FROM users WHERE user_id = ? LIMIT 1");
         $stmt->execute([$userId]);
         $currentUser = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -149,6 +223,8 @@ function handleUpdateProfile() {
 
         $fullName = trim((string)($_POST['full_name'] ?? $currentUser['full_name']));
         $email = trim((string)($_POST['email_address'] ?? $currentUser['email']));
+        $currentPassword = (string)($_POST['current_password'] ?? '');
+        $newPassword = trim((string)($_POST['new_password'] ?? ''));
 
         if ($fullName === '') {
             Response::error('Full name is required', [], Response::HTTP_BAD_REQUEST);
@@ -158,6 +234,26 @@ function handleUpdateProfile() {
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
             Response::error('Valid email is required', [], Response::HTTP_BAD_REQUEST);
             return;
+        }
+
+        $passwordHash = null;
+        if ($newPassword !== '') {
+            if ($currentPassword === '') {
+                Response::error('Current password is required to change your password', [], Response::HTTP_BAD_REQUEST);
+                return;
+            }
+
+            if (!password_verify($currentPassword, $currentUser['password'] ?? '')) {
+                Response::error('Current password is incorrect', [], Response::HTTP_BAD_REQUEST);
+                return;
+            }
+
+            if (strlen($newPassword) < PASSWORD_MIN_LENGTH) {
+                Response::error('New password must be at least ' . PASSWORD_MIN_LENGTH . ' characters', [], Response::HTTP_BAD_REQUEST);
+                return;
+            }
+
+            $passwordHash = password_hash($newPassword, PASSWORD_BCRYPT, ['cost' => BCRYPT_COST]);
         }
 
         $avatarPath = $currentUser['avatar'] ?? null;
@@ -204,7 +300,6 @@ function handleUpdateProfile() {
                 return;
             }
 
-            // Delete previous uploaded avatar when possible.
             if (!empty($avatarPath) && strpos($avatarPath, '/frontend/assets/uploads/avatars/') !== false) {
                 $oldPath = dirname(__DIR__, 2) . str_replace('/School_Facility_Maintenance_System', '', $avatarPath);
                 if (is_file($oldPath)) {
@@ -215,8 +310,16 @@ function handleUpdateProfile() {
             $avatarPath = '/School_Facility_Maintenance_System/frontend/assets/uploads/avatars/' . $fileName;
         }
 
-        $updateStmt = $pdo->prepare("UPDATE users SET full_name = ?, email = ?, avatar = ?, updated_at = NOW() WHERE user_id = ?");
-        $updateStmt->execute([$fullName, $email, $avatarPath, $userId]);
+        $updateFields = "full_name = ?, email = ?, avatar = ?, updated_at = NOW()";
+        $updateParams = [$fullName, $email, $avatarPath];
+        if ($passwordHash) {
+            $updateFields .= ", password = ?";
+            $updateParams[] = $passwordHash;
+        }
+        $updateParams[] = $userId;
+
+        $updateStmt = $pdo->prepare("UPDATE users SET {$updateFields} WHERE user_id = ?");
+        $updateStmt->execute($updateParams);
 
         $refetchStmt = $pdo->prepare("SELECT u.*, d.name as department_name FROM users u LEFT JOIN departments d ON u.department_id = d.department_id WHERE u.user_id = ? LIMIT 1");
         $refetchStmt->execute([$userId]);
@@ -250,9 +353,22 @@ function handleUpdateProfile() {
     }
 }
 
-/**
- * Ensure the users table has an avatar column.
- */
+function ensurePendingStatusSupported(PDO $pdo) {
+    try {
+        $columnStmt = $pdo->query("SHOW COLUMNS FROM users LIKE 'status'");
+        $column = $columnStmt ? $columnStmt->fetch(PDO::FETCH_ASSOC) : null;
+        $type = strtolower((string)($column['Type'] ?? ''));
+
+        if (strpos($type, "'pending'") !== false) {
+            return;
+        }
+
+        $pdo->exec("ALTER TABLE users MODIFY COLUMN status ENUM('active','inactive','suspended','pending') DEFAULT 'active'");
+    } catch (Throwable $e) {
+        Logger::error('Pending status schema check warning', ['error' => $e->getMessage()]);
+    }
+}
+
 function ensureAvatarColumn(PDO $pdo) {
     $checkStmt = $pdo->prepare("SELECT COUNT(*) AS cnt FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'avatar'");
     $checkStmt->execute();
@@ -262,4 +378,135 @@ function ensureAvatarColumn(PDO $pdo) {
         $pdo->exec("ALTER TABLE users ADD COLUMN avatar VARCHAR(500) NULL AFTER status");
     }
 }
-?>
+
+function handleActivateUser($input) {
+    global $pdo;
+
+    $userId = $input['user_id'] ?? null;
+
+    if (!$userId) {
+        Response::error('User ID is required', [], Response::HTTP_BAD_REQUEST);
+        return;
+    }
+
+    try {
+        $stmt = $pdo->prepare("SELECT user_id, role, status FROM users WHERE user_id = ?");
+        $stmt->execute([$userId]);
+        $targetUser = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$targetUser) {
+            Response::error('User not found', [], Response::HTTP_NOT_FOUND);
+            return;
+        }
+
+        if (strtolower(trim((string)($targetUser['role'] ?? ''))) === ROLE_SUPER_ADMIN) {
+            Response::error('Super Admin accounts cannot be changed here', [], Response::HTTP_BAD_REQUEST);
+            return;
+        }
+
+        if (strtolower(trim((string)($targetUser['status'] ?? ''))) === STATUS_ACTIVE) {
+            Response::success('User is already active');
+            return;
+        }
+
+        $stmt = $pdo->prepare("UPDATE users SET status = ?, updated_at = NOW() WHERE user_id = ?");
+        $result = $stmt->execute([STATUS_ACTIVE, $userId]);
+
+        if ($result) {
+            try {
+                $logStmt = $pdo->prepare("INSERT INTO activity_logs (user_id, action, entity_type, entity_id, details, ip_address) VALUES (?, ?, ?, ?, ?, ?)");
+                $logStmt->execute([
+                    $_SESSION['user_id'],
+                    'ACTIVATE_USER',
+                    'user',
+                    $userId,
+                    "Set user #$userId to active",
+                    $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1'
+                ]);
+            } catch (Exception $e) {
+                Logger::error('Activity log insert failed', ['error' => $e->getMessage()]);
+            }
+
+            Response::success('User set to active successfully');
+        } else {
+            Response::error('Failed to set user active', [], Response::HTTP_INTERNAL_ERROR);
+        }
+    } catch (Exception $e) {
+        Logger::error('Activate user error', ['user_id' => $userId, 'error' => $e->getMessage()]);
+        Response::error('Failed to set user active', [], Response::HTTP_INTERNAL_ERROR);
+    }
+}
+
+function handleRejectUser($input) {
+    global $pdo;
+
+    $userId = isset($input['user_id']) ? (int)$input['user_id'] : 0;
+
+    if ($userId <= 0) {
+        Response::error('User ID is required', [], Response::HTTP_BAD_REQUEST);
+        return;
+    }
+
+    if ($userId === (int)($_SESSION['user_id'] ?? 0)) {
+        Response::error('Cannot reject your own account', [], Response::HTTP_BAD_REQUEST);
+        return;
+    }
+
+    try {
+        $stmt = $pdo->prepare("SELECT user_id, role, status FROM users WHERE user_id = ? LIMIT 1");
+        $stmt->execute([$userId]);
+        $targetUser = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$targetUser) {
+            Response::error('User not found', [], Response::HTTP_NOT_FOUND);
+            return;
+        }
+
+        if (strtolower(trim((string)($targetUser['role'] ?? ''))) === ROLE_SUPER_ADMIN) {
+            Response::error('Super Admin accounts cannot be rejected here', [], Response::HTTP_BAD_REQUEST);
+            return;
+        }
+
+        if (strtolower(trim((string)($targetUser['status'] ?? ''))) !== STATUS_PENDING) {
+            Response::error('Only pending users can be rejected', [], Response::HTTP_BAD_REQUEST);
+            return;
+        }
+
+        $pdo->beginTransaction();
+
+        $deleteLogsStmt = $pdo->prepare("DELETE FROM activity_logs WHERE user_id = ?");
+        $deleteLogsStmt->execute([$userId]);
+
+        $deleteUserStmt = $pdo->prepare("DELETE FROM users WHERE user_id = ?");
+        $deleted = $deleteUserStmt->execute([$userId]);
+
+        if (!$deleted || $deleteUserStmt->rowCount() < 1) {
+            $pdo->rollBack();
+            Response::error('Failed to reject user', [], Response::HTTP_INTERNAL_ERROR);
+            return;
+        }
+
+        try {
+            $logStmt = $pdo->prepare("INSERT INTO activity_logs (user_id, action, entity_type, entity_id, details, ip_address) VALUES (?, ?, ?, ?, ?, ?)");
+            $logStmt->execute([
+                $_SESSION['user_id'],
+                'REJECT_USER',
+                'user',
+                $userId,
+                "Rejected pending user #{$userId} and deleted account",
+                $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1'
+            ]);
+        } catch (Exception $e) {
+            Logger::error('Activity log insert failed', ['error' => $e->getMessage()]);
+        }
+
+        $pdo->commit();
+        Response::success('Pending user rejected and account deleted successfully');
+    } catch (Exception $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+
+        Logger::error('Reject user error', ['user_id' => $userId, 'error' => $e->getMessage()]);
+        Response::error('Failed to reject user', [], Response::HTTP_INTERNAL_ERROR);
+    }
+}

@@ -2,7 +2,107 @@
  * Page initialization scripts
  */
 
+const ThemeManager = {
+    storageKey: 'sfmsThemeMode',
+    mediaQuery: null,
+    mediaListener: null,
+
+    getSavedMode() {
+        // Force dark mode as the system default theme.
+        return 'dark';
+    },
+
+    resolveMode(mode) {
+        if (mode === 'auto') {
+            const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+            return prefersDark ? 'dark' : 'light';
+        }
+        return mode;
+    },
+
+    applyMode(mode, options = {}) {
+        const { persist = true } = options;
+        const safeMode = ['light', 'dark', 'auto'].includes(mode) ? mode : 'light';
+        const resolved = this.resolveMode(safeMode);
+        const root = document.documentElement;
+
+        if (persist) {
+            localStorage.setItem(this.storageKey, safeMode);
+        }
+
+        root.setAttribute('data-theme-mode', safeMode);
+        root.setAttribute('data-theme-resolved', resolved);
+        root.style.colorScheme = resolved === 'dark' ? 'dark' : 'light';
+    },
+
+    init() {
+        this.applyMode(this.getSavedMode(), { persist: false });
+
+        if (!window.matchMedia) return;
+
+        this.mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+
+        if (!this.mediaListener) {
+            this.mediaListener = () => {
+                if (this.getSavedMode() === 'auto') {
+                    this.applyMode('auto', { persist: false });
+                }
+            };
+        }
+
+        if (typeof this.mediaQuery.addEventListener === 'function') {
+            this.mediaQuery.addEventListener('change', this.mediaListener);
+        } else if (typeof this.mediaQuery.addListener === 'function') {
+            this.mediaQuery.addListener(this.mediaListener);
+        }
+    }
+};
+
+window.ThemeManager = window.ThemeManager || ThemeManager;
+
+const AccessibilityManager = {
+    storageKey: 'sfms_settings_font_size',
+
+    getSavedFontSize() {
+        const size = localStorage.getItem(this.storageKey);
+        return ['small', 'medium', 'large'].includes(size) ? size : 'medium';
+    },
+
+    getScale(size) {
+        const scaleMap = {
+            small: 0.92,
+            medium: 1,
+            large: 1.12
+        };
+
+        return Object.prototype.hasOwnProperty.call(scaleMap, size) ? scaleMap[size] : scaleMap.medium;
+    },
+
+    applyFontSize(size, options = {}) {
+        const { persist = true } = options;
+        const safeSize = ['small', 'medium', 'large'].includes(size) ? size : 'medium';
+        const scale = this.getScale(safeSize);
+        const root = document.documentElement;
+
+        root.setAttribute('data-font-size-mode', safeSize);
+        root.style.setProperty('--ui-font-scale', String(scale));
+        root.style.setProperty('--ui-zoom', '1');
+
+        if (persist) {
+            localStorage.setItem(this.storageKey, safeSize);
+        }
+    },
+
+    init() {
+        this.applyFontSize(this.getSavedFontSize(), { persist: false });
+    }
+};
+
+window.AccessibilityManager = window.AccessibilityManager || AccessibilityManager;
+
 document.addEventListener('DOMContentLoaded', function() {
+    AccessibilityManager.init();
+    ThemeManager.init();
     initializeNavigation();
     initializeModals();
     initializeDropdowns();
@@ -20,18 +120,48 @@ function initializeNavigation() {
         return;
     }
     
-    // Set up logout button
-    const logoutBtn = document.querySelector('[data-logout]');
-    if (logoutBtn) {
-        logoutBtn.addEventListener('click', async (e) => {
-            e.preventDefault();
-            try {
+    // Set up logout buttons (with confirmation modal)
+    const logoutButtons = document.querySelectorAll('[data-logout]');
+    const logoutModalId = 'global-logout-modal';
+    const logoutConfirmBtn = document.getElementById('global-logout-confirm');
+    const logoutCancelBtn = document.getElementById('global-logout-cancel');
+
+    async function performLogout() {
+        try {
+            if (window.API && typeof API.logout === 'function') {
+                await API.logout();
+            } else if (window.api && typeof api.logout === 'function') {
                 await api.logout();
-                Session.clear();
-                window.location.href = '/index.php';
-            } catch (error) {
-                UI.toast('Logout failed', 'danger');
             }
+        } catch (error) {
+            // Ignore API failures and fall back to server-side logout.
+        } finally {
+            Session.clear();
+            window.location.href = '/School_Facility_Maintenance_System/frontend/pages/logout.php';
+        }
+    }
+
+    logoutButtons.forEach((logoutBtn) => {
+        logoutBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            if (document.getElementById(logoutModalId)) {
+                UI.toggleModal(logoutModalId, true);
+                return;
+            }
+            performLogout();
+        });
+    });
+
+    if (logoutConfirmBtn) {
+        logoutConfirmBtn.addEventListener('click', async () => {
+            UI.toggleModal(logoutModalId, false);
+            await performLogout();
+        });
+    }
+
+    if (logoutCancelBtn) {
+        logoutCancelBtn.addEventListener('click', () => {
+            UI.toggleModal(logoutModalId, false);
         });
     }
     

@@ -57,62 +57,93 @@ $pageTitle = 'System Administration Dashboard';
         }
 
         .stat-card {
-            background: white;
-            padding: 25px;
-            border-radius: 10px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            border-left: 5px solid #8F00CC;
+            background: #ffffff;
+            border: 1px solid rgba(143, 0, 204, 0.2);
+            border-radius: 14px;
+            padding: 16px;
+            box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
             display: flex;
             flex-direction: column;
-            justify-content: space-between;
+            gap: 10px;
+            min-height: 122px;
+            transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
         }
 
-        .stat-card.users {
-            border-left-color: #3b82f6;
+        .stat-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 24px rgba(15, 23, 42, 0.12);
+            border-color: rgba(143, 0, 204, 0.35);
         }
 
-        .stat-card.reports {
-            border-left-color: #10b981;
+        .stat-head {
+            display: flex;
+            align-items: center;
+            gap: 12px;
         }
 
-        .stat-card.departments {
-            border-left-color: #f59e0b;
+        .stat-icon-chip {
+            width: 50px;
+            height: 50px;
+            border-radius: 12px;
+            display: grid;
+            place-items: center;
+            font-size: 22px;
+            font-weight: 700;
+            color: #1f2937;
+            background: #f3e8ff;
         }
 
-        .stat-card.pending {
-            border-left-color: #ef4444;
+        .stat-card.users .stat-icon-chip {
+            background: linear-gradient(135deg, #dbeafe, #bfdbfe);
         }
 
-        .stat-card.overdue {
-            border-left-color: #f97316;
+        .stat-card.reports .stat-icon-chip {
+            background: linear-gradient(135deg, #dbeafe, #d1d5db);
         }
 
-        .stat-card.completed {
-            border-left-color: #6366f1;
+        .stat-card.departments .stat-icon-chip {
+            background: linear-gradient(135deg, #f3e8ff, #ddd6fe);
+        }
+
+        .stat-card.pending .stat-icon-chip {
+            background: linear-gradient(135deg, #fef3c7, #fed7aa);
+        }
+
+        .stat-card.in-progress .stat-icon-chip {
+            background: linear-gradient(135deg, #fde68a, #fdba74);
+        }
+
+        .stat-card.completed .stat-icon-chip {
+            background: linear-gradient(135deg, #bbf7d0, #86efac);
+        }
+
+        .stat-card.overdue .stat-icon-chip {
+            background: linear-gradient(135deg, #fee2e2, #fecaca);
         }
 
         .stat-label {
             color: #6b7280;
-            font-size: 13px;
+            font-size: 11px;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 8px;
-            font-weight: 600;
+            letter-spacing: 0.8px;
+            margin-bottom: 0;
+            font-weight: 700;
         }
 
         .stat-value {
-            color: #8F00CC;
-            font-size: 32px;
+            color: #1f2a4a;
+            font-size: 48px;
+            line-height: 1;
             font-weight: 700;
-            margin-bottom: 5px;
+            margin: 0;
         }
 
         .stat-detail {
-            color: #9ca3af;
-            font-size: 12px;
-            margin-top: 8px;
-            border-top: 1px solid #e5e7eb;
-            padding-top: 8px;
+            color: #4b5563;
+            font-size: 13px;
+            margin-top: 0;
+            padding-top: 0;
+            border-top: none;
         }
 
         .charts-section {
@@ -142,6 +173,26 @@ $pageTitle = 'System Administration Dashboard';
             position: relative;
             height: 300px;
             margin-bottom: 15px;
+        }
+
+        .priority-chart-card {
+            background: #f8fafc;
+            border: 1px solid #e5e7eb;
+            box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
+            padding: 0;
+            overflow: hidden;
+        }
+
+        .priority-chart-card .chart-title {
+            color: #111827;
+            margin: 0;
+            padding: 22px 24px;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .priority-chart-card .chart-canvas {
+            margin-bottom: 0;
+            padding: 18px 16px 14px;
         }
 
         .overview-section {
@@ -286,6 +337,171 @@ $pageTitle = 'System Administration Dashboard';
             vertical-align: middle;
         }
 
+        .last-month-filters {
+            margin-bottom: 20px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+        }
+
+        .last-month-filter-control {
+            padding: 8px 12px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 14px;
+            background: var(--card-color);
+            color: var(--text-light);
+        }
+
+        .last-month-clear-btn {
+            padding: 8px 12px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+            font-weight: 500;
+            background: var(--accent-cancel);
+            color: #ffffff;
+        }
+
+        .last-month-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+            background: var(--card-color);
+            border: 1px solid var(--border);
+        }
+
+        .last-month-table thead tr {
+            background: var(--table-header-bg);
+            border-bottom: 2px solid var(--table-border);
+        }
+
+        .last-month-table th {
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            color: var(--table-header-text);
+            border-color: var(--table-border);
+        }
+
+        .last-month-table td {
+            padding: 12px;
+            color: var(--text-light);
+            border-bottom: 1px solid var(--table-border);
+        }
+
+        .last-month-table tbody tr:nth-child(odd) {
+            background: var(--card-color);
+        }
+
+        .last-month-table tbody tr:nth-child(even) {
+            background: var(--muted-card);
+        }
+
+        .last-month-table tbody tr:hover {
+            background: var(--table-row-hover);
+        }
+
+        .last-month-table .cell-muted {
+            color: var(--muted-text);
+        }
+
+        .last-month-table .cell-emphasis {
+            color: var(--primary-color);
+            font-weight: 600;
+        }
+
+        .last-month-view-link {
+            color: var(--primary-color);
+            text-decoration: none;
+            font-weight: 500;
+            border: 1px solid var(--primary-color);
+            padding: 4px 12px;
+            border-radius: 4px;
+            display: inline-block;
+            background: transparent;
+        }
+
+        .last-month-view-link:hover {
+            background: var(--primary-color);
+            color: #ffffff;
+        }
+
+        :root[data-theme-resolved='dark'] .system-dashboard {
+            background: #080d18;
+        }
+
+        :root[data-theme-resolved='dark'] .recent-activity-section {
+            background: #111827;
+            border: 1px solid #374151;
+        }
+
+        :root[data-theme-resolved='dark'] .recent-activity-title {
+            color: #f3f4f6;
+            border-bottom-color: #374151;
+        }
+
+        :root[data-theme-resolved='dark'] .last-month-filter-control {
+            background: #111827 !important;
+            color: #e5e7eb !important;
+            border-color: #374151 !important;
+        }
+
+        :root[data-theme-resolved='dark'] .last-month-filter-control::placeholder {
+            color: #9ca3af;
+        }
+
+        :root[data-theme-resolved='dark'] #lastMonthReportsContainer .last-month-table {
+            background: #111827 !important;
+            border-color: #374151 !important;
+        }
+
+        :root[data-theme-resolved='dark'] #lastMonthReportsContainer .last-month-table thead,
+        :root[data-theme-resolved='dark'] #lastMonthReportsContainer .last-month-table thead tr,
+        :root[data-theme-resolved='dark'] #lastMonthReportsContainer .last-month-table th {
+            background: #1f2937 !important;
+            color: #f3f4f6 !important;
+            border-color: #374151 !important;
+            opacity: 1 !important;
+        }
+
+        :root[data-theme-resolved='dark'] #lastMonthReportsContainer .last-month-table td {
+            color: #e5e7eb !important;
+            border-color: #374151 !important;
+            opacity: 1 !important;
+            text-shadow: none !important;
+        }
+
+        :root[data-theme-resolved='dark'] #lastMonthReportsContainer .last-month-table tbody tr,
+        :root[data-theme-resolved='dark'] #lastMonthReportsContainer .last-month-table tbody tr:nth-child(odd),
+        :root[data-theme-resolved='dark'] #lastMonthReportsContainer .last-month-table tbody tr:nth-child(even) {
+            background: #111827 !important;
+        }
+
+        :root[data-theme-resolved='dark'] #lastMonthReportsContainer .last-month-table tbody tr:hover {
+            background: #1a2233 !important;
+        }
+
+        :root[data-theme-resolved='dark'] #lastMonthReportsContainer .last-month-table .cell-muted {
+            color: #cbd5e1 !important;
+        }
+
+        :root[data-theme-resolved='dark'] #lastMonthReportsContainer .last-month-table .cell-emphasis {
+            color: #f3f4f6 !important;
+        }
+
+        :root[data-theme-resolved='dark'] #lastMonthReportsContainer .last-month-view-link {
+            color: #e5e7eb !important;
+            border-color: #8A2BE2 !important;
+            background: rgba(138, 43, 226, 0.12) !important;
+        }
+
+        :root[data-theme-resolved='dark'] #lastMonthReportsContainer .last-month-view-link:hover {
+            color: #ffffff !important;
+            background: #8A2BE2 !important;
+        }
+
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
@@ -307,11 +523,17 @@ $pageTitle = 'System Administration Dashboard';
             }
 
             .stat-value {
-                font-size: 24px;
+                font-size: 38px;
             }
 
             .stat-card {
                 padding: 15px;
+            }
+
+            .stat-icon-chip {
+                width: 44px;
+                height: 44px;
+                font-size: 18px;
             }
         }
     </style>
@@ -346,7 +568,7 @@ $pageTitle = 'System Administration Dashboard';
                     <canvas id="statusChart"></canvas>
                 </div>
             </div>
-            <div class="chart-container">
+            <div class="chart-container priority-chart-card">
                 <div class="chart-title">Reports by Priority</div>
                 <div class="chart-canvas">
                     <canvas id="priorityChart"></canvas>
@@ -405,8 +627,8 @@ $pageTitle = 'System Administration Dashboard';
             <div class="recent-activity-title">ðŸ“… Last Month Reports</div>
             
             <!-- Filter Options -->
-            <div style="margin-bottom: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px;">
-                <select id="last-month-status-filter" class="form-control" style="padding: 8px 12px; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 14px;">
+            <div class="last-month-filters">
+                <select id="last-month-status-filter" class="form-control last-month-filter-control">
                     <option value="">All Status</option>
                     <option value="submitted">Submitted</option>
                     <option value="assigned">Assigned</option>
@@ -415,7 +637,7 @@ $pageTitle = 'System Administration Dashboard';
                     <option value="closed">Closed</option>
                 </select>
                 
-                <select id="last-month-priority-filter" class="form-control" style="padding: 8px 12px; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 14px;">
+                <select id="last-month-priority-filter" class="form-control last-month-filter-control">
                     <option value="">All Priority</option>
                     <option value="low">Low</option>
                     <option value="medium">Medium</option>
@@ -424,13 +646,13 @@ $pageTitle = 'System Administration Dashboard';
                     <option value="critical">Critical</option>
                 </select>
 
-                <input type="date" id="last-month-date-from" class="form-control" style="padding: 8px 12px; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 14px;">
+                <input type="date" id="last-month-date-from" class="form-control last-month-filter-control">
 
-                <input type="date" id="last-month-date-to" class="form-control" style="padding: 8px 12px; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 14px;">
+                <input type="date" id="last-month-date-to" class="form-control last-month-filter-control">
 
-                <input type="text" id="last-month-search" placeholder="Search title..." class="form-control" style="padding: 8px 12px; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 14px;">
+                <input type="text" id="last-month-search" placeholder="Search title..." class="form-control last-month-filter-control">
                 
-                <button id="last-month-clear-filters" class="btn btn-secondary" style="padding: 8px 12px; background: #6b7280; color: white; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; font-weight: 500;">Clear Filters</button>
+                <button id="last-month-clear-filters" class="btn btn-secondary last-month-clear-btn">Clear Filters</button>
             </div>
 
             <!-- Reports Table -->
@@ -481,7 +703,10 @@ $pageTitle = 'System Administration Dashboard';
             const container = document.getElementById('statsContainer');
             container.innerHTML = `
                 <div class="stat-card users">
-                    <div class="stat-label">Total Users</div>
+                    <div class="stat-head">
+                        <span class="stat-icon-chip" aria-hidden="true">&#128101;</span>
+                        <div class="stat-label">Total Users</div>
+                    </div>
                     <div class="stat-value">${data.totalUsers}</div>
                     <div class="stat-detail">
                         Super Admin: ${data.roleBreakdown.super_admin || 0}<br>
@@ -491,18 +716,21 @@ $pageTitle = 'System Administration Dashboard';
                 </div>
 
                 <div class="stat-card reports">
-                    <div class="stat-label">Total Reports</div>
+                    <div class="stat-head">
+                        <span class="stat-icon-chip" aria-hidden="true">&#128196;</span>
+                        <div class="stat-label">Total Reports</div>
+                    </div>
                     <div class="stat-value">${data.totalReports}</div>
                     <div class="stat-detail">
-                        Completed: ${data.statusBreakdown.completed || 0} &nbsp;|&nbsp;
-                        In Progress: ${data.inProgressReports || 0}<br>
-                        Submitted: ${data.statusBreakdown.submitted || 0} &nbsp;|&nbsp;
-                        Assigned: ${data.statusBreakdown.assigned || 0}
+                        System-wide report volume
                     </div>
                 </div>
 
                 <div class="stat-card departments">
-                    <div class="stat-label">Departments</div>
+                    <div class="stat-head">
+                        <span class="stat-icon-chip" aria-hidden="true">&#127970;</span>
+                        <div class="stat-label">Departments</div>
+                    </div>
                     <div class="stat-value">${data.totalDepartments}</div>
                     <div class="stat-detail">
                         Active maintenance departments
@@ -510,15 +738,32 @@ $pageTitle = 'System Administration Dashboard';
                 </div>
 
                 <div class="stat-card pending">
-                    <div class="stat-label">Pending Reports</div>
+                    <div class="stat-head">
+                        <span class="stat-icon-chip" aria-hidden="true">&#9203;</span>
+                        <div class="stat-label">Pending Tasks</div>
+                    </div>
                     <div class="stat-value">${data.pendingReports}</div>
                     <div class="stat-detail">
-                        Submitted + Assigned â€” needs action
+                        Submitted + assigned
+                    </div>
+                </div>
+
+                <div class="stat-card in-progress">
+                    <div class="stat-head">
+                        <span class="stat-icon-chip" aria-hidden="true">&#128295;</span>
+                        <div class="stat-label">In Progress</div>
+                    </div>
+                    <div class="stat-value">${data.inProgressReports || 0}</div>
+                    <div class="stat-detail">
+                        Currently being worked on
                     </div>
                 </div>
 
                 <div class="stat-card overdue">
-                    <div class="stat-label">Overdue Reports</div>
+                    <div class="stat-head">
+                        <span class="stat-icon-chip" aria-hidden="true">&#9888;</span>
+                        <div class="stat-label">Overdue</div>
+                    </div>
                     <div class="stat-value">${data.overdueReports}</div>
                     <div class="stat-detail">
                         Past due date, not yet completed
@@ -526,10 +771,13 @@ $pageTitle = 'System Administration Dashboard';
                 </div>
 
                 <div class="stat-card completed">
-                    <div class="stat-label">Completed (This Month)</div>
+                    <div class="stat-head">
+                        <span class="stat-icon-chip" aria-hidden="true">&#10004;</span>
+                        <div class="stat-label">Completed</div>
+                    </div>
                     <div class="stat-value">${data.completedThisMonth}</div>
                     <div class="stat-detail">
-                        Current month achievement
+                        This month
                     </div>
                 </div>
             `;
@@ -608,14 +856,17 @@ $pageTitle = 'System Administration Dashboard';
 
             const ctx2 = document.getElementById('priorityChart').getContext('2d');
             priorityChart = new Chart(ctx2, {
-                type: 'doughnut',
+                type: 'bar',
                 data: {
                     labels: data.priorityChart.labels,
                     datasets: [{
+                        label: 'Reports',
                         data: data.priorityChart.data,
-                        backgroundColor: data.priorityChart.colors,
+                        backgroundColor: ['#94a3b8', '#3b82f6', '#f59e0b', '#ef4444', '#991b1b'],
                         borderColor: '#ffffff',
-                        borderWidth: 2
+                        borderWidth: 1,
+                        barThickness: 70,
+                        maxBarThickness: 76
                     }]
                 },
                 options: {
@@ -623,7 +874,29 @@ $pageTitle = 'System Administration Dashboard';
                     maintainAspectRatio: false,
                     plugins: {
                         legend: {
-                            position: 'right'
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                stepSize: 2,
+                                color: '#4b5563'
+                            },
+                            grid: {
+                                color: 'rgba(148, 163, 184, 0.35)',
+                                drawBorder: false
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                color: '#4b5563'
+                            },
+                            grid: {
+                                color: 'rgba(148, 163, 184, 0.25)',
+                                drawBorder: false
+                            }
                         }
                     }
                 }
@@ -888,35 +1161,64 @@ $pageTitle = 'System Administration Dashboard';
                 });
             }
 
-            let html = '<table style="width: 100%; border-collapse: collapse; font-size: 14px;">';
+            function getResolvedTheme() {
+                const rootTheme = document.documentElement.getAttribute('data-theme-resolved');
+                if (rootTheme === 'dark' || rootTheme === 'light') {
+                    return rootTheme;
+                }
+
+                try {
+                    const mode = localStorage.getItem('sfmsThemeMode') || 'light';
+                    if (mode === 'auto') {
+                        return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+                    }
+                    return mode === 'dark' ? 'dark' : 'light';
+                } catch (error) {
+                    return 'light';
+                }
+            }
+
+            const isDark = getResolvedTheme() === 'dark';
+            const tableBg = isDark ? '#111827' : '#ffffff';
+            const borderColor = isDark ? '#374151' : '#e5e7eb';
+            const headerBg = isDark ? '#1f2937' : '#f3f4f6';
+            const headerText = isDark ? '#f3f4f6' : '#8F00CC';
+            const rowOdd = isDark ? '#111827' : '#ffffff';
+            const rowEven = isDark ? '#0f172a' : '#f9fafb';
+            const textPrimary = isDark ? '#f3f4f6' : '#8F00CC';
+            const textMuted = isDark ? '#cbd5e1' : '#6b7280';
+            const viewText = isDark ? '#e5e7eb' : '#8F00CC';
+            const viewBg = isDark ? 'rgba(138, 43, 226, 0.14)' : 'transparent';
+
+            let html = `<table class="last-month-table" style="width: 100%; border-collapse: collapse; font-size: 14px; background: ${tableBg}; border: 1px solid ${borderColor};">`;
             html += '<thead>';
-            html += '<tr style="background: #f3f4f6; border-bottom: 2px solid #e5e7eb;">';
-            html += '<th style="padding: 12px; text-align: left; font-weight: 600; color: #8F00CC;">ID</th>';
-            html += '<th style="padding: 12px; text-align: left; font-weight: 600; color: #8F00CC;">Title</th>';
-            html += '<th style="padding: 12px; text-align: left; font-weight: 600; color: #8F00CC;">Location</th>';
-            html += '<th style="padding: 12px; text-align: left; font-weight: 600; color: #8F00CC;">Priority</th>';
-            html += '<th style="padding: 12px; text-align: left; font-weight: 600; color: #8F00CC;">Status</th>';
-            html += '<th style="padding: 12px; text-align: left; font-weight: 600; color: #8F00CC;">Assigned To</th>';
-            html += '<th style="padding: 12px; text-align: left; font-weight: 600; color: #8F00CC;">Created</th>';
-            html += '<th style="padding: 12px; text-align: left; font-weight: 600; color: #8F00CC;">Action</th>';
+            html += `<tr style="background: ${headerBg}; border-bottom: 2px solid ${borderColor};">`;
+            html += `<th style="padding: 12px; text-align: left; font-weight: 600; color: ${headerText}; border-color: ${borderColor};">ID</th>`;
+            html += `<th style="padding: 12px; text-align: left; font-weight: 600; color: ${headerText}; border-color: ${borderColor};">Title</th>`;
+            html += `<th style="padding: 12px; text-align: left; font-weight: 600; color: ${headerText}; border-color: ${borderColor};">Location</th>`;
+            html += `<th style="padding: 12px; text-align: left; font-weight: 600; color: ${headerText}; border-color: ${borderColor};">Priority</th>`;
+            html += `<th style="padding: 12px; text-align: left; font-weight: 600; color: ${headerText}; border-color: ${borderColor};">Status</th>`;
+            html += `<th style="padding: 12px; text-align: left; font-weight: 600; color: ${headerText}; border-color: ${borderColor};">Assigned To</th>`;
+            html += `<th style="padding: 12px; text-align: left; font-weight: 600; color: ${headerText}; border-color: ${borderColor};">Created</th>`;
+            html += `<th style="padding: 12px; text-align: left; font-weight: 600; color: ${headerText}; border-color: ${borderColor};">Action</th>`;
             html += '</tr>';
             html += '</thead><tbody>';
 
-            reports.forEach((report, idx) => {
+            reports.forEach((report, index) => {
                 const priorityColor = getPriorityColor(report.priority);
                 const statusColor = getStatusColor(report.status);
                 const createdDate = formatDate(report.created_at);
-                const bgColor = idx % 2 === 0 ? '#ffffff' : '#f9fafb';
+                const rowBg = index % 2 === 0 ? rowOdd : rowEven;
 
-                html += `<tr style="background: ${bgColor}; border-bottom: 1px solid #e5e7eb;">`;
-                html += `<td style="padding: 12px; color: #8F00CC; font-weight: 500;">#${report.report_id}</td>`;
-                html += `<td style="padding: 12px; color: #8F00CC; font-weight: 500;">${report.title}</td>`;
-                html += `<td style="padding: 12px; color: #6b7280;">${report.location}</td>`;
-                html += `<td style="padding: 12px;"><span style="background: ${priorityColor}; color: white; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600;">${report.priority.toUpperCase()}</span></td>`;
-                html += `<td style="padding: 12px;"><span style="background: ${statusColor}; color: white; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600;">${report.status.replace('_', ' ').toUpperCase()}</span></td>`;
-                html += `<td style="padding: 12px; color: #6b7280;">${report.assigned_name || 'Unassigned'}</td>`;
-                html += `<td style="padding: 12px; color: #6b7280;">${createdDate}</td>`;
-                html += `<td style="padding: 12px;"><a href="/School_Facility_Maintenance_System/frontend/pages/maintenance-report-detail.php?id=${report.report_id}" style="color: #8F00CC; text-decoration: none; font-weight: 500; border: 1px solid #8F00CC; padding: 4px 12px; border-radius: 4px; display: inline-block;">View</a></td>`;
+                html += `<tr style="background: ${rowBg}; border-bottom: 1px solid ${borderColor};">`;
+                html += `<td class="cell-emphasis" style="padding: 12px; color: ${textPrimary}; border-color: ${borderColor}; font-weight: 600;">#${report.report_id}</td>`;
+                html += `<td class="cell-emphasis" style="padding: 12px; color: ${textPrimary}; border-color: ${borderColor}; font-weight: 600;">${report.title}</td>`;
+                html += `<td class="cell-muted" style="padding: 12px; color: ${textMuted}; border-color: ${borderColor};">${report.location}</td>`;
+                html += `<td style="padding: 12px; border-color: ${borderColor};"><span style="background: ${priorityColor}; color: white; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600;">${report.priority.toUpperCase()}</span></td>`;
+                html += `<td style="padding: 12px; border-color: ${borderColor};"><span style="background: ${statusColor}; color: white; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600;">${report.status.replace('_', ' ').toUpperCase()}</span></td>`;
+                html += `<td class="cell-muted" style="padding: 12px; color: ${textMuted}; border-color: ${borderColor};">${report.assigned_name || 'Unassigned'}</td>`;
+                html += `<td class="cell-muted" style="padding: 12px; color: ${textMuted}; border-color: ${borderColor};">${createdDate}</td>`;
+                html += `<td style="padding: 12px; border-color: ${borderColor};"><a href="/School_Facility_Maintenance_System/frontend/pages/maintenance-report-detail.php?id=${report.report_id}" class="last-month-view-link" style="color: ${viewText}; text-decoration: none; font-weight: 600; border: 1px solid #8A2BE2; padding: 6px 14px; border-radius: 6px; display: inline-block; background: ${viewBg};">View</a></td>`;
                 html += '</tr>';
             });
 

@@ -6,6 +6,11 @@
 
 // Get current page to set active state
 $current_page = basename($_SERVER['PHP_SELF']);
+$current_settings_tab = isset($_GET['tab']) ? strtolower(trim((string) $_GET['tab'])) : 'general';
+$allowed_settings_tabs = ['general', 'account', 'notifications'];
+if (!in_array($current_settings_tab, $allowed_settings_tabs, true)) {
+    $current_settings_tab = 'general';
+}
 ?>
 
 <aside class="sidebar" id="sidebar">
@@ -30,12 +35,27 @@ $current_page = basename($_SERVER['PHP_SELF']);
     <!-- Main Navigation Menu -->
     <nav class="sidebar-nav">
         <ul class="nav-menu">
+            <li class="nav-section-label"><span>Main</span></li>
             <!-- Dashboard -->
             <?php
                 $dashLink = 'dashboard.php';
                 if (!empty($user) && ($user['role'] === 'maintenance_admin')) {
                     $dashLink = 'maintenance-dashboard.php';
+                } elseif (!empty($user) && ($user['role'] === 'maintenance_staff')) {
+                    $dashLink = 'staff-dashboard.php';
                 }
+
+                $reportsLink = 'reports.php';
+                if (!empty($user) && (($user['role'] ?? '') === 'maintenance_staff')) {
+                    $reportsLink = 'maintenance-reports-list.php';
+                }
+
+                $inventoryLink = '#inventory';
+                if (!empty($user) && in_array(($user['role'] ?? ''), ['maintenance_admin', 'maintenance_staff'], true)) {
+                    $inventoryLink = 'buildings-overview.php';
+                }
+
+                $showUserManagement = !empty($user) && (($user['role'] ?? '') === 'super_admin');
             ?>
             <li class="nav-item">
                 <a href="<?php echo $dashLink; ?>" class="nav-link <?php echo ($current_page === basename($dashLink)) ? 'active' : ''; ?>" data-page="dashboard">
@@ -52,7 +72,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
 
             <!-- All Reports -->
             <li class="nav-item">
-                <a href="reports.php" class="nav-link <?php echo ($current_page === 'reports.php') ? 'active' : ''; ?>" data-page="reports">
+                <a href="<?php echo $reportsLink; ?>" class="nav-link <?php echo ($current_page === basename($reportsLink)) ? 'active' : ''; ?>" data-page="reports">
                     <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M14 2H6C4.9 2 4 2.9 4 4V20C4 21.1 4.9 22 6 22H18C19.1 22 20 21.1 20 20V8L14 2Z"></path>
                         <path d="M14 2V8H20"></path>
@@ -65,7 +85,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
 
             <!-- Inventory -->
             <li class="nav-item">
-                <a href="#inventory" class="nav-link" data-page="inventory">
+                <a href="<?php echo $inventoryLink; ?>" class="nav-link <?php echo ($current_page === basename($inventoryLink)) ? 'active' : ''; ?>" data-page="inventory">
                     <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M9 2C7.9 2 7 2.9 7 4V20C7 21.1 7.9 22 9 22H19C20.1 22 21 21.1 21 20V8L13 2H9Z"></path>
                         <path d="M13 2V8H21"></path>
@@ -77,60 +97,70 @@ $current_page = basename($_SERVER['PHP_SELF']);
                 </a>
             </li>
 
-            <!-- User Management -->
+            <?php if ($showUserManagement): ?>
             <li class="nav-item">
                 <a href="users.php" class="nav-link <?php echo ($current_page === 'users.php') ? 'active' : ''; ?>" data-page="users">
                     <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="12" cy="8" r="4"></circle>
-                        <path d="M4 20C4 15.6 7.6 12 12 12C16.4 12 20 15.6 20 20"></path>
-                        <circle cx="18" cy="18" r="2" opacity="0.6"></circle>
+                        <path d="M16 21V19C16 16.79 14.21 15 12 15H6C3.79 15 2 16.79 2 19V21"></path>
+                        <circle cx="9" cy="7" r="4"></circle>
+                        <path d="M22 21V19C22 17.14 20.73 15.56 19 15.13"></path>
+                        <path d="M16 3.13C17.73 3.56 19 5.14 19 7C19 8.86 17.73 10.44 16 10.87"></path>
                     </svg>
                     <span class="nav-text">User Management</span>
                 </a>
             </li>
+            <?php endif; ?>
 
-            <?php if (!empty($user) && in_array($user['role'], ['super_admin', 'maintenance_admin'], true)): ?>
-            <!-- Settings (for Super Admin and Maintenance Admin) -->
-            <li class="nav-item">
-                <a href="settings.php" class="nav-link <?php echo ($current_page === 'settings.php') ? 'active' : ''; ?>" data-page="settings">
+            <li class="nav-section-label"><span>Account</span></li>
+            <!-- Settings -->
+            <li class="nav-item settings-item">
+                <a href="#" class="nav-link settings-link <?php echo ($current_page === 'settings.php') ? 'active' : ''; ?>" data-page="settings" data-settings-toggle aria-expanded="false" aria-controls="settings-submenu">
                     <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <circle cx="12" cy="12" r="3"></circle>
                         <path d="M12 1V3M12 21V23M4.22 4.22L5.64 5.64M18.36 18.36L19.78 19.78M1 12H3M21 12H23M4.22 19.78L5.64 18.36M18.36 5.64L19.78 4.22"></path>
                     </svg>
                     <span class="nav-text">Settings</span>
+                    <span class="nav-caret" aria-hidden="true">▾</span>
                 </a>
+                <ul class="settings-submenu" id="settings-submenu">
+                    <li class="nav-item">
+                        <a href="settings.php?tab=general" class="nav-link settings-subitem <?php echo ($current_page === 'settings.php' && $current_settings_tab === 'general') ? 'active' : ''; ?>" data-page="settings-general">
+                            <span class="nav-text">General</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="settings.php?tab=account" class="nav-link settings-subitem <?php echo ($current_page === 'settings.php' && $current_settings_tab === 'account') ? 'active' : ''; ?>" data-page="settings-account">
+                            <span class="nav-text">Account</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="settings.php?tab=notifications" class="nav-link settings-subitem <?php echo ($current_page === 'settings.php' && $current_settings_tab === 'notifications') ? 'active' : ''; ?>" data-page="settings-notifications">
+                            <span class="nav-text">Notifications</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="#" class="nav-link logout-link logout-subitem" data-logout>
+                            <span class="nav-text">Log Out</span>
+                        </a>
+                    </li>
+                </ul>
             </li>
-            <?php endif; ?>
+            
         </ul>
     </nav>
 
     <!-- Sidebar Footer -->
-    <div class="sidebar-footer">
-        <ul class="nav-menu">
-            <?php if (empty($user) || !in_array($user['role'], ['super_admin', 'maintenance_admin'], true)): ?>
-            <!-- Settings -->
-            <li class="nav-item">
-                <a href="settings.php" class="nav-link <?php echo ($current_page === 'settings.php') ? 'active' : ''; ?>" data-page="settings">
-                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="12" cy="12" r="3"></circle>
-                        <path d="M12 1V3M12 21V23M4.22 4.22L5.64 5.64M18.36 18.36L19.78 19.78M1 12H3M21 12H23M4.22 19.78L5.64 18.36M18.36 5.64L19.78 4.22"></path>
-                    </svg>
-                    <span class="nav-text">Settings</span>
-                </a>
-            </li>
-            <?php endif; ?>
-
-        </ul>
-    </div>
+    <div class="sidebar-footer"></div>
     <style>
         /* logo styling for sidebar header image – make circular */
         .sidebar-header .logo-container img.sidebar-logo {
             width: 60px;
             height: 60px;
             object-fit: cover;
+            object-position: center;
             border-radius: 50%;
-            margin-right: 10px;
-            vertical-align: middle;
+            margin: 0;
+            display: block;
         }
     </style>
 </aside>

@@ -36,10 +36,12 @@ define('PASSWORD_MIN_LENGTH', 8);
 define('STATUS_ACTIVE', 'active');
 define('STATUS_INACTIVE', 'inactive');
 define('STATUS_SUSPENDED', 'suspended');
+define('STATUS_PENDING', 'pending');
 
 // Role constants
 define('ROLE_SUPER_ADMIN', 'super_admin');
 define('ROLE_DEPARTMENT_ADMIN', 'department_admin');
+define('ROLE_MAINTENANCE_ADMIN', 'maintenance_admin');
 define('ROLE_MAINTENANCE_STAFF', 'maintenance_staff');
 define('ROLE_USER', 'user');
 

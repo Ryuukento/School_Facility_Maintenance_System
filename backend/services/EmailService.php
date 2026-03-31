@@ -54,6 +54,8 @@ class EmailService
         $mail->Password   = self::SMTP_PASSWORD;
         $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
         $mail->Port       = self::SMTP_PORT;
+        $mail->Timeout    = 10;
+        $mail->SMTPKeepAlive = false;
 
         $mail->setFrom(self::SMTP_USERNAME, self::FROM_NAME);
         $mail->isHTML(true);
@@ -71,35 +73,71 @@ class EmailService
     public static function sendNewReportNotification(array $report, array $superAdmins): bool
     {
         if (empty($superAdmins)) {
-            return false;
+            $superAdmins = [];
         }
 
-        $success = true;
+      $emails = [];
+      $seenEmails = [];
 
-        foreach ($superAdmins as $admin) {
-            if (empty($admin['email'])) continue;
-
-            try {
-                $mail = self::createMailer();
-                $mail->addAddress($admin['email'], $admin['full_name'] ?? 'Admin');
-
-                $priorityColor = self::getPriorityColor($report['priority'] ?? 'medium');
-                $priorityLabel = strtoupper($report['priority'] ?? 'MEDIUM');
-
-                $mail->Subject = '[SFMS] New Maintenance Report: ' . ($report['title'] ?? 'Untitled');
-                $mail->Body    = self::buildNewReportEmailHTML($report, $priorityColor, $priorityLabel);
-                $mail->AltBody = self::buildNewReportEmailText($report);
-
-                $mail->send();
-                error_log('[EmailService] Email sent to ' . $admin['email']);
-
-            } catch (PHPMailerException $e) {
-                error_log('[EmailService] Failed to send to ' . ($admin['email'] ?? '?') . ': ' . $e->getMessage());
-                $success = false;
-            }
+      foreach ($superAdmins as $admin) {
+        $email = strtolower(trim((string)($admin['email'] ?? '')));
+        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+          continue;
         }
 
-        return $success;
+        if (isset($seenEmails[$email])) {
+          continue;
+        }
+
+        $seenEmails[$email] = true;
+        $emails[] = [
+          'email' => $email,
+          'full_name' => $admin['full_name'] ?? 'Admin'
+        ];
+      }
+
+      // Always copy the configured SMTP account so this mailbox receives
+      // every new-report alert even if DB recipients are missing/misconfigured.
+      $smtpAccountEmail = strtolower(trim((string)self::SMTP_USERNAME));
+      if ($smtpAccountEmail !== '' && filter_var($smtpAccountEmail, FILTER_VALIDATE_EMAIL) && !isset($seenEmails[$smtpAccountEmail])) {
+        $seenEmails[$smtpAccountEmail] = true;
+        $emails[] = [
+          'email' => $smtpAccountEmail,
+          'full_name' => 'Super Admin'
+        ];
+      }
+
+      if (empty($emails)) {
+        return false;
+      }
+
+      try {
+        $mail = self::createMailer();
+
+        // Send one message to all admins (first as TO, others as BCC) to avoid
+        // opening multiple SMTP sessions that slow down report submission.
+        $primary = array_shift($emails);
+        $mail->addAddress($primary['email'], $primary['full_name']);
+
+        foreach ($emails as $admin) {
+          $mail->addBCC($admin['email'], $admin['full_name']);
+        }
+
+        $priorityColor = self::getPriorityColor($report['priority'] ?? 'medium');
+        $priorityLabel = strtoupper($report['priority'] ?? 'MEDIUM');
+
+        $mail->Subject = '[SFMS] New Maintenance Report: ' . ($report['title'] ?? 'Untitled');
+        $mail->Body    = self::buildNewReportEmailHTML($report, $priorityColor, $priorityLabel);
+        $mail->AltBody = self::buildNewReportEmailText($report);
+
+        $mail->send();
+        error_log('[EmailService] Email sent to ' . $primary['email'] . ' with BCC recipients: ' . count($emails));
+
+        return true;
+      } catch (Throwable $e) {
+        error_log('[EmailService] Failed to send admin notification email: ' . $e->getMessage());
+        return false;
+      }
     }
 
     /**

@@ -11,21 +11,13 @@ if (!isset($_SESSION['user'])) {
 }
 
 $user = $_SESSION['user'];
-if (!in_array($user['role'], ['super_admin', 'maintenance_admin'])) {
-    header('Location: /School_Facility_Maintenance_System/frontend/pages/dashboard.php');
+if (($user['role'] ?? '') !== 'maintenance_staff') {
+    header('Location: /School_Facility_Maintenance_System/frontend/pages/maintenance-reports-list.php');
     exit;
 }
 
 require_once __DIR__ . '/../../backend/config/database.php';
 $pdo = getDBConnection();
-
-// Get departments
-$stmt = $pdo->query("SELECT * FROM departments WHERE status = 'active' ORDER BY name");
-$departments = $stmt->fetchAll();
-
-// Get maintenance staff for assignment
-$stmt = $pdo->query("SELECT user_id, full_name FROM users WHERE role IN ('maintenance_admin', 'maintenance_staff') AND status = 'active' ORDER BY full_name");
-$staff = $stmt->fetchAll();
 
 $reportId = $_GET['id'] ?? null;
 $report = null;
@@ -58,7 +50,7 @@ if ($reportId) {
 
 <?php include __DIR__ . '/../includes/header.php'; ?>
 
-<main class="container" style="margin-top: 20px; max-width: 700px;">
+<main class="container maintenance-create-report-page" style="margin-top: 20px;">
     <div class="card">
         <div class="card-header">
             <h2><?php echo $report ? 'Edit' : 'Create'; ?> Maintenance Report</h2>
@@ -92,19 +84,6 @@ if ($reportId) {
                 </div>
 
                 <div class="form-group">
-                    <label for="department_id">Department *</label>
-                    <select id="department_id" name="department_id" required>
-                        <option value="">Select Department</option>
-                        <?php foreach ($departments as $dept): ?>
-                            <option value="<?php echo $dept['department_id']; ?>" 
-                                <?php echo ($report && $report['department_id'] == $dept['department_id']) ? 'selected' : ''; ?>>
-                                <?php echo htmlspecialchars($dept['name']); ?>
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-
-                <div class="form-group">
                     <label for="priority">Priority *</label>
                     <select id="priority" name="priority" required>
                         <option value="low" <?php echo ($report && $report['priority'] == 'low') ? 'selected' : ''; ?>>Low</option>
@@ -124,28 +103,6 @@ if ($reportId) {
                         required><?php echo htmlspecialchars($report['description'] ?? ''); ?></textarea>
                 </div>
 
-                <div class="form-group">
-                    <label for="assigned_to">Assign To</label>
-                    <select id="assigned_to" name="assigned_to">
-                        <option value="">Do not assign</option>
-                        <?php foreach ($staff as $person): ?>
-                            <option value="<?php echo $person['user_id']; ?>"
-                                <?php echo ($report && $report['assigned_to'] == $person['user_id']) ? 'selected' : ''; ?>>
-                                <?php echo htmlspecialchars($person['full_name']); ?>
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-
-                <div class="form-group">
-                    <label for="due_date">Due Date</label>
-                    <input 
-                        type="date" 
-                        id="due_date" 
-                        name="due_date"
-                        value="<?php echo htmlspecialchars($report['due_date'] ?? ''); ?>">
-                </div>
-
                 <div class="d-flex gap-sm">
                     <button type="submit" class="btn btn-primary" id="submit-btn">
                         <?php echo $report ? 'Update' : 'Create'; ?> Report
@@ -158,6 +115,55 @@ if ($reportId) {
         </div>
     </div>
 </main>
+
+<style>
+.maintenance-create-report-page {
+    width: calc(100% - var(--sidebar-width));
+    max-width: calc(100% - var(--sidebar-width));
+    margin-left: var(--sidebar-width);
+    margin-right: 0;
+    padding-left: 24px;
+    padding-right: 24px;
+}
+
+.navbar .navbar-container {
+    max-width: none;
+    margin: 0;
+    padding-left: 24px;
+    padding-right: 24px;
+}
+
+#sidebar.collapsed ~ main.maintenance-create-report-page {
+    width: calc(100% - var(--sidebar-width-collapsed));
+    max-width: calc(100% - var(--sidebar-width-collapsed));
+    margin-left: var(--sidebar-width-collapsed);
+}
+
+.maintenance-create-report-page .card {
+    width: 100%;
+    margin: 0;
+}
+
+@media (max-width: 992px) {
+    .maintenance-create-report-page {
+        width: calc(100% - var(--sidebar-width-collapsed));
+        max-width: calc(100% - var(--sidebar-width-collapsed));
+        margin-left: var(--sidebar-width-collapsed);
+        padding-left: 16px;
+        padding-right: 16px;
+    }
+}
+
+@media (max-width: 640px) {
+    .maintenance-create-report-page {
+        width: calc(100% - var(--sidebar-width-collapsed));
+        max-width: calc(100% - var(--sidebar-width-collapsed));
+        margin-left: var(--sidebar-width-collapsed);
+        padding-left: 12px;
+        padding-right: 12px;
+    }
+}
+</style>
 
 <?php include __DIR__ . '/../includes/footer.php'; ?>
 
@@ -176,14 +182,11 @@ document.getElementById('report-form').addEventListener('submit', async (e) => {
     const formData = {
         title: document.getElementById('title').value.trim(),
         location: document.getElementById('location').value.trim(),
-        department_id: document.getElementById('department_id').value || null,
         priority: document.getElementById('priority').value,
-        description: document.getElementById('description').value.trim(),
-        assigned_to: document.getElementById('assigned_to').value || null,
-        due_date: document.getElementById('due_date').value || null
+        description: document.getElementById('description').value.trim()
     };
     
-    if (!formData.title || !formData.location || !formData.description || !formData.department_id) {
+    if (!formData.title || !formData.location || !formData.description) {
         alertContainer.innerHTML = '<div class="alert alert-danger">Please fill in all required fields</div>';
         return;
     }
@@ -208,12 +211,15 @@ document.getElementById('report-form').addEventListener('submit', async (e) => {
         const result = await response.json();
         
         if (result.success) {
-            alertContainer.innerHTML = '<div class="alert alert-success">Report ' + (reportId ? 'updated' : 'created') + ' successfully!</div>';
+            const successMessage = reportId
+                ? 'Report updated successfully!'
+                : 'Report created successfully! Na-notify na via email ang Super Admin.';
+            alertContainer.innerHTML = '<div class="alert alert-success">' + successMessage + '</div>';
             
             setTimeout(() => {
                 const newId = result.data.report_id || reportId;
                 window.location.href = `/School_Facility_Maintenance_System/frontend/pages/maintenance-report-detail.php?id=${newId}`;
-            }, 1500);
+            }, 1000);
         } else {
             throw new Error(result.message || 'Failed to save report');
         }

@@ -1,15 +1,15 @@
 /**
- * API Client for SFMS
+ * API Client for SFMS - Laravel Backend
  */
 
 const API = {
-    baseURL: '/School_Facility_Maintenance_System/backend/api',
+    baseURL: '/School_Facility_Maintenance_System/laravel_app/public/api',
     
     /**
      * Login user
      */
     async login(email, password) {
-        const response = await fetch(`${this.baseURL}/auth.php?action=login`, {
+        const response = await fetch(`${this.baseURL}/auth/login`, {
             method: 'POST',
             credentials: 'include',
             headers: {
@@ -31,8 +31,12 @@ const API = {
      * Logout user
      */
     async logout() {
-        const response = await fetch(`${this.baseURL}/auth.php?action=logout`, {
-            credentials: 'include'
+        const response = await fetch(`${this.baseURL}/auth/logout`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+                'Content-Type': 'application/json'
+            }
         });
         const data = await response.json();
         return data;
@@ -42,8 +46,11 @@ const API = {
      * Check session
      */
     async checkSession() {
-        const response = await fetch(`${this.baseURL}/auth.php?action=check`, {
-            credentials: 'include'
+        const response = await fetch(`${this.baseURL}/auth/check`, {
+            credentials: 'include',
+            headers: {
+                'Content-Type': 'application/json'
+            }
         });
         const data = await response.json();
         return data;
@@ -53,13 +60,17 @@ const API = {
      * Get all reports
      */
     async getReports() {
-        const response = await fetch(`${this.baseURL}/reports.php?action=list`, {
-            credentials: 'include'
+        const response = await fetch(`${this.baseURL}/reports`, {
+            method: 'GET',
+            credentials: 'include',
+            headers: {
+                'Content-Type': 'application/json'
+            }
         });
         const data = await response.json();
         
         if (!data.success) {
-            throw new Error(data.message);
+            throw new Error(data.message || 'Unauthorized: Please log in');
         }
         
         return data;
@@ -69,8 +80,12 @@ const API = {
      * Get single report
      */
     async getReport(id) {
-        const response = await fetch(`${this.baseURL}/reports.php?action=get&id=${id}`, {
-            credentials: 'include'
+        const response = await fetch(`${this.baseURL}/reports/${id}`, {
+            method: 'GET',
+            credentials: 'include',
+            headers: {
+                'Content-Type': 'application/json'
+            }
         });
         const data = await response.json();
         
@@ -85,7 +100,7 @@ const API = {
      * Create new report
      */
     async createReport(reportData) {
-        const response = await fetch(`${this.baseURL}/reports.php?action=create`, {
+        const response = await fetch(`${this.baseURL}/reports`, {
             method: 'POST',
             credentials: 'include',
             headers: {
@@ -107,8 +122,9 @@ const API = {
      * Update report
      */
     async updateReport(reportData) {
-        const response = await fetch(`${this.baseURL}/reports.php?action=update`, {
-            method: 'POST',
+        const reportId = reportData.report_id || reportData.id;
+        const response = await fetch(`${this.baseURL}/reports/${reportId}`, {
+            method: 'PATCH',
             credentials: 'include',
             headers: {
                 'Content-Type': 'application/json'
@@ -129,8 +145,12 @@ const API = {
      * Delete report
      */
     async deleteReport(id) {
-        const response = await fetch(`${this.baseURL}/reports.php?action=delete&id=${id}`, {
-            credentials: 'include'
+        const response = await fetch(`${this.baseURL}/reports/${id}`, {
+            method: 'DELETE',
+            credentials: 'include',
+            headers: {
+                'Content-Type': 'application/json'
+            }
         });
         const data = await response.json();
         
@@ -142,50 +162,33 @@ const API = {
     },
 
     /**
-     * Notifications
+     * Notifications - stored as part of reports (pending implementation)
      */
     async getNotifications(limit = 10) {
-        const response = await fetch(`${this.baseURL}/notifications.php?action=getUnread&limit=${limit}`, {
-            credentials: 'include'
-        });
-        const data = await response.json();
-        if (!data.success) throw new Error(data.message || 'Failed to fetch notifications');
-        return data;
+        // Placeholder - notifications not yet implemented in Laravel
+        return { success: true, data: [] };
     },
 
     async getNotificationCount() {
-        const response = await fetch(`${this.baseURL}/notifications.php?action=count`, {
-            credentials: 'include'
-        });
-        const data = await response.json();
-        if (!data.success) throw new Error(data.message || 'Failed to fetch notification count');
-        return data;
+        // Placeholder - notifications not yet implemented in Laravel
+        return { success: true, count: 0 };
     },
 
     async markNotificationAsRead(notificationId) {
-        const form = new URLSearchParams();
-        form.append('notification_id', notificationId);
-
-        const response = await fetch(`${this.baseURL}/notifications.php?action=markAsRead`, {
-            method: 'POST',
-            credentials: 'include',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded'
-            },
-            body: form.toString()
-        });
-
-        const data = await response.json();
-        if (!data.success) throw new Error(data.message || 'Failed to mark notification');
-        return data;
+        // Placeholder - notifications not yet implemented in Laravel
+        return { success: true };
     },
     
     /**
-     * Get statistics
+     * Get statistics / Dashboard stats
      */
     async getStats() {
-        const response = await fetch(`${this.baseURL}/reports.php?action=stats`, {
-            credentials: 'include'
+        const response = await fetch(`${this.baseURL}/dashboard/stats`, {
+            method: 'GET',
+            credentials: 'include',
+            headers: {
+                'Content-Type': 'application/json'
+            }
         });
         const data = await response.json();
         

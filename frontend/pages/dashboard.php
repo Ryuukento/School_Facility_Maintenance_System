@@ -15,70 +15,147 @@ $user = $_SESSION['user'];
         <div class="card-header">
             <div>
                 <h2>Dashboard</h2>
-                <p class="text-muted mb-0">Overview of system activity and reports</p>
+                <p class="text-muted mb-0 dashboard-kicker" id="dashboard-kicker"></p>
             </div>
         </div>
         <div class="card-body">
             <!-- Summary Cards Grid -->
             <div class="summary-cards-grid">
                 <!-- Total Reports Card -->
-                <div class="summary-card">
+                <div class="summary-card summary-card-action" onclick="navigateToReportsCard('total')">
                     <div class="summary-card-content">
-                        <h3 class="summary-card-title">Total Reports</h3>
+                        <h3 class="summary-card-title">Total reports</h3>
                         <div class="summary-card-value" id="stat-total">-</div>
-                        <p class="summary-card-desc">All reports in the system</p>
+                        <p class="summary-card-desc summary-trend-positive">all reports in the system</p>
                     </div>
-                    <div class="summary-card-icon">📄</div>
+                    <div class="summary-card-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                            <path d="M14 2v6h6"></path>
+                        </svg>
+                    </div>
                 </div>
 
                 <!-- Reports Today Card -->
-                <div class="summary-card">
+                <div class="summary-card summary-card-action" onclick="navigateToReportsCard('today')">
                     <div class="summary-card-content">
-                        <h3 class="summary-card-title">Reports Today</h3>
+                        <h3 class="summary-card-title">Reports today</h3>
                         <div class="summary-card-value" id="stat-today">-</div>
-                        <p class="summary-card-desc">Submitted today</p>
+                        <p class="summary-card-desc summary-trend-positive">submitted today</p>
                     </div>
-                    <div class="summary-card-icon">📅</div>
+                    <div class="summary-card-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="4" width="18" height="18" rx="2"></rect>
+                            <path d="M16 2v4M8 2v4M3 10h18"></path>
+                        </svg>
+                    </div>
+                </div>
+
+                <!-- Pending Tasks Card -->
+                <div class="summary-card summary-card-action" onclick="navigateToReportsCard('pending_tasks')">
+                    <div class="summary-card-content">
+                        <h3 class="summary-card-title">Pending tasks</h3>
+                        <div class="summary-card-value" id="stat-pending">-</div>
+                        <p class="summary-card-desc summary-trend-warning">needs attention</p>
+                    </div>
+                    <div class="summary-card-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="9"></circle>
+                            <path d="M12 7v6l4 2"></path>
+                        </svg>
+                    </div>
+                </div>
+
+                <!-- In Progress Card -->
+                <div class="summary-card summary-card-action" onclick="navigateToReportsCard('in_progress')">
+                    <div class="summary-card-content">
+                        <h3 class="summary-card-title">In progress</h3>
+                        <div class="summary-card-value" id="stat-in-progress">-</div>
+                        <p class="summary-card-desc summary-trend-positive">on track</p>
+                    </div>
+                    <div class="summary-card-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M20 7a5 5 0 0 1-7 4.6L7.6 17A2 2 0 1 1 5 14.4l5.4-5.4A5 5 0 1 1 20 7z"></path>
+                        </svg>
+                    </div>
+                </div>
+
+                <!-- Completed Card -->
+                <div class="summary-card summary-card-action" onclick="navigateToReportsCard('completed')">
+                    <div class="summary-card-content">
+                        <h3 class="summary-card-title">Completed</h3>
+                        <div class="summary-card-value" id="stat-completed">-</div>
+                        <p class="summary-card-desc summary-trend-positive">this month</p>
+                    </div>
+                    <div class="summary-card-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M20 6L9 17l-5-5"></path>
+                        </svg>
+                    </div>
                 </div>
 
                 <!-- Low Stock Items Card -->
-                <div class="summary-card summary-card-alert">
+                <div class="summary-card summary-card-alert summary-card-action" onclick="navigateToReportsCard('low_stock')">
                     <div class="summary-card-content">
-                        <h3 class="summary-card-title">Low Stock Items</h3>
+                        <h3 class="summary-card-title">Low stock</h3>
                         <div class="summary-card-value" id="stat-low">-</div>
-                        <p class="summary-card-desc">Inventory needing restock</p>
+                        <p class="summary-card-desc summary-trend-danger">restock now</p>
                     </div>
-                    <div class="summary-card-icon">⚠️</div>
+                    <div class="summary-card-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M10.29 3.86l-8 14A1 1 0 0 0 3.14 19h17.72a1 1 0 0 0 .85-1.5l-8-14a1 1 0 0 0-1.72 0z"></path>
+                            <path d="M12 9v4"></path>
+                            <path d="M12 17h.01"></path>
+                        </svg>
+                    </div>
                 </div>
 
                 <!-- Buildings Overview Card -->
                 <div class="summary-card summary-card-action" onclick="navigateToBuildingsOverview()">
                     <div class="summary-card-content">
-                        <h3 class="summary-card-title">Buildings Overview</h3>
-                        <div class="summary-card-value" style="font-size: 32px;">🏢</div>
-                        <p class="summary-card-desc">Browse buildings, floors & rooms</p>
+                        <h3 class="summary-card-title">Buildings overview</h3>
+                        <div class="summary-card-value" style="font-size: 32px;">Open</div>
+                        <p class="summary-card-desc">browse buildings and rooms</p>
                     </div>
-                    <div class="summary-card-icon">🔍</div>
+                    <div class="summary-card-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M3 21h18"></path>
+                            <path d="M5 21V7l7-4 7 4v14"></path>
+                            <path d="M9 9h6"></path>
+                            <path d="M9 13h6"></path>
+                        </svg>
+                    </div>
                 </div>
 
                 <!-- Add New Building Card -->
                 <div class="summary-card summary-card-action" onclick="openBuildingModal()">
                     <div class="summary-card-content">
-                        <h3 class="summary-card-title">Add New Building</h3>
-                        <div class="summary-card-value" style="font-size: 32px;">🏢</div>
-                        <p class="summary-card-desc">Create new building</p>
+                        <h3 class="summary-card-title">Add building</h3>
+                        <div class="summary-card-value" style="font-size: 32px;">New</div>
+                        <p class="summary-card-desc">create a new building</p>
                     </div>
-                    <div class="summary-card-icon">➕</div>
+                    <div class="summary-card-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 5v14"></path>
+                            <path d="M5 12h14"></path>
+                        </svg>
+                    </div>
                 </div>
 
                 <!-- Add New Room Card -->
                 <div class="summary-card summary-card-action" onclick="openRoomModal()">
                     <div class="summary-card-content">
-                        <h3 class="summary-card-title">Add New Room</h3>
-                        <div class="summary-card-value" style="font-size: 32px;">🚪</div>
-                        <p class="summary-card-desc">Add room to building</p>
+                        <h3 class="summary-card-title">Add room</h3>
+                        <div class="summary-card-value" style="font-size: 32px;">New</div>
+                        <p class="summary-card-desc">add room to a floor</p>
                     </div>
-                    <div class="summary-card-icon">➕</div>
+                    <div class="summary-card-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="4" width="18" height="16" rx="2"></rect>
+                            <path d="M8 12h8"></path>
+                            <path d="M12 8v8"></path>
+                        </svg>
+                    </div>
                 </div>
             </div>
 
@@ -94,7 +171,7 @@ $user = $_SESSION['user'];
                     </div>
                 </div>
 
-                <div class="card chart-card">
+                <div class="card chart-card priority-chart-card">
                     <div class="card-header">
                         <h2>Reports by Priority</h2>
                         <p class="text-muted mb-0">Priority levels across all reports.</p>
@@ -104,14 +181,14 @@ $user = $_SESSION['user'];
                     </div>
                 </div>
 
-                <div class="card">
+                <div class="card recent-reports-card">
                     <div class="card-header">
-                        <h2>Recent Activity</h2>
-                        <p class="text-muted mb-0">A log of the latest actions in the system.</p>
+                        <h2>Recent reports</h2>
+                        <a href="/School_Facility_Maintenance_System/frontend/pages/reports.php" class="recent-reports-link">View all</a>
                     </div>
                     <div class="card-body">
                         <div class="recent-activity" id="recentActivity">
-                            <!-- Activity items will render here -->
+                            <!-- Recent reports list will render here -->
                         </div>
                     </div>
                 </div>
@@ -186,6 +263,27 @@ $user = $_SESSION['user'];
 </div>
 
 <style>
+/* Align dashboard content like the reference layout (no centered container drift) */
+.navbar .navbar-container {
+    max-width: none;
+    margin: 0;
+    padding-left: 24px;
+    padding-right: 24px;
+}
+
+main.container {
+    margin-left: var(--sidebar-width);
+    margin-right: 0;
+    max-width: calc(100% - var(--sidebar-width));
+    padding-left: 24px;
+    padding-right: 24px;
+}
+
+#sidebar.collapsed ~ main.container {
+    margin-left: var(--sidebar-width-collapsed);
+    max-width: calc(100% - var(--sidebar-width-collapsed));
+}
+
 /* Modal Styles */
 .modal {
     display: none;
@@ -321,12 +419,280 @@ $user = $_SESSION['user'];
 .modal-footer .btn-primary:hover {
     background: var(--primary-dark, #3277e6);
 }
+
+/* Dashboard polish */
+.dashboard-kicker {
+    color: #9fb0cc !important;
+    font-weight: 500;
+}
+
+.priority-chart-card {
+    background: linear-gradient(180deg, #182436 0%, #121c2d 100%);
+    border: 1px solid #24344c;
+    box-shadow: 0 10px 24px rgba(3, 8, 18, 0.26);
+    overflow: hidden;
+}
+
+.priority-chart-card .card-header {
+    border-bottom: 1px solid #24344c;
+}
+
+.priority-chart-card .card-header h2 {
+    color: #e8effa;
+}
+
+.priority-chart-card .card-header .text-muted {
+    color: #9fb0cc !important;
+}
+
+.priority-chart-card .card-body {
+    padding: 18px 16px 14px;
+}
+
+.summary-cards-grid {
+    gap: 16px;
+}
+
+.summary-card {
+    min-height: 136px;
+    padding: 18px;
+    border-radius: 16px;
+    border: 1px solid #2a3d5b;
+    background: linear-gradient(180deg, #182438 0%, #121d2f 100%);
+    box-shadow: 0 10px 24px rgba(3, 8, 18, 0.22);
+}
+
+.summary-card:hover {
+    transform: translateY(-4px);
+    border-color: #8b5cf6;
+    background: linear-gradient(180deg, #2a1450 0%, #1f103d 100%);
+    box-shadow: 0 14px 30px rgba(91, 33, 182, 0.4);
+}
+
+.summary-card:hover .summary-card-icon {
+    background: rgba(168, 85, 247, 0.2);
+    border-color: rgba(192, 132, 252, 0.55);
+    color: #d8b4fe;
+}
+
+.summary-card-title {
+    margin: 0 0 8px;
+    font-size: 0.92rem;
+    font-weight: 700;
+    text-transform: none;
+    letter-spacing: 0;
+    color: #c7d4e8;
+}
+
+.summary-card-value {
+    color: #f4f8ff;
+}
+
+.summary-card-desc {
+    color: #9fb0cc;
+    font-size: 0.9rem;
+    text-transform: lowercase;
+}
+
+.summary-card-icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+    display: grid;
+    place-items: center;
+    background: rgba(118, 166, 255, 0.16);
+    border: 1px solid rgba(118, 166, 255, 0.34);
+    color: #9fc0ff;
+    box-shadow: 0 8px 18px rgba(2, 6, 23, 0.22);
+}
+
+.summary-card-icon svg {
+    width: 20px;
+    height: 20px;
+}
+
+.summary-card-alert {
+    border-color: #633242;
+    background: linear-gradient(180deg, #3a1f2b 0%, #2b1821 100%);
+}
+
+.summary-card-alert .summary-card-title,
+.summary-card-alert .summary-card-value,
+.summary-card-alert .summary-card-desc,
+.summary-card-alert .summary-card-icon {
+    color: #ffd9df;
+}
+
+.summary-card-alert .summary-card-icon {
+    background: rgba(255, 138, 158, 0.16);
+    border-color: rgba(255, 138, 158, 0.4);
+}
+
+.summary-card-action {
+    cursor: pointer;
+}
+
+.summary-trend-positive {
+    color: #7ce5b4;
+}
+
+.summary-trend-warning {
+    color: #f8cf79;
+}
+
+.summary-trend-danger {
+    color: #ff9eaa;
+}
+
+.recent-reports-card .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.recent-reports-link {
+    color: #9fc0ff;
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.recent-reports-link:hover {
+    color: #c4d7ff;
+}
+
+.recent-report-row {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 0;
+    border-bottom: 1px solid rgba(159, 176, 204, 0.2);
+}
+
+.recent-report-row:last-child {
+    border-bottom: none;
+}
+
+.recent-report-title {
+    color: #e4ecf9;
+    font-weight: 600;
+}
+
+.recent-report-date {
+    color: #93a7c6;
+    font-size: 12px;
+    margin-top: 3px;
+}
+
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: capitalize;
+    letter-spacing: 0.2px;
+}
+
+.priority-low { background: rgba(125, 211, 252, 0.16); color: #7dd3fc; }
+.priority-medium { background: rgba(252, 211, 77, 0.16); color: #fcd34d; }
+.priority-high { background: rgba(251, 146, 60, 0.16); color: #fb923c; }
+.priority-urgent { background: rgba(248, 113, 113, 0.16); color: #f87171; }
+.priority-critical { background: rgba(244, 63, 94, 0.2); color: #fb7185; }
+
+.status-submitted { background: rgba(96, 165, 250, 0.16); color: #93c5fd; }
+.status-assigned { background: rgba(147, 197, 253, 0.16); color: #bfdbfe; }
+.status-in-progress { background: rgba(252, 211, 77, 0.16); color: #fcd34d; }
+.status-completed { background: rgba(74, 222, 128, 0.16); color: #86efac; }
+.status-cancelled { background: rgba(248, 113, 113, 0.16); color: #fca5a5; }
+
+@media (max-width: 640px) {
+    main.container {
+        margin-left: var(--sidebar-width-collapsed);
+        max-width: calc(100% - var(--sidebar-width-collapsed));
+    }
+
+    .navbar .navbar-container,
+    main.container {
+        padding-left: 14px;
+        padding-right: 14px;
+    }
+
+    .summary-card {
+        min-height: 124px;
+        padding: 14px;
+    }
+
+    .summary-card-value {
+        font-size: 28px;
+    }
+
+    .summary-card-desc {
+        font-size: 0.84rem;
+    }
+
+    .summary-card-icon {
+        width: 36px;
+        height: 36px;
+    }
+
+    .recent-report-row {
+        grid-template-columns: 1fr;
+        gap: 8px;
+    }
+}
 </style>
 
 <script>
 
+function updateDashboardKicker() {
+    const kickerEl = document.getElementById('dashboard-kicker');
+    if (!kickerEl) return;
+
+    const now = new Date();
+    const hour = now.getHours();
+
+    let greeting = 'Good evening';
+    if (hour < 12) {
+        greeting = 'Good morning';
+    } else if (hour < 18) {
+        greeting = 'Good afternoon';
+    }
+
+    const dateText = new Intl.DateTimeFormat('en-US', {
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric'
+    }).format(now);
+
+    const timeText = new Intl.DateTimeFormat('en-US', {
+        hour: 'numeric',
+        minute: '2-digit'
+    }).format(now);
+
+    kickerEl.textContent = `${dateText} · ${timeText} ${greeting}`;
+}
+
 let reportsStatusChart;
 let reportsPriorityChart;
+const LARAVEL_API_BASE = '/School_Facility_Maintenance_System/laravel_app/public/api';
+const LARAVEL_BRIDGE_BASE = '/School_Facility_Maintenance_System/laravel_app/public/backend/api';
+
+function extractReportsFromResponse(payload) {
+    const data = payload && payload.data ? payload.data : {};
+
+    if (Array.isArray(data.reports)) {
+        return data.reports;
+    }
+
+    if (Array.isArray(data.data)) {
+        return data.data;
+    }
+
+    return [];
+}
 // Modal Functions
 function openBuildingModal() {
     document.getElementById('buildingModal').classList.add('show');
@@ -337,7 +703,6 @@ function closeBuildingModal() {
     document.getElementById('buildingModal').classList.remove('show');
     document.getElementById('buildingForm').reset();
 }
-
 function openRoomModal() {
     document.getElementById('roomModal').classList.add('show');
     loadBuildingsInModal();
@@ -369,6 +734,27 @@ function closeRoomModal() {
 // Navigate to buildings overview page
 function navigateToBuildingsOverview() {
     window.location.href = '/School_Facility_Maintenance_System/frontend/pages/buildings-overview.php';
+}
+
+function navigateToReportsCard(cardKey) {
+    if (cardKey === 'low_stock') {
+        window.location.href = '/School_Facility_Maintenance_System/frontend/pages/buildings-overview.php?focus=low_stock';
+        return;
+    }
+
+    const targetUrl = new URL('/School_Facility_Maintenance_System/frontend/pages/reports.php', window.location.origin);
+
+    if (cardKey === 'today') {
+        targetUrl.searchParams.set('date_scope', 'today');
+    } else if (cardKey === 'pending_tasks') {
+        targetUrl.searchParams.set('status_group', 'pending_tasks');
+    } else if (cardKey === 'in_progress') {
+        targetUrl.searchParams.set('status', 'in_progress');
+    } else if (cardKey === 'completed') {
+        targetUrl.searchParams.set('status', 'completed');
+    }
+
+    window.location.href = targetUrl.toString();
 }
 
 // Load buildings in room modal
@@ -585,30 +971,50 @@ function buildStatsFromReports(reports) {
 }
 
 async function fetchDashboardStats() {
-    // Primary source: dedicated stats endpoint
-    const statsResp = await fetch('/School_Facility_Maintenance_System/backend/api/reports.php?action=stats', {
+    // Primary source: Laravel dashboard stats endpoint
+    const statsResp = await fetch(`${LARAVEL_API_BASE}/dashboard/stats`, {
         credentials: 'include'
     });
     const statsJson = await statsResp.json();
 
-    if (statsJson.success && statsJson.data && statsJson.data.stats) {
-        const stats = statsJson.data.stats;
+    if (statsJson.success && statsJson.data) {
+        const stats = {
+            total: Number(statsJson.data.total_reports || 0),
+            reports_today: Number(statsJson.data.reports_today || 0),
+            submitted: Number(statsJson.data.pending || 0),
+            assigned: 0,
+            in_progress: Number(statsJson.data.in_progress || 0),
+            completed: Number(statsJson.data.completed || 0),
+            closed: 0,
+            cancelled: 0,
+            low_stock: Number(statsJson.data.low_stock || 0),
+            by_priority: {
+                low: 0,
+                medium: 0,
+                high: 0,
+                urgent: 0,
+                critical: 0
+            }
+        };
 
-        // Add reports_today and fill extended priority fields from list endpoint.
+        // Fill extended status and priority values from report list endpoint.
         try {
-            const reportsResp = await fetch('/School_Facility_Maintenance_System/backend/api/reports.php?action=list', {
+            const reportsResp = await fetch(`${LARAVEL_BRIDGE_BASE}/reports-api.php?action=list&per_page=200`, {
                 credentials: 'include'
             });
             const reportsJson = await reportsResp.json();
-            if (reportsJson.success && reportsJson.data && Array.isArray(reportsJson.data.reports)) {
-                const derived = buildStatsFromReports(reportsJson.data.reports);
+            if (reportsJson.success) {
+                const derived = buildStatsFromReports(extractReportsFromResponse(reportsJson));
                 stats.reports_today = derived.reports_today;
+                stats.assigned = derived.assigned;
+                stats.closed = derived.closed;
+                stats.cancelled = derived.cancelled;
                 stats.by_priority = {
-                    low: stats.by_priority?.low ?? derived.by_priority.low,
-                    medium: stats.by_priority?.medium ?? derived.by_priority.medium,
-                    high: stats.by_priority?.high ?? derived.by_priority.high,
-                    urgent: stats.by_priority?.urgent ?? derived.by_priority.urgent,
-                    critical: stats.by_priority?.critical ?? derived.by_priority.critical
+                    low: derived.by_priority.low,
+                    medium: derived.by_priority.medium,
+                    high: derived.by_priority.high,
+                    urgent: derived.by_priority.urgent,
+                    critical: derived.by_priority.critical
                 };
             }
         } catch (deriveErr) {
@@ -621,13 +1027,13 @@ async function fetchDashboardStats() {
     }
 
     // Fallback source: compute from report list endpoint
-    const reportsResp = await fetch('/School_Facility_Maintenance_System/backend/api/reports.php?action=list', {
+    const reportsResp = await fetch(`${LARAVEL_BRIDGE_BASE}/reports-api.php?action=list&per_page=200`, {
         credentials: 'include'
     });
     const reportsJson = await reportsResp.json();
 
-    if (reportsJson.success && reportsJson.data && Array.isArray(reportsJson.data.reports)) {
-        return buildStatsFromReports(reportsJson.data.reports);
+    if (reportsJson.success) {
+        return buildStatsFromReports(extractReportsFromResponse(reportsJson));
     }
 
     return {
@@ -671,6 +1077,12 @@ async function initDashboard() {
 
         document.getElementById('stat-total').textContent = total;
         document.getElementById('stat-today').textContent = todayCount;
+        const pendingEl = document.getElementById('stat-pending');
+        if (pendingEl) pendingEl.textContent = submitted + assigned;
+        const inProgressEl = document.getElementById('stat-in-progress');
+        if (inProgressEl) inProgressEl.textContent = inProgress;
+        const completedEl = document.getElementById('stat-completed');
+        if (completedEl) completedEl.textContent = completed;
         const lowEl = document.getElementById('stat-low');
         lowEl.textContent = (stats.low_stock !== undefined) ? stats.low_stock : '—';
 
@@ -717,7 +1129,8 @@ async function initDashboard() {
                                 data: [priorityLow, priorityMedium, priorityHigh, priorityUrgent, priorityCritical],
                                 backgroundColor: ['#94a3b8', '#3b82f6', '#f59e0b', '#ef4444', '#991b1b'],
                                 borderRadius: 6,
-                                barThickness: 36
+                                barThickness: 64,
+                                maxBarThickness: 72
                             }]
                         },
                         options: {
@@ -728,13 +1141,20 @@ async function initDashboard() {
                                     beginAtZero: true,
                                     ticks: {
                                         precision: 0,
-                                        color: getComputedStyle(document.documentElement).getPropertyValue('--muted-text') || '#9aa3b2'
+                                        stepSize: 2,
+                                        color: '#4b5563'
                                     },
-                                    grid: { color: 'rgba(255,255,255,0.05)' }
+                                    grid: {
+                                        color: 'rgba(148, 163, 184, 0.35)',
+                                        drawBorder: false
+                                    }
                                 },
                                 x: {
-                                    ticks: { color: getComputedStyle(document.documentElement).getPropertyValue('--muted-text') || '#9aa3b2' },
-                                    grid: { display: false }
+                                    ticks: { color: '#4b5563' },
+                                    grid: {
+                                        color: 'rgba(148, 163, 184, 0.25)',
+                                        drawBorder: false
+                                    }
                                 }
                             },
                             plugins: {
@@ -766,41 +1186,63 @@ async function initDashboard() {
 async function renderRecentActivity() {
     const list = document.getElementById('recentActivity');
     try {
-        const response = await fetch('/School_Facility_Maintenance_System/backend/api/reports.php?action=list', {
+        const response = await fetch(`${LARAVEL_BRIDGE_BASE}/reports-api.php?action=list&per_page=20`, {
             credentials: 'include'
         });
         const data = await response.json();
         
-        if (!data.success || !data.data || !data.data.reports) {
-            list.innerHTML = '<p class="text-muted">No recent activity.</p>';
+        if (!data.success) {
+            list.innerHTML = '<p class="text-muted">No recent reports.</p>';
             return;
         }
         
-        const reports = data.data.reports.slice(0, 5); // show latest 5
+        const reports = extractReportsFromResponse(data).slice(0, 5); // show latest 5
         
         if (reports.length === 0) {
             list.innerHTML = '<p class="text-muted">No reports yet.</p>';
             return;
         }
+
+        const statusClassMap = {
+            submitted: 'status-submitted',
+            assigned: 'status-assigned',
+            in_progress: 'status-in-progress',
+            completed: 'status-completed',
+            cancelled: 'status-cancelled',
+            closed: 'status-completed'
+        };
+        const priorityClassMap = {
+            low: 'priority-low',
+            medium: 'priority-medium',
+            high: 'priority-high',
+            urgent: 'priority-urgent',
+            critical: 'priority-critical'
+        };
         
         let html = '';
         reports.forEach(report => {
-            const initials = (report.creator_name || 'U').split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
             const date = new Date(report.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            const status = (report.status || 'submitted').toLowerCase();
+            const priority = (report.priority || 'medium').toLowerCase();
+            const statusClass = statusClassMap[status] || 'status-submitted';
+            const priorityClass = priorityClassMap[priority] || 'priority-medium';
+            const reportTitle = report.title || 'Untitled report';
+            const statusLabel = status.replace('_', ' ');
             html += `
-                <div class="activity-item">
-                    <div class="activity-avatar">${initials}</div>
+                <div class="recent-report-row">
                     <div>
-                        <div class="activity-desc">${report.creator_name || 'Unknown'} created report: <strong>${report.title}</strong></div>
-                        <div class="activity-meta">Status: ${report.status} · ${date}</div>
+                        <div class="recent-report-title">${reportTitle}</div>
+                        <div class="recent-report-date">${date}</div>
                     </div>
+                    <span class="status-badge ${priorityClass}">${priority}</span>
+                    <span class="status-badge ${statusClass}">${statusLabel}</span>
                 </div>
             `;
         });
         list.innerHTML = html;
     } catch (err) {
-        console.error('Failed to load recent activity:', err);
-        list.innerHTML = '<p class="text-muted">Could not load recent activity.</p>';
+        console.error('Failed to load recent reports:', err);
+        list.innerHTML = '<p class="text-muted">Could not load recent reports.</p>';
     }
 }
 
@@ -876,6 +1318,8 @@ async function addRoom() {
 <script>
 // Initialize dashboard after api.js is loaded
 document.addEventListener('DOMContentLoaded', () => {
+    updateDashboardKicker();
+    setInterval(updateDashboardKicker, 60000);
     initDashboard();
     loadBuildingsForDropdown();
 });

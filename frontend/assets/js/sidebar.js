@@ -9,6 +9,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const sidebarOverlay = document.getElementById('sidebarOverlay');
     const navLinks = document.querySelectorAll('.nav-link');
     const navItems = document.querySelectorAll('.nav-item');
+    const settingsItem = document.querySelector('.nav-item.settings-item');
+    const settingsLink = settingsItem ? settingsItem.querySelector('[data-settings-toggle]') : null;
+    const settingsSubmenu = document.getElementById('settings-submenu');
 
     // ========================================
     // INITIALIZATION
@@ -20,6 +23,7 @@ document.addEventListener('DOMContentLoaded', function() {
      */
     function initSidebar() {
         applyActiveState();
+        loadSettingsPreference();
         attachEventListeners();
         setResponsiveMode();
         loadSidebarPreference();
@@ -56,6 +60,35 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Save preference
         saveSidebarPreference();
+    }
+
+    // ========================================
+    // SETTINGS SUBMENU
+    // ========================================
+
+    function setSettingsExpanded(expanded, persist = true) {
+        if (!settingsItem) {
+            return;
+        }
+
+        settingsItem.classList.toggle('settings-open', expanded);
+        if (settingsLink) {
+            settingsLink.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        }
+
+        if (persist) {
+            localStorage.setItem('facilityflow_settings_open', expanded ? 'true' : 'false');
+        }
+    }
+
+    function loadSettingsPreference() {
+        if (!settingsItem || !settingsLink || !settingsSubmenu) {
+            return;
+        }
+
+        const isActive = settingsLink.classList.contains('active');
+        const saved = localStorage.getItem('facilityflow_settings_open') === 'true';
+        setSettingsExpanded(isActive || saved, false);
     }
 
     // ========================================
@@ -101,6 +134,13 @@ document.addEventListener('DOMContentLoaded', function() {
         const href = this.getAttribute('href');
         
         if (!href || href.includes('logout') || href.startsWith('http')) {
+            return;
+        }
+
+        if (this.dataset.settingsToggle !== undefined) {
+            const isOpen = settingsItem && settingsItem.classList.contains('settings-open');
+            setSettingsExpanded(!isOpen);
+            e.preventDefault();
             return;
         }
 

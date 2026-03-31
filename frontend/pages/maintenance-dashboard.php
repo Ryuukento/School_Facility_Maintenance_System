@@ -12,10 +12,15 @@ if (!isset($_SESSION['user'])) {
 }
 
 $user = $_SESSION['user'];
-if (!in_array($user['role'], ['super_admin', 'maintenance_admin'])) {
+if (!in_array($user['role'], ['super_admin', 'maintenance_admin', 'maintenance_staff'])) {
     header('Location: /School_Facility_Maintenance_System/frontend/pages/dashboard.php');
     exit;
 }
+
+$isMaintenanceAdminView = in_array($user['role'], ['super_admin', 'maintenance_admin'], true);
+$reportsPageLink = $isMaintenanceAdminView
+    ? '/School_Facility_Maintenance_System/frontend/pages/reports.php'
+    : '/School_Facility_Maintenance_System/frontend/pages/maintenance-reports-list.php';
 
 require_once __DIR__ . '/../../backend/config/database.php';
 $pdo = getDBConnection();
@@ -26,6 +31,22 @@ $pdo = getDBConnection();
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Maintenance Dashboard - School Facility Maintenance System</title>
+    <script>
+        (function () {
+            try {
+                var mode = localStorage.getItem('sfmsThemeMode') || 'light';
+                var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+                var resolved = mode === 'auto' ? (prefersDark ? 'dark' : 'light') : mode;
+                var root = document.documentElement;
+
+                root.setAttribute('data-theme-mode', mode);
+                root.setAttribute('data-theme-resolved', resolved);
+                root.style.colorScheme = resolved === 'dark' ? 'dark' : 'light';
+            } catch (error) {
+                // Keep default theme if storage is unavailable.
+            }
+        })();
+    </script>
     <link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/styles.css">
     <link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/color-scheme.css">
     <link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/maintenance-dashboard.css">
@@ -35,7 +56,7 @@ $pdo = getDBConnection();
 
 <?php include __DIR__ . '/../includes/header.php'; ?>
 
-<main class="container" style="margin-top: 20px;">
+<main class="container maintenance-admin-dashboard-page">
     <!-- Page Header -->
     <div class="page-header mb-lg">
         <h1 style="margin: 0;">Maintenance Dashboard</h1>
@@ -43,81 +64,67 @@ $pdo = getDBConnection();
 
     <!-- Statistics Cards -->
     <div class="stats-grid">
-        <div class="stat-card">
-            <div class="stat-icon" style="background: #dbeafe;">
-                <span style="font-size: 24px;">📋</span>
-            </div>
+        <div class="stat-card stat-card-total">
             <div class="stat-content">
                 <p class="stat-label">Total Reports</p>
                 <h3 class="stat-value" id="total-reports">0</h3>
-                <p class="stat-meta text-muted">Created by you</p>
+                <p class="stat-meta text-muted"><?php echo $isMaintenanceAdminView ? 'All submitted reports' : 'Created by you'; ?></p>
             </div>
+            <div class="stat-icon-chip" aria-hidden="true">📄</div>
         </div>
 
-        <div class="stat-card">
-            <div class="stat-icon" style="background: #e0f2fe;">
-                <span style="font-size: 24px;">📅</span>
-            </div>
+        <div class="stat-card stat-card-today">
             <div class="stat-content">
                 <p class="stat-label">Reports Today</p>
                 <h3 class="stat-value" id="reports-today">0</h3>
                 <p class="stat-meta text-muted">Submitted today</p>
             </div>
+            <div class="stat-icon-chip" aria-hidden="true">🗓️</div>
         </div>
 
-        <div class="stat-card">
-            <div class="stat-icon" style="background: #fed7aa;">
-                <span style="font-size: 24px;">⏳</span>
-            </div>
+        <div class="stat-card stat-card-pending">
             <div class="stat-content">
                 <p class="stat-label">Pending Tasks</p>
                 <h3 class="stat-value" id="pending-tasks">0</h3>
-                <p class="stat-meta text-muted">Assigned to you</p>
+                <p class="stat-meta text-muted"><?php echo $isMaintenanceAdminView ? 'Across maintenance queue' : 'Assigned to you'; ?></p>
             </div>
+            <div class="stat-icon-chip" aria-hidden="true">⏳</div>
         </div>
 
-        <div class="stat-card">
-            <div class="stat-icon" style="background: #fed7aa;">
-                <span style="font-size: 24px;">🔧</span>
-            </div>
+        <div class="stat-card stat-card-progress">
             <div class="stat-content">
                 <p class="stat-label">In Progress</p>
                 <h3 class="stat-value" id="in-progress">0</h3>
-                <p class="stat-meta text-muted">Currently working</p>
+                <p class="stat-meta text-muted"><?php echo $isMaintenanceAdminView ? 'Active maintenance work' : 'Currently working'; ?></p>
             </div>
+            <div class="stat-icon-chip" aria-hidden="true">🔧</div>
         </div>
 
-        <div class="stat-card">
-            <div class="stat-icon" style="background: #bbf7d0;">
-                <span style="font-size: 24px;">✅</span>
-            </div>
+        <div class="stat-card stat-card-completed">
             <div class="stat-content">
                 <p class="stat-label">Completed</p>
                 <h3 class="stat-value" id="completed-month">0</h3>
                 <p class="stat-meta text-muted">This month</p>
             </div>
+            <div class="stat-icon-chip" aria-hidden="true">✅</div>
         </div>
 
-        <div class="stat-card">
-            <div class="stat-icon" style="background: #fecaca;">
-                <span style="font-size: 24px;">⚠️</span>
-            </div>
+        <div class="stat-card stat-card-overdue">
             <div class="stat-content">
                 <p class="stat-label">Overdue</p>
                 <h3 class="stat-value" id="overdue-count">0</h3>
                 <p class="stat-meta text-muted">Need attention</p>
             </div>
+            <div class="stat-icon-chip" aria-hidden="true">⚠️</div>
         </div>
 
-        <div class="stat-card">
-            <div class="stat-icon" style="background: #d1d5db;">
-                <span style="font-size: 24px;">⏱️</span>
-            </div>
+        <div class="stat-card stat-card-average">
             <div class="stat-content">
                 <p class="stat-label">Avg. Completion</p>
                 <h3 class="stat-value" id="avg-completion">0d</h3>
                 <p class="stat-meta text-muted">Days to complete</p>
             </div>
+            <div class="stat-icon-chip" aria-hidden="true">⏱️</div>
         </div>
     </div>
 
@@ -145,11 +152,11 @@ $pdo = getDBConnection();
     <!-- Recent Reports -->
     <div class="card mt-lg">
         <div class="card-header d-flex justify-between align-center">
-            <h3 style="margin: 0;">My Recent Reports</h3>
-            <a href="/School_Facility_Maintenance_System/frontend/pages/maintenance-reports-list.php" class="btn btn-sm btn-secondary">View All</a>
+            <h3 style="margin: 0;"><?php echo $isMaintenanceAdminView ? 'Recent Reports' : 'My Recent Reports'; ?></h3>
+            <a href="<?php echo htmlspecialchars($reportsPageLink, ENT_QUOTES, 'UTF-8'); ?>" class="btn btn-sm btn-secondary">View All</a>
         </div>
         <div class="card-body">
-            <p class="text-muted" style="margin-bottom: 10px;">Showing reports you created or are assigned to.</p>
+            <p class="text-muted" style="margin-bottom: 10px;"><?php echo $isMaintenanceAdminView ? 'Showing reports submitted by staff and maintenance team.' : 'Showing reports you created or are assigned to.'; ?></p>
             <div id="recent-reports-container">
                 <div class="loading">Loading reports...</div>
             </div>
@@ -166,6 +173,47 @@ $pdo = getDBConnection();
         </div>
     </div>
 </main>
+
+<style>
+.maintenance-admin-dashboard-page {
+    width: calc(100% - var(--sidebar-width));
+    max-width: calc(100% - var(--sidebar-width));
+    margin-left: var(--sidebar-width);
+    margin-right: 0;
+    margin-top: 20px;
+    padding-left: 24px;
+    padding-right: 24px;
+}
+
+.navbar .navbar-container {
+    max-width: none;
+    margin: 0;
+    padding-left: 24px;
+    padding-right: 24px;
+}
+
+#sidebar.collapsed ~ main.maintenance-admin-dashboard-page {
+    width: calc(100% - var(--sidebar-width-collapsed));
+    max-width: calc(100% - var(--sidebar-width-collapsed));
+    margin-left: var(--sidebar-width-collapsed);
+}
+
+@media (max-width: 992px) {
+    .maintenance-admin-dashboard-page {
+        width: calc(100% - var(--sidebar-width-collapsed));
+        max-width: calc(100% - var(--sidebar-width-collapsed));
+        margin-left: var(--sidebar-width-collapsed);
+    }
+}
+
+@media (max-width: 640px) {
+    .navbar .navbar-container,
+    .maintenance-admin-dashboard-page {
+        padding-left: 14px;
+        padding-right: 14px;
+    }
+}
+</style>
 
 <?php include __DIR__ . '/../includes/footer.php'; ?>
 
@@ -199,13 +247,13 @@ window.API = window.API || {
 window.UI = window.UI || {
     getPriorityBadge(priority) {
         const colors = {
-            'low': 'badge-info',
-            'medium': 'badge-warning',
-            'high': 'badge-danger',
-            'urgent': 'badge-danger',
-            'critical': 'badge-danger'
+            'low': 'badge-priority-low',
+            'medium': 'badge-priority-medium',
+            'high': 'badge-priority-high',
+            'urgent': 'badge-priority-urgent',
+            'critical': 'badge-priority-critical'
         };
-        return colors[priority] || 'badge-info';
+        return colors[priority] || 'badge-priority-low';
     },
 
     getStatusBadge(status) {
@@ -313,6 +361,19 @@ function initializeCharts(data) {
     if (data.priority_data) {
         const priorityCtx = document.getElementById('priorityChart');
         if (priorityCtx) {
+            const priorityPalette = {
+                low: '#94a3b8',
+                medium: '#3b82f6',
+                high: '#f59e0b',
+                urgent: '#ef4444',
+                critical: '#991b1b'
+            };
+
+            const priorityColors = (data.priority_data.labels || []).map((label) => {
+                const key = String(label || '').toLowerCase().trim();
+                return priorityPalette[key] || '#94a3b8';
+            });
+
             new Chart(priorityCtx, {
                 type: 'bar',
                 data: {
@@ -320,9 +381,11 @@ function initializeCharts(data) {
                     datasets: [{
                         label: 'Reports',
                         data: data.priority_data.values,
-                        backgroundColor: ['#94a3b8', '#3b82f6', '#f59e0b', '#ef4444', '#991b1b'],
+                        backgroundColor: priorityColors,
                         borderColor: '#ffffff',
-                        borderWidth: 1
+                        borderWidth: 1,
+                        barThickness: 70,
+                        maxBarThickness: 76
                     }]
                 },
                 options: {
@@ -332,7 +395,26 @@ function initializeCharts(data) {
                         legend: { display: false }
                     },
                     scales: {
-                        y: { beginAtZero: true }
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                stepSize: 2,
+                                color: '#4b5563'
+                            },
+                            grid: {
+                                color: 'rgba(148, 163, 184, 0.35)',
+                                drawBorder: false
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                color: '#4b5563'
+                            },
+                            grid: {
+                                color: 'rgba(148, 163, 184, 0.25)',
+                                drawBorder: false
+                            }
+                        }
                     }
                 }
             });
@@ -381,6 +463,7 @@ function initializeCharts(data) {
 
 function displayRecentReports(reports) {
     const container = document.getElementById('recent-reports-container');
+    const isMaintenanceAdminView = <?php echo $isMaintenanceAdminView ? 'true' : 'false'; ?>;
     
     if (reports.length === 0) {
         container.innerHTML = '<p class="text-muted text-center">No reports found</p>';
@@ -390,6 +473,9 @@ function displayRecentReports(reports) {
     let html = '<table class="table">';
     html += '<thead><tr>';
     html += '<th>ID</th><th>Title</th><th>Location</th><th>Priority</th><th>Status</th>';
+    if (isMaintenanceAdminView) {
+        html += '<th>Submitted By</th>';
+    }
     html += '<th>Assigned To</th><th>Created</th><th>Action</th>';
     html += '</tr></thead><tbody>';
 
@@ -404,6 +490,9 @@ function displayRecentReports(reports) {
         html += `<td>${report.location}</td>`;
         html += `<td><span class="badge ${priorityBadge}">${report.priority.toUpperCase()}</span></td>`;
         html += `<td><span class="badge ${statusBadge}">${report.status.replace('_', ' ').toUpperCase()}</span></td>`;
+        if (isMaintenanceAdminView) {
+            html += `<td>${report.creator_name || 'N/A'}</td>`;
+        }
         html += `<td>${report.assigned_name || 'Unassigned'}</td>`;
         html += `<td>${createdDate}</td>`;
         html += `<td><a href="/School_Facility_Maintenance_System/frontend/pages/maintenance-report-detail.php?id=${report.report_id}" class="btn btn-sm btn-primary">View</a></td>`;

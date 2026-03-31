@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SFMS - Installation Guide</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            font-size: 18px;
+            opacity: 0.9;
+        }
+        
+        .content {
+            padding: 40px;
+        }
+        
+        .step {
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+        }
+        
+        .step h3 {
+            color: #667eea;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .step-number {
+            background: #667eea;
+            color: white;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 16px;
+        }
+        
+        .code {
+            background: #2d3748;
+            color: #48bb78;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            margin: 10px 0;
+            overflow-x: auto;
+        }
+        
+        .credentials {
+            background: #fff5f5;
+            border: 2px solid #fc8181;
+            padding: 20px;
+            border-radius: 4px;
+            margin: 20px 0;
+        }
+        
+        .credentials h4 {
+            color: #c53030;
+            margin-bottom: 10px;
+        }
+        
+        .credential-item {
+            background: white;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .btn {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 12px 30px;
+            text-decoration: none;
+            border-radius: 4px;
+            font-weight: bold;
+            transition: background 0.3s;
+        }
+        
+        .btn:hover {
+            background: #5568d3;
+        }
+        
+        .success {
+            background: #c6f6d5;
+            border-left-color: #48bb78;
+        }
+        
+        .warning {
+            background: #fef3c7;
+            border-left-color: #f59e0b;
+        }
+        
+        .footer {
+            background: #f8f9fa;
+            padding: 20px 40px;
+            text-align: center;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏫 School Facility Maintenance System</h1>
+            <p>Installation & Quick Start Guide</p>
+        </div>
+        
+        <div class="content">
+            <div class="step success">
+                <h3><span class="step-number">✓</span> System Ready!</h3>
+                <p>Your SFMS is ready to install. Follow the steps below to get started.</p>
+            </div>
+            
+            <div class="step">
+                <h3><span class="step-number">1</span> Start Your Server</h3>
+                <p><strong>For Laragon:</strong></p>
+                <div class="code">Open Laragon → Click "Start All"</div>
+                <p style="margin-top: 10px;"><strong>For XAMPP:</strong></p>
+                <div class="code">Open XAMPP Control Panel → Start Apache & MySQL</div>
+            </div>
+            
+            <div class="step">
+                <h3><span class="step-number">2</span> Copy This Folder</h3>
+                <p><strong>For Laragon:</strong></p>
+                <div class="code">Copy to: C:\laragon\www\School_Facility_Maintenance_System\</div>
+                <p style="margin-top: 10px;"><strong>For XAMPP:</strong></p>
+                <div class="code">Copy to: C:\xampp\htdocs\School_Facility_Maintenance_System\</div>
+            </div>
+            
+            <div class="step">
+                <h3><span class="step-number">3</span> Import Database</h3>
+                <ol style="margin-left: 20px; margin-top: 10px;">
+                    <li>Open: <a href="http://localhost/phpmyadmin" target="_blank">http://localhost/phpmyadmin</a></li>
+                    <li>Click "Import" tab</li>
+                    <li>Choose file: <code>database/setup.sql</code></li>
+                    <li>Click "Go"</li>
+                    <li>Wait for "Success" message</li>
+                </ol>
+            </div>
+            
+            <div class="step">
+                <h3><span class="step-number">4</span> Access Your System</h3>
+                <p>Open your browser and go to:</p>
+                <div class="code">
+                    <a href="http://localhost/School_Facility_Maintenance_System/" target="_blank" style="color: #48bb78;">
+                        http://localhost/School_Facility_Maintenance_System/
+                    </a>
+                </div>
+            </div>
+            
+            <div class="credentials">
+                <h4>🔑 Test Login Credentials</h4>
+                <p style="margin-bottom: 10px;">All passwords are: <strong>admin123</strong></p>
+                
+                <div class="credential-item">
+                    <strong>Super Admin:</strong> <a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="2a4b4e4743446a594942454546044f4e5f">[email&#160;protected]</a>
+                </div>
+                <div class="credential-item">
+                    <strong>Dept Admin:</strong> <a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="36535a53551857525b5f587645555e59595a18535243">[email&#160;protected]</a>
+                </div>
+                <div class="credential-item">
+                    <strong>Staff:</strong> <a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="503a3f383e7e233d392438102333383f3f3c7e353425">[email&#160;protected]</a>
+                </div>
+                <div class="credential-item">
+                    <strong>User:</strong> <a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="77041605161f591d181f190418193704141f18181b59121302">[email&#160;protected]</a>
+                </div>
+            </div>
+            
+            <div class="step warning">
+                <h3><span class="step-number">⚠</span> Troubleshooting</h3>
+                <p><strong>If you encounter any issues:</strong></p>
+                <ul style="margin-left: 20px; margin-top: 10px;">
+                    <li>Make sure Apache & MySQL are running</li>
+                    <li>Check if database "school_facility_maintenance" exists</li>
+                    <li>Clear browser cache (Ctrl+Shift+Delete)</li>
+                    <li>Try incognito/private mode</li>
+                    <li>Read README.md for detailed troubleshooting</li>
+                </ul>
+            </div>
+            
+            <div style="text-al

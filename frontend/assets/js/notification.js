@@ -5,6 +5,8 @@
 const NotificationManager = {
     isOpen: false,
     refreshInterval: null,
+    currentFilter: 'all',
+    lastNotifications: [],
     
     init() {
         const bell = document.getElementById('notificationBell');
@@ -40,6 +42,16 @@ const NotificationManager = {
                 this.markAllAsRead();
             });
         }
+
+        const tabs = document.querySelectorAll('.notification-tab');
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                tabs.forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                this.currentFilter = tab.dataset.filter || 'all';
+                this.renderNotifications(this.lastNotifications);
+            });
+        });
     },
     
     toggleDropdown() {
@@ -88,6 +100,7 @@ const NotificationManager = {
                 badge.style.display = 'none';
             }
             
+            this.lastNotifications = notifications;
             this.renderNotifications(notifications);
         } catch (error) {
             console.error('Failed to load notifications:', error);
@@ -96,14 +109,17 @@ const NotificationManager = {
     
     renderNotifications(notifications) {
         const list = document.getElementById('notificationList');
+        const filtered = this.currentFilter === 'unread'
+            ? notifications.filter(n => Number(n.is_read) === 0)
+            : notifications;
         
-        if (notifications.length === 0) {
+        if (filtered.length === 0) {
             list.innerHTML = '<div class="notification-empty">No notifications</div>';
             return;
         }
         
         let html = '';
-        notifications.forEach(notif => {
+        filtered.forEach(notif => {
             const isUnread = notif.is_read === 0 ? 'unread' : '';
             const icon = this.getIcon(notif.type);
             const timeAgo = this.getTimeAgo(notif.created_at);
@@ -111,13 +127,14 @@ const NotificationManager = {
             const reportId = Number(notif.report_id) || 0;
             
             html += `
-                <div class="notification-item ${isUnread}" onclick="NotificationManager.handleNotificationClick(${notificationId}, ${reportId})">
+                <div class="notification-item ${isUnread}" data-notification-id="${notificationId}" data-report-id="${reportId}" onclick="NotificationManager.handleNotificationClick(${notificationId}, ${reportId}, this)">
                     <div class="notification-icon">${icon}</div>
                     <div class="notification-content">
                         <div class="notification-title">${notif.title}</div>
                         <div class="notification-message">${notif.message}</div>
                         <div class="notification-time">${timeAgo}</div>
                     </div>
+                    ${isUnread ? '<span class="notification-dot"></span>' : ''}
                 </div>
             `;
         });
@@ -125,12 +142,22 @@ const NotificationManager = {
         list.innerHTML = html;
     },
     
-    async handleNotificationClick(notificationId, reportId) {
+    async handleNotificationClick(notificationId, reportId, itemEl = null) {
         const targetUrl = this.getNotificationTargetUrl(reportId);
 
         // Never block navigation because of mark-as-read errors.
         try {
             if (notificationId) {
+                const notif = this.lastNotifications.find(n => Number(n.notification_id) === Number(notificationId));
+                if (notif && Number(notif.is_read) === 0) {
+                    notif.is_read = 1;
+                    this.updateBadgeCount(-1);
+                    if (itemEl) {
+                        itemEl.classList.remove('unread');
+                        const dot = itemEl.querySelector('.notification-dot');
+                        if (dot) dot.remove();
+                    }
+                }
                 await this.markNotificationAsRead(notificationId);
             }
         } catch (error) {
@@ -143,6 +170,19 @@ const NotificationManager = {
         }
 
         this.loadNotifications();
+    },
+
+    updateBadgeCount(delta) {
+        const badge = document.getElementById('notificationCount');
+        if (!badge) return;
+        const current = badge.textContent === '9+' ? 9 : Number(badge.textContent || 0);
+        const next = Math.max(0, current + delta);
+        if (next > 0) {
+            badge.textContent = next > 9 ? '9+' : String(next);
+            badge.style.display = 'flex';
+        } else {
+            badge.style.display = 'none';
+        }
     },
 
     async markNotificationAsRead(notificationId) {
@@ -186,6 +226,7 @@ const NotificationManager = {
 
         return `/School_Facility_Maintenance_System/frontend/pages/report-detail.php?id=${safeReportId}`;
     },
+
     
     async markAllAsRead() {
         try {

@@ -18,16 +18,12 @@ require_once __DIR__ . '/../../backend/config/database.php';
 // Establish database connection
 $pdo = getDBConnection();
 
-// Get departments for dropdown
-$stmt = $pdo->query("SELECT * FROM departments WHERE status = 'active' ORDER BY name");
-$departments = $stmt->fetchAll();
-
 $user = $_SESSION['user'];
 $pageTitle = 'Create Report - SFMS';
 include __DIR__ . '/../includes/header.php';
 ?>
-<main class="container" style="margin-top: 20px;">
-    <div class="card" style="max-width: 800px; margin: 0 auto;">
+<main class="container create-report-page" style="margin-top: 20px;">
+    <div class="card create-report-card">
         <div class="card-header">
             <h2>Create New Maintenance Report</h2>
             <p class="text-muted mb-0">Submit a new facility maintenance request</p>
@@ -55,18 +51,6 @@ include __DIR__ . '/../includes/header.php';
                         name="location" 
                         placeholder="e.g., Building A - Room 101"
                         required>
-                </div>
-                
-                <div class="form-group">
-                    <label for="department_id">Department</label>
-                    <select id="department_id" name="department_id">
-                        <option value="">Select Department</option>
-                        <?php foreach ($departments as $dept): ?>
-                            <option value="<?php echo $dept['department_id']; ?>">
-                                <?php echo htmlspecialchars($dept['name']); ?>
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
                 </div>
                 
                 <div class="form-group">
@@ -101,6 +85,56 @@ include __DIR__ . '/../includes/header.php';
     </div>
 </main>
 
+<style>
+.create-report-page {
+    width: calc(100% - var(--sidebar-width));
+    max-width: calc(100% - var(--sidebar-width));
+    margin-left: var(--sidebar-width);
+    margin-right: 0;
+    padding-left: 24px;
+    padding-right: 24px;
+}
+
+.navbar .navbar-container {
+    max-width: none;
+    margin: 0;
+    padding-left: 24px;
+    padding-right: 24px;
+}
+
+#sidebar.collapsed ~ main.create-report-page {
+    width: calc(100% - var(--sidebar-width-collapsed));
+    max-width: calc(100% - var(--sidebar-width-collapsed));
+    margin-left: var(--sidebar-width-collapsed);
+}
+
+.create-report-card {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+}
+
+@media (max-width: 992px) {
+    .create-report-page {
+        width: calc(100% - var(--sidebar-width-collapsed));
+        max-width: calc(100% - var(--sidebar-width-collapsed));
+        margin-left: var(--sidebar-width-collapsed);
+        padding-left: 16px;
+        padding-right: 16px;
+    }
+}
+
+@media (max-width: 640px) {
+    .create-report-page {
+        width: calc(100% - var(--sidebar-width-collapsed));
+        max-width: calc(100% - var(--sidebar-width-collapsed));
+        margin-left: var(--sidebar-width-collapsed);
+        padding-left: 12px;
+        padding-right: 12px;
+    }
+}
+</style>
+
 <script>
 // Ensure API and Session are defined globally
 window.API = window.API || {
@@ -112,8 +146,18 @@ window.API = window.API || {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data)
         });
-        const result = await response.json();
-        if (!result.success) throw new Error(result.message);
+
+        const raw = await response.text();
+        let result;
+
+        try {
+            result = JSON.parse(raw);
+        } catch (parseError) {
+            const preview = raw.slice(0, 180).replace(/\s+/g, ' ').trim();
+            throw new Error(`Server returned invalid response. ${preview || 'No response body received.'}`);
+        }
+
+        if (!result.success) throw new Error(result.message || 'Failed to create report');
         return result;
     },
     async logout() {
@@ -142,7 +186,6 @@ document.getElementById('report-form').addEventListener('submit', async (e) => {
     const formData = {
         title: document.getElementById('title').value.trim(),
         location: document.getElementById('location').value.trim(),
-        department_id: document.getElementById('department_id').value || null,
         priority: document.getElementById('priority').value,
         description: document.getElementById('description').value.trim()
     };
@@ -163,7 +206,7 @@ document.getElementById('report-form').addEventListener('submit', async (e) => {
         const response = await window.API.createReport(formData);
         
         if (response.success) {
-            alertContainer.innerHTML = '<div class="alert alert-success">Report submitted successfully! Redirecting...</div>';
+            alertContainer.innerHTML = '<div class="alert alert-success">Report submitted successfully! Na-notify na via email ang Super Admin. Redirecting...</div>';
             
             // Redirect after 1 second, include new report ID so we can highlight it on the list
             const newId = response.data && response.data.report_id ? response.data.report_id : '';

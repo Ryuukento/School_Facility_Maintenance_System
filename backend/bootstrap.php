@@ -28,14 +28,22 @@ require_once ROOT_DIR . '/backend/middleware/RoleMiddleware.php';
 require_once ROOT_DIR . '/backend/models/User.php';
 require_once ROOT_DIR . '/backend/models/MaintenanceReport.php';
 require_once ROOT_DIR . '/backend/models/ActivityLog.php';
+require_once ROOT_DIR . '/backend/models/Notification.php';
+require_once ROOT_DIR . '/backend/models/Building.php';
+require_once ROOT_DIR . '/backend/models/Floor.php';
+require_once ROOT_DIR . '/backend/models/Room.php';
+require_once ROOT_DIR . '/backend/models/Item.php';
 
 // Load services
 require_once ROOT_DIR . '/backend/services/AuthenticationService.php';
 require_once ROOT_DIR . '/backend/services/ReportService.php';
+require_once ROOT_DIR . '/backend/services/FacilityService.php';
+require_once ROOT_DIR . '/backend/services/EmailService.php';
 
 // Load controllers
 require_once ROOT_DIR . '/backend/controllers/AuthController.php';
 require_once ROOT_DIR . '/backend/controllers/ReportController.php';
+require_once ROOT_DIR . '/backend/controllers/FacilityController.php';
 
 // Initialize logger
 Logger::init();

@@ -9,10 +9,11 @@ include __DIR__ . '/../includes/header.php';
 
 $reportId = $_GET['id'] ?? 0;
 $user = $_SESSION['user'];
+$isSuperAdmin = ($user['role'] ?? '') === 'super_admin';
 ?>
 
-<main class="container">
-    <div class="card" style="max-width: 900px; margin: 0 auto;">
+<main class="container report-view-page">
+    <div class="card">
         <div class="card-header d-flex justify-between align-center">
             <div style="flex: 1;">
                 <h2 id="report-title">Loading...</h2>
@@ -28,9 +29,18 @@ $user = $_SESSION['user'];
         </div>
     </div>
     
-    <!-- Update Status Card (for admins/staff) -->
-    <?php if (in_array($user['role'], ['super_admin', 'department_admin', 'maintenance_staff'])): ?>
-    <div class="card" style="max-width: 900px; margin: 20px auto 0;">
+    <?php if ($isSuperAdmin): ?>
+    <div class="card" style="margin-top: 20px;">
+        <div class="card-body" style="display: flex; justify-content: flex-end;">
+            <a id="assign-report-btn"
+               href="/School_Facility_Maintenance_System/frontend/pages/maintenance-report-detail.php?id=<?php echo intval($reportId); ?>&back=all_reports"
+               class="btn btn-primary">
+                Assign Report
+            </a>
+        </div>
+    </div>
+    <?php elseif (in_array($user['role'], ['department_admin', 'maintenance_staff'])): ?>
+    <div class="card" style="margin-top: 20px;">
         <div class="card-header">
             <h2>Update Report Status</h2>
         </div>
@@ -56,6 +66,46 @@ $user = $_SESSION['user'];
     <?php endif; ?>
 </main>
 
+<style>
+.report-view-page {
+    width: calc(100% - var(--sidebar-width));
+    max-width: calc(100% - var(--sidebar-width));
+    margin-left: var(--sidebar-width);
+    margin-right: 0;
+    padding-left: 24px;
+    padding-right: 24px;
+}
+
+.navbar .navbar-container {
+    max-width: none;
+    margin: 0;
+    padding-left: 24px;
+    padding-right: 24px;
+}
+
+#sidebar.collapsed ~ main.report-view-page {
+    width: calc(100% - var(--sidebar-width-collapsed));
+    max-width: calc(100% - var(--sidebar-width-collapsed));
+    margin-left: var(--sidebar-width-collapsed);
+}
+
+@media (max-width: 992px) {
+    .report-view-page {
+        width: calc(100% - var(--sidebar-width-collapsed));
+        max-width: calc(100% - var(--sidebar-width-collapsed));
+        margin-left: var(--sidebar-width-collapsed);
+    }
+}
+
+@media (max-width: 640px) {
+    .navbar .navbar-container,
+    .report-view-page {
+        padding-left: 14px;
+        padding-right: 14px;
+    }
+}
+</style>
+
 <script>
 const reportId = <?php echo intval($reportId); ?>;
 
@@ -75,52 +125,61 @@ async function loadReport() {
         document.getElementById('report-title').textContent = `#${report.report_id} - ${report.title}`;
         
         // Build details HTML
+        const sectionWrapStyle = 'margin-top: 20px;';
+        const sectionTitleStyle = 'margin-bottom: 15px; font-weight: 600; color: var(--text-light);';
+        const tableStyle = 'border-collapse: collapse; width: 100%;';
+        const thStyle = 'width: 200px; padding: 12px 8px; text-align: left; font-weight: 700; color: var(--text-light); background: var(--muted-card); border-bottom: 1px solid var(--border);';
+        const thLastStyle = 'width: 200px; padding: 12px 8px; text-align: left; font-weight: 700; color: var(--text-light); background: var(--muted-card);';
+        const tdStyle = 'padding: 12px 8px; color: var(--text-light); background: var(--card-color); border-bottom: 1px solid var(--border);';
+        const tdLastStyle = 'padding: 12px 8px; color: var(--text-light); background: var(--card-color);';
+        const detailBoxStyle = 'background: var(--muted-card); padding: 15px; border-radius: 6px; border-left: 4px solid var(--primary-color); line-height: 1.6; color: var(--text-light);';
+
         let html = '<div style="display: grid; gap: 20px;">';
         
         // Basic Info
         html += '<div>';
-        html += '<h3 style="margin-bottom: 15px; font-weight: 600;">Basic Information</h3>';
-        html += '<table class="table" style="border-collapse: collapse;">';
-        html += `<tr><th style="width: 200px; padding: 12px 8px; text-align: left; font-weight: 700; color: #222; background: #f8f9fa; border-bottom: 1px solid #ddd;">Report ID</th><td style="padding: 12px 8px; border-bottom: 1px solid #ddd;">#${report.report_id}</td></tr>`;
-        html += `<tr><th style="width: 200px; padding: 12px 8px; text-align: left; font-weight: 700; color: #222; background: #f8f9fa; border-bottom: 1px solid #ddd;">Title</th><td style="padding: 12px 8px; border-bottom: 1px solid #ddd;"><strong>${report.title}</strong></td></tr>`;
-        html += `<tr><th style="width: 200px; padding: 12px 8px; text-align: left; font-weight: 700; color: #222; background: #f8f9fa; border-bottom: 1px solid #ddd;">Location</th><td style="padding: 12px 8px; border-bottom: 1px solid #ddd;">${report.location}</td></tr>`;
-        html += `<tr><th style="width: 200px; padding: 12px 8px; text-align: left; font-weight: 700; color: #222; background: #f8f9fa; border-bottom: 1px solid #ddd;">Priority</th><td style="padding: 12px 8px; border-bottom: 1px solid #ddd;">${UI.getPriorityBadge(report.priority)}</td></tr>`;
-        html += `<tr><th style="width: 200px; padding: 12px 8px; text-align: left; font-weight: 700; color: #222; background: #f8f9fa; border-bottom: 1px solid #ddd;">Status</th><td style="padding: 12px 8px; border-bottom: 1px solid #ddd;">${UI.getStatusBadge(report.status)}</td></tr>`;
-        html += `<tr><th style="width: 200px; padding: 12px 8px; text-align: left; font-weight: 700; color: #222; background: #f8f9fa;">Department</th><td style="padding: 12px 8px;">${report.department_name || 'Not assigned'}</td></tr>`;
+        html += `<h3 style="${sectionTitleStyle}">Basic Information</h3>`;
+        html += `<table class="table" style="${tableStyle}">`;
+        html += `<tr><th style="${thStyle}">Report ID</th><td style="${tdStyle}">#${report.report_id}</td></tr>`;
+        html += `<tr><th style="${thStyle}">Title</th><td style="${tdStyle}"><strong>${report.title}</strong></td></tr>`;
+        html += `<tr><th style="${thStyle}">Location</th><td style="${tdStyle}">${report.location}</td></tr>`;
+        html += `<tr><th style="${thStyle}">Priority</th><td style="${tdStyle}">${UI.getPriorityBadge(report.priority)}</td></tr>`;
+        html += `<tr><th style="${thStyle}">Status</th><td style="${tdStyle}">${UI.getStatusBadge(report.status)}</td></tr>`;
+        html += `<tr><th style="${thLastStyle}">Department</th><td style="${tdLastStyle}">${report.department_name || 'Not assigned'}</td></tr>`;
         html += '</table>';
         html += '</div>';
         
         // Description
-        html += '<div style="margin-top: 20px;">';
-        html += '<h3 style="margin-bottom: 15px; font-weight: 600;">Description</h3>';
-        html += `<div style="background: #f8f9fa; padding: 15px; border-radius: 6px; border-left: 4px solid #007bff; line-height: 1.6; color: #333;">${report.description || 'No description provided'}</div>`;
+        html += `<div style="${sectionWrapStyle}">`;
+        html += `<h3 style="${sectionTitleStyle}">Description</h3>`;
+        html += `<div style="${detailBoxStyle}">${report.description || 'No description provided'}</div>`;
         html += '</div>';
         
         // People
-        html += '<div style="margin-top: 20px;">';
-        html += '<h3 style="margin-bottom: 15px; font-weight: 600;">People</h3>';
-        html += '<table class="table" style="border-collapse: collapse;">';
-        html += `<tr><th style="width: 200px; padding: 12px 8px; text-align: left; font-weight: 700; color: #222; background: #f8f9fa; border-bottom: 1px solid #ddd;">Created By</th><td style="padding: 12px 8px; border-bottom: 1px solid #ddd;">${report.creator_name} ${report.creator_email ? `(${report.creator_email})` : ''}</td></tr>`;
-        html += `<tr><th style="width: 200px; padding: 12px 8px; text-align: left; font-weight: 700; color: #222; background: #f8f9fa;">Assigned To</th><td style="padding: 12px 8px;">${report.assigned_name ? `${report.assigned_name} ${report.assigned_email ? `(${report.assigned_email})` : ''}` : 'Not assigned yet'}</td></tr>`;
+        html += `<div style="${sectionWrapStyle}">`;
+        html += `<h3 style="${sectionTitleStyle}">People</h3>`;
+        html += `<table class="table" style="${tableStyle}">`;
+        html += `<tr><th style="${thStyle}">Created By</th><td style="${tdStyle}">${report.creator_name} ${report.creator_email ? `(${report.creator_email})` : ''}</td></tr>`;
+        html += `<tr><th style="${thLastStyle}">Assigned To</th><td style="${tdLastStyle}">${report.assigned_name ? `${report.assigned_name} ${report.assigned_email ? `(${report.assigned_email})` : ''}` : 'Not assigned yet'}</td></tr>`;
         html += '</table>';
         html += '</div>';
         
         // Dates
         if (report.created_at_full || report.created_at || report.updated_at_formatted || report.updated_at) {
-            html += '<div style="margin-top: 20px;">';
-            html += '<h3 style="margin-bottom: 15px; font-weight: 600;">Timeline</h3>';
-            html += '<table class="table" style="border-collapse: collapse;">';
+            html += `<div style="${sectionWrapStyle}">`;
+            html += `<h3 style="${sectionTitleStyle}">Timeline</h3>`;
+            html += `<table class="table" style="${tableStyle}">`;
             if (report.created_at_full || report.created_at) {
-                html += `<tr><th style="width: 200px; padding: 12px 8px; text-align: left; font-weight: 700; color: #222; background: #f8f9fa; border-bottom: 1px solid #ddd;">Created</th><td style="padding: 12px 8px; border-bottom: 1px solid #ddd;">${report.created_at_full || report.created_at}</td></tr>`;
+                html += `<tr><th style="${thStyle}">Created</th><td style="${tdStyle}">${report.created_at_full || report.created_at}</td></tr>`;
             }
             if (report.updated_at_formatted || report.updated_at) {
-                html += `<tr><th style="width: 200px; padding: 12px 8px; text-align: left; font-weight: 700; color: #222; background: #f8f9fa; border-bottom: 1px solid #ddd;">Last Updated</th><td style="padding: 12px 8px; border-bottom: 1px solid #ddd;">${report.updated_at_formatted || report.updated_at}</td></tr>`;
+                html += `<tr><th style="${thStyle}">Last Updated</th><td style="${tdStyle}">${report.updated_at_formatted || report.updated_at}</td></tr>`;
             }
             if (report.due_date) {
-                html += `<tr><th style="width: 200px; padding: 12px 8px; text-align: left; font-weight: 700; color: #222; background: #f8f9fa; border-bottom: 1px solid #ddd;">Due Date</th><td style="padding: 12px 8px; border-bottom: 1px solid #ddd;">${report.due_date_formatted || report.due_date}</td></tr>`;
+                html += `<tr><th style="${thStyle}">Due Date</th><td style="${tdStyle}">${report.due_date_formatted || report.due_date}</td></tr>`;
             }
             if (report.completed_date) {
-                html += `<tr><th style="width: 200px; padding: 12px 8px; text-align: left; font-weight: 700; color: #222; background: #f8f9fa;">Completed</th><td style="padding: 12px 8px;">${report.completed_date_formatted || report.completed_date}</td></tr>`;
+                html += `<tr><th style="${thLastStyle}">Completed</th><td style="${tdLastStyle}">${report.completed_date_formatted || report.completed_date}</td></tr>`;
             }
             html += '</table>';
             html += '</div>';
@@ -143,7 +202,7 @@ async function loadReport() {
 }
 
 // Handle status update
-<?php if (in_array($user['role'], ['super_admin', 'department_admin', 'maintenance_staff'])): ?>
+<?php if (in_array($user['role'], ['department_admin', 'maintenance_staff'])): ?>
 document.getElementById('update-form')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     

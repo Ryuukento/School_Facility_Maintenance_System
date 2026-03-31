@@ -10,7 +10,7 @@ include __DIR__ . '/../includes/header.php';
 $user = $_SESSION['user'];
 ?>
 
-<main class="container">
+<main class="container buildings-page-container">
     <div class="card">
         <div class="card-header" id="overviewHeader">
             <div>
@@ -53,6 +53,31 @@ $user = $_SESSION['user'];
     </div>
 </div>
 
+<div id="buildingModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Add New Building</h2>
+            <span class="modal-close" onclick="closeBuildingModal()">&times;</span>
+        </div>
+        <div class="modal-body">
+            <form id="buildingForm">
+                <div class="form-group">
+                    <label for="buildingNameInput">Building Name *</label>
+                    <input type="text" id="buildingNameInput" class="form-control" placeholder="e.g., Science Wing" required>
+                </div>
+                <div class="form-group">
+                    <label for="buildingDescInput">Description</label>
+                    <textarea id="buildingDescInput" class="form-control" rows="3" placeholder="Optional description"></textarea>
+                </div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeBuildingModal()">Cancel</button>
+            <button class="btn btn-primary" onclick="saveBuildingData()">Save Building</button>
+        </div>
+    </div>
+</div>
+
 <div id="editBuildingModal" class="modal">
     <div class="modal-content">
         <div class="modal-header">
@@ -74,6 +99,43 @@ $user = $_SESSION['user'];
         <div class="modal-footer">
             <button class="btn btn-secondary" onclick="closeEditBuildingModal()">Cancel</button>
             <button class="btn btn-primary" onclick="saveEditBuilding()">Save Changes</button>
+        </div>
+    </div>
+</div>
+
+<div id="roomModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Add New Room</h2>
+            <span class="modal-close" onclick="closeRoomModal()">&times;</span>
+        </div>
+        <div class="modal-body">
+            <form id="roomForm">
+                <div class="form-group">
+                    <label for="roomBuildingSelect">Building *</label>
+                    <select id="roomBuildingSelect" class="form-control" required onchange="loadFloorsForRoom(this.value)">
+                        <option value="">Choose a building</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="roomFloorSelect">Floor *</label>
+                    <select id="roomFloorSelect" class="form-control" required>
+                        <option value="">Choose a floor</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="roomNameInput">Room Name / Number *</label>
+                    <input type="text" id="roomNameInput" class="form-control" placeholder="e.g., Room 304 or Biology Lab" required>
+                </div>
+                <div class="form-group">
+                    <label for="roomCapacityInput">Capacity</label>
+                    <input type="number" id="roomCapacityInput" class="form-control" placeholder="e.g., 50" min="1">
+                </div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeRoomModal()">Cancel</button>
+            <button class="btn btn-primary" onclick="saveRoomData()">Save Room</button>
         </div>
     </div>
 </div>
@@ -114,6 +176,36 @@ $user = $_SESSION['user'];
 </div>
 
 <style>
+.buildings-page-container {
+    width: calc(100% - var(--sidebar-width));
+    max-width: calc(100% - var(--sidebar-width));
+    margin-left: var(--sidebar-width);
+    margin-right: 0;
+    padding-left: 24px;
+    padding-right: 24px;
+}
+
+.navbar .navbar-container {
+    max-width: none;
+    margin: 0;
+    padding-left: 24px;
+    padding-right: 24px;
+}
+
+#sidebar.collapsed ~ main.buildings-page-container {
+    width: calc(100% - var(--sidebar-width-collapsed));
+    max-width: calc(100% - var(--sidebar-width-collapsed));
+    margin-left: var(--sidebar-width-collapsed);
+}
+
+@media (max-width: 992px) {
+    .buildings-page-container {
+        width: calc(100% - var(--sidebar-width-collapsed));
+        max-width: calc(100% - var(--sidebar-width-collapsed));
+        margin-left: var(--sidebar-width-collapsed);
+    }
+}
+
 /* reuse existing modal styles from dashboard; could inline or include same file */
 .modal { display: none; position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); }
 .modal.show { display: block; }
@@ -135,14 +227,169 @@ $user = $_SESSION['user'];
 .summary-card { position: relative; }
 .card-actions {
     position: absolute;
-    right: 10px;
-    bottom: 10px;
+    right: 12px;
+    bottom: 12px;
     display: flex;
     gap: 8px;
 }
-.card-actions .btn { padding: 4px 10px; font-size: 12px; }
-.btn-danger { background: #c0392b; color: #fff; }
-.btn-danger:hover { background: #a93226; }
+.card-actions .btn {
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+    border-radius: 10px;
+    border: none;
+    box-shadow: 0 8px 20px rgba(16, 24, 40, 0.2);
+    transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
+}
+.card-actions .btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 12px 24px rgba(16, 24, 40, 0.25);
+    filter: brightness(1.04);
+}
+
+/* Premium card styling for Buildings/Floors/Rooms/Items containers */
+#overviewContainer.summary-cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+    gap: 20px;
+}
+
+#overviewContainer .summary-card {
+    width: 100%;
+    max-width: none;
+    position: relative;
+    overflow: hidden;
+    min-height: 182px;
+    padding: 22px 24px 66px;
+    border-radius: 16px;
+    border: 1px solid rgba(168, 85, 247, 0.25);
+    background:
+        radial-gradient(circle at 85% 15%, rgba(216, 180, 254, 0.32) 0%, rgba(216, 180, 254, 0) 36%),
+        linear-gradient(140deg, #25103f 0%, #3a1a64 45%, #5a2b8f 100%);
+    box-shadow:
+        0 10px 24px rgba(15, 23, 42, 0.24),
+        inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    transform: translateY(0);
+    transition: transform 0.24s ease, box-shadow 0.24s ease, border-color 0.24s ease;
+}
+
+#overviewContainer .summary-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(120deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0));
+}
+
+#overviewContainer .summary-card:hover {
+    transform: translateY(-4px);
+    border-color: rgba(216, 180, 254, 0.72);
+    box-shadow:
+        0 16px 34px rgba(15, 23, 42, 0.32),
+        0 0 0 1px rgba(216, 180, 254, 0.28);
+}
+
+#overviewContainer .summary-card-title {
+    margin: 0 0 10px;
+    font-size: 1.2rem;
+    line-height: 1.25;
+    max-width: calc(100% - 72px);
+    padding-right: 6px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-transform: uppercase;
+    letter-spacing: 0.7px;
+    color: #f8fbff;
+    font-weight: 800;
+}
+
+#overviewContainer .summary-card-desc {
+    margin: 0;
+    color: rgba(246, 235, 255, 0.92);
+    font-size: 1.06rem;
+    line-height: 1.5;
+}
+
+#overviewContainer .summary-card-icon {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 50px;
+    height: 50px;
+    border-radius: 12px;
+    display: grid;
+    place-items: center;
+    font-size: 26px;
+    background: rgba(236, 210, 255, 0.2);
+    border: 1px solid rgba(236, 210, 255, 0.32);
+    box-shadow: 0 8px 18px rgba(2, 6, 23, 0.22);
+}
+
+#overviewContainer .btn-secondary {
+    background: linear-gradient(135deg, #c084fc, #8b5cf6);
+    color: #ffffff;
+}
+
+.btn-danger {
+    background: linear-gradient(135deg, #ff5e5e, #dc2626);
+    color: #fff;
+}
+
+.btn-danger:hover {
+    background: linear-gradient(135deg, #ff6e6e, #b91c1c);
+}
+
+@media (max-width: 1200px) {
+    #overviewContainer.summary-cards-grid {
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        gap: 18px;
+    }
+}
+
+@media (max-width: 900px) {
+    #overviewContainer.summary-cards-grid {
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    }
+}
+
+@media (max-width: 640px) {
+    .navbar .navbar-container,
+    .buildings-page-container {
+        padding-left: 14px;
+        padding-right: 14px;
+    }
+
+    #overviewContainer .summary-card {
+        min-height: 128px;
+        padding: 14px 14px 52px;
+    }
+
+    #overviewContainer .summary-card-title {
+        font-size: 0.95rem;
+    }
+
+    #overviewContainer .summary-card-desc {
+        font-size: 0.88rem;
+    }
+
+    #overviewContainer .summary-card-icon {
+        width: 34px;
+        height: 34px;
+        font-size: 18px;
+    }
+
+    .card-actions {
+        right: 8px;
+        bottom: 8px;
+        gap: 6px;
+    }
+
+    .card-actions .btn {
+        padding: 6px 10px;
+        font-size: 11px;
+    }
+}
 </style>
 
 <script>
@@ -163,9 +410,9 @@ function clearActions() {
     document.getElementById('overviewActions').innerHTML = '';
 }
 
-function addActionButton(text, onClick) {
+function addActionButton(text, onClick, variant = 'secondary') {
     const btn = document.createElement('button');
-    btn.className = 'btn btn-secondary';
+    btn.className = `btn btn-${variant}`;
     btn.textContent = text;
     btn.onclick = onClick;
     document.getElementById('overviewActions').appendChild(btn);
@@ -259,17 +506,6 @@ async function loadRooms(floorId, floorName) {
     document.getElementById('overviewTitle').textContent = 'Rooms of ' + floorName;
     document.getElementById('overviewSubtitle').textContent = 'Select a room to view items';
     clearActions();
-    addActionButton('Add Room', () => {
-        openRoomModal();
-        // after buildings list is loaded we set the selects
-        setTimeout(() => {
-            document.getElementById('roomBuildingSelect').value = currentBuildingId;
-            loadFloorsForRoom(currentBuildingId);
-            setTimeout(() => {
-                document.getElementById('roomFloorSelect').value = currentFloorId;
-            }, 200);
-        }, 200);
-    });
     addActionButton('Back', () => loadFloors(currentBuildingId, currentBuildingName));
 
     const container = document.getElementById('overviewContainer');
@@ -476,6 +712,45 @@ async function saveEditBuilding() {
     }
 }
 
+function openBuildingModal() {
+    document.getElementById('buildingModal').classList.add('show');
+    document.getElementById('buildingNameInput').focus();
+}
+
+function closeBuildingModal() {
+    document.getElementById('buildingModal').classList.remove('show');
+    document.getElementById('buildingForm').reset();
+}
+
+async function saveBuildingData() {
+    const buildingName = document.getElementById('buildingNameInput').value.trim();
+    const buildingDesc = document.getElementById('buildingDescInput').value.trim();
+
+    if (!buildingName) {
+        alert('Please enter a building name');
+        return;
+    }
+
+    try {
+        const response = await fetch('/School_Facility_Maintenance_System/backend/api/buildings.php?action=create', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: buildingName, description: buildingDesc })
+        });
+        const result = await response.json();
+        if (result.success) {
+            closeBuildingModal();
+            loadBuildings();
+        } else {
+            alert(result.message || 'Failed to add building');
+        }
+    } catch (error) {
+        console.error('Error saving building:', error);
+        alert('Error saving building. Please try again.');
+    }
+}
+
 // Floor modal functions
 function openFloorModal() {
     document.getElementById('floorModal').classList.add('show');
@@ -527,6 +802,97 @@ async function saveFloorData() {
     }
 }
 
+// Room modal functions
+function openRoomModal() {
+    document.getElementById('roomModal').classList.add('show');
+    loadBuildingsInModal();
+    document.getElementById('roomNameInput').focus();
+}
+function closeRoomModal() {
+    document.getElementById('roomModal').classList.remove('show');
+    document.getElementById('roomForm').reset();
+}
+function loadBuildingsInModal() {
+    const buildingSelect = document.getElementById('roomBuildingSelect');
+    const floorSelect = document.getElementById('roomFloorSelect');
+    buildingSelect.innerHTML = '<option value="">Choose a building</option>';
+    floorSelect.innerHTML = '<option value="">Choose a floor</option>';
+
+    fetch('/School_Facility_Maintenance_System/backend/api/buildings.php?action=list', {
+        credentials: 'same-origin'
+    })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success && Array.isArray(data.buildings)) {
+                data.buildings.forEach(building => {
+                    const option = document.createElement('option');
+                    option.value = building.id;
+                    option.textContent = building.name;
+                    buildingSelect.appendChild(option);
+                });
+            }
+        })
+        .catch(err => {
+            console.error('Error loading buildings for room modal', err);
+        });
+}
+function loadFloorsForRoom(buildingId) {
+    const floorSelect = document.getElementById('roomFloorSelect');
+    floorSelect.innerHTML = '<option value="">Choose a floor</option>';
+    if (!buildingId) return;
+    fetch('/School_Facility_Maintenance_System/backend/api/floors.php?action=getByBuilding&building_id=' + encodeURIComponent(buildingId), {
+        credentials: 'same-origin'
+    })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success && Array.isArray(data.floors)) {
+                data.floors.forEach(floor => {
+                    const opt = document.createElement('option');
+                    opt.value = floor.id;
+                    opt.textContent = floor.name;
+                    floorSelect.appendChild(opt);
+                });
+            }
+        })
+        .catch(err => {
+            console.error('Error loading floors for room modal', err);
+        });
+}
+async function saveRoomData() {
+    const buildingId = document.getElementById('roomBuildingSelect').value.trim();
+    const floorId = document.getElementById('roomFloorSelect').value.trim();
+    const roomName = document.getElementById('roomNameInput').value.trim();
+    const roomCapacity = document.getElementById('roomCapacityInput').value.trim();
+
+    if (!buildingId) { alert('Please select a building'); return; }
+    if (!floorId) { alert('Please select a floor'); return; }
+    if (!roomName) { alert('Please enter a room name/number'); return; }
+
+    try {
+        const response = await fetch('/School_Facility_Maintenance_System/backend/api/rooms.php?action=create', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                building_id: buildingId,
+                floor_id: floorId,
+                name: roomName,
+                capacity: roomCapacity || null
+            })
+        });
+        const result = await response.json();
+        if (result.success) {
+            closeRoomModal();
+            loadRooms(currentFloorId, currentFloorName);
+        } else {
+            alert(result.message || 'Failed to add room');
+        }
+    } catch (error) {
+        console.error('Error saving room:', error);
+        alert('Error saving room. Please try again.');
+    }
+}
+
 // Item modal functions
 function openItemModal() {
     document.getElementById('itemModal').classList.add('show');
@@ -557,6 +923,8 @@ async function saveItemData() {
 // initialize on load
 window.addEventListener('DOMContentLoaded', initOverview);
 </script>
+
+<?php include __DIR__ . '/../includes/footer.php'; ?>
 
 
 

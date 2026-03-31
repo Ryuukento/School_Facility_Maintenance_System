@@ -23,7 +23,7 @@ class MaintenanceReport {
             $data['description'],
             $data['location'],
             $data['priority'] ?? PRIORITY_MEDIUM,
-            $data['status'] ?? REPORT_STATUS_SUBMITTED,
+            $data['status'] ?? 'submitted',
             $data['created_by'],
             $data['assigned_to'] ?? null,
             $data['department_id'] ?? null,

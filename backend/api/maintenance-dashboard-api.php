@@ -34,37 +34,49 @@ function getDashboardStats() {
     AuthMiddleware::protect();
     
     $userId = $_SESSION['user_id'];
+    $role = normalizeMaintenanceRole($_SESSION['user']['role'] ?? '');
     global $pdo;
     
-    // Get statistics based on user role
-    $isAdmin = in_array($_SESSION['user']['role'], ['super_admin', 'maintenance_admin']);
+    // Super admin and maintenance admin can see all maintenance reports.
+    $isAdmin = in_array($role, ['super_admin', 'maintenance_admin'], true);
     
     try {
-        $sql = "SELECT 
-                    COUNT(DISTINCT CASE WHEN created_by = ? THEN report_id END) as total_reports,
-                    COUNT(DISTINCT CASE WHEN status = 'submitted' AND assigned_to = ? THEN report_id END) as pending,
-                    COUNT(DISTINCT CASE WHEN status = 'in_progress' AND assigned_to = ? THEN report_id END) as in_progress,
-                    COUNT(DISTINCT CASE WHEN status = 'completed' 
-                        AND MONTH(completed_date) = MONTH(CURRENT_DATE)
-                        AND YEAR(completed_date) = YEAR(CURRENT_DATE)
-                        AND assigned_to = ? THEN report_id END) as completed_this_month,
-                    COUNT(DISTINCT CASE WHEN due_date < CURRENT_DATE 
-                        AND status NOT IN ('completed', 'closed') 
-                        AND assigned_to = ? THEN report_id END) as overdue,
-                    AVG(CASE WHEN status IN ('completed', 'closed') 
-                        THEN TIMESTAMPDIFF(DAY, created_at, COALESCE(completed_date, updated_at)) END) as avg_completion_days
-                FROM maintenance_reports
-                WHERE 1=1";
-        
-        if (!$isAdmin) {
-            $sql .= " AND (created_by = ? OR assigned_to = ?)";
-        }
-        
-        $stmt = $pdo->prepare($sql);
-        
         if ($isAdmin) {
-            $stmt->execute([$userId, $userId, $userId, $userId, $userId]);
+            $sql = "SELECT 
+                        COUNT(*) as total_reports,
+                        COUNT(CASE WHEN status = 'submitted' THEN report_id END) as pending,
+                        COUNT(CASE WHEN status = 'in_progress' THEN report_id END) as in_progress,
+                        COUNT(CASE WHEN status = 'completed' 
+                            AND MONTH(completed_date) = MONTH(CURRENT_DATE)
+                            AND YEAR(completed_date) = YEAR(CURRENT_DATE)
+                            THEN report_id END) as completed_this_month,
+                        COUNT(CASE WHEN due_date < CURRENT_DATE 
+                            AND status NOT IN ('completed', 'closed') 
+                            THEN report_id END) as overdue,
+                        AVG(CASE WHEN status IN ('completed', 'closed') 
+                            THEN TIMESTAMPDIFF(DAY, created_at, COALESCE(completed_date, updated_at)) END) as avg_completion_days
+                    FROM maintenance_reports";
+
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute();
         } else {
+            $sql = "SELECT 
+                        COUNT(DISTINCT CASE WHEN created_by = ? THEN report_id END) as total_reports,
+                        COUNT(DISTINCT CASE WHEN status = 'submitted' AND assigned_to = ? THEN report_id END) as pending,
+                        COUNT(DISTINCT CASE WHEN status = 'in_progress' AND assigned_to = ? THEN report_id END) as in_progress,
+                        COUNT(DISTINCT CASE WHEN status = 'completed' 
+                            AND MONTH(completed_date) = MONTH(CURRENT_DATE)
+                            AND YEAR(completed_date) = YEAR(CURRENT_DATE)
+                            AND assigned_to = ? THEN report_id END) as completed_this_month,
+                        COUNT(DISTINCT CASE WHEN due_date < CURRENT_DATE 
+                            AND status NOT IN ('completed', 'closed') 
+                            AND assigned_to = ? THEN report_id END) as overdue,
+                        AVG(CASE WHEN status IN ('completed', 'closed') 
+                            THEN TIMESTAMPDIFF(DAY, created_at, COALESCE(completed_date, updated_at)) END) as avg_completion_days
+                    FROM maintenance_reports
+                    WHERE created_by = ? OR assigned_to = ?";
+
+            $stmt = $pdo->prepare($sql);
             $stmt->execute([$userId, $userId, $userId, $userId, $userId, $userId, $userId]);
         }
         
@@ -86,22 +98,24 @@ function getChartData() {
     AuthMiddleware::protect();
     
     $userId = $_SESSION['user_id'];
+    $role = normalizeMaintenanceRole($_SESSION['user']['role'] ?? '');
     global $pdo;
     
-    $isAdmin = in_array($_SESSION['user']['role'], ['super_admin', 'maintenance_admin']);
+    $isAdmin = in_array($role, ['super_admin', 'maintenance_admin'], true);
     
     try {
         $chartData = [];
         
         // Status distribution
         $statusSql = "SELECT status, COUNT(*) as count 
-                      FROM maintenance_reports 
-                      WHERE created_by = ?" . (!$isAdmin ? " OR assigned_to = ?" : "") . "
-                      GROUP BY status 
-                      ORDER BY count DESC";
-        
+                      FROM maintenance_reports ";
+        if (!$isAdmin) {
+            $statusSql .= "WHERE created_by = ? OR assigned_to = ? ";
+        }
+        $statusSql .= "GROUP BY status ORDER BY count DESC";
+
         $stmt = $pdo->prepare($statusSql);
-        $isAdmin ? $stmt->execute([$userId]) : $stmt->execute([$userId, $userId]);
+        $isAdmin ? $stmt->execute() : $stmt->execute([$userId, $userId]);
         $statusResults = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
         $statusLabels = [];
@@ -118,13 +132,15 @@ function getChartData() {
         
         // Priority distribution
         $prioritySql = "SELECT priority, COUNT(*) as count 
-                        FROM maintenance_reports 
-                        WHERE created_by = ?" . (!$isAdmin ? " OR assigned_to = ?" : "") . "
-                        GROUP BY priority 
+                        FROM maintenance_reports ";
+        if (!$isAdmin) {
+            $prioritySql .= "WHERE created_by = ? OR assigned_to = ? ";
+        }
+        $prioritySql .= "GROUP BY priority 
                         ORDER BY FIELD(priority, 'low', 'medium', 'high', 'urgent', 'critical')";
-        
+
         $stmt = $pdo->prepare($prioritySql);
-        $isAdmin ? $stmt->execute([$userId]) : $stmt->execute([$userId, $userId]);
+        $isAdmin ? $stmt->execute() : $stmt->execute([$userId, $userId]);
         $priorityResults = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
         $priorityLabels = [];
@@ -145,13 +161,15 @@ function getChartData() {
                         COUNT(*) as created,
                         SUM(CASE WHEN status IN ('completed', 'closed') THEN 1 ELSE 0 END) as completed
                     FROM maintenance_reports
-                    WHERE created_at >= DATE_SUB(CURRENT_DATE, INTERVAL 6 MONTH)
-                    AND (created_by = ?" . (!$isAdmin ? " OR assigned_to = ?" : "") . ")
-                    GROUP BY DATE_FORMAT(created_at, '%Y-%m')
+                    WHERE created_at >= DATE_SUB(CURRENT_DATE, INTERVAL 6 MONTH) ";
+        if (!$isAdmin) {
+            $trendSql .= "AND (created_by = ? OR assigned_to = ?) ";
+        }
+        $trendSql .= "GROUP BY DATE_FORMAT(created_at, '%Y-%m')
                     ORDER BY created_at";
-        
+
         $stmt = $pdo->prepare($trendSql);
-        $isAdmin ? $stmt->execute([$userId]) : $stmt->execute([$userId, $userId]);
+        $isAdmin ? $stmt->execute() : $stmt->execute([$userId, $userId]);
         $trendResults = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
         $trendLabels = [];
@@ -175,4 +193,21 @@ function getChartData() {
         Logger::error('Error fetching chart data', ['error' => $e->getMessage()]);
         Response::error('Failed to fetch chart data', [], Response::HTTP_INTERNAL_ERROR);
     }
+}
+
+/**
+ * Normalize legacy role strings to current maintenance role names.
+ */
+function normalizeMaintenanceRole($role) {
+    $role = strtolower(trim((string)$role));
+
+    if ($role === 'admin_maintenance') {
+        return 'maintenance_admin';
+    }
+
+    if ($role === 'eelab_staff' || $role === 'maintenance_personnel' || $role === '') {
+        return 'maintenance_staff';
+    }
+
+    return $role;
 }

@@ -139,6 +139,9 @@ $user = $_SESSION['user'];
                     <a href="/School_Facility_Maintenance_System/frontend/pages/reports.php" class="btn btn-secondary">
                         Cancel
                     </a>
+                    <button type="button" class="btn btn-danger" id="delete-btn">
+                        Delete Report
+                    </button>
                 </div>
             </form>
         </div>
@@ -158,6 +161,17 @@ window.API = window.API || {
             credentials: 'include',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data)
+        });
+        const result = await response.json();
+        if (!result.success) throw new Error(result.message);
+        return result;
+    },
+    async deleteReport(reportId) {
+        const response = await fetch(`${this.baseURL}/reports.php?action=delete`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ report_id: reportId })
         });
         const result = await response.json();
         if (!result.success) throw new Error(result.message);
@@ -185,6 +199,7 @@ document.getElementById('report-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     
     const submitBtn = document.getElementById('submit-btn');
+    const deleteBtn = document.getElementById('delete-btn');
     const alertContainer = document.getElementById('alert-container');
     
     // Get form data
@@ -208,6 +223,7 @@ document.getElementById('report-form').addEventListener('submit', async (e) => {
     const originalText = submitBtn.innerHTML;
     submitBtn.innerHTML = 'Saving...';
     submitBtn.disabled = true;
+    deleteBtn.disabled = true;
     alertContainer.innerHTML = '';
     
     try {
@@ -227,6 +243,35 @@ document.getElementById('report-form').addEventListener('submit', async (e) => {
         console.error('Submit error:', error);
         alertContainer.innerHTML = `<div class="alert alert-danger">${error.message}</div>`;
         submitBtn.innerHTML = originalText;
+        submitBtn.disabled = false;
+        deleteBtn.disabled = false;
+    }
+});
+
+document.getElementById('delete-btn').addEventListener('click', async () => {
+    const alertContainer = document.getElementById('alert-container');
+    const submitBtn = document.getElementById('submit-btn');
+    const deleteBtn = document.getElementById('delete-btn');
+
+    const confirmed = window.confirm('Delete this report? This action cannot be undone.');
+    if (!confirmed) return;
+
+    const originalText = deleteBtn.innerHTML;
+    deleteBtn.innerHTML = 'Deleting...';
+    deleteBtn.disabled = true;
+    submitBtn.disabled = true;
+    alertContainer.innerHTML = '';
+
+    try {
+        await window.API.deleteReport(<?php echo $reportId; ?>);
+        alertContainer.innerHTML = '<div class="alert alert-success">Report deleted. Redirecting...</div>';
+        setTimeout(() => {
+            window.location.href = '/School_Facility_Maintenance_System/frontend/pages/reports.php';
+        }, 1000);
+    } catch (error) {
+        alertContainer.innerHTML = `<div class="alert alert-danger">${error.message}</div>`;
+        deleteBtn.innerHTML = originalText;
+        deleteBtn.disabled = false;
         submitBtn.disabled = false;
     }
 });

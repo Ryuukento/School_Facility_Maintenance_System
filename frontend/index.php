@@ -14,6 +14,8 @@ if (!empty($_SESSION['user'])) {
     $role = $_SESSION['user']['role'] ?? '';
     if ($role === 'maintenance_admin') {
         header('Location: /School_Facility_Maintenance_System/frontend/pages/maintenance-dashboard.php', true, 302);
+    } elseif ($role === 'maintenance_staff') {
+        header('Location: /School_Facility_Maintenance_System/frontend/pages/staff-dashboard.php', true, 302);
     } else {
         header('Location: /School_Facility_Maintenance_System/frontend/pages/dashboard.php', true, 302);
     }

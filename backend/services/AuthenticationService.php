@@ -60,12 +60,14 @@ class AuthenticationService {
             ];
         }
         
+        $normalizedRole = $this->normalizeRoleAlias($user['role'] ?? '');
+
         // Create session
         SessionMiddleware::initialize();
         $_SESSION['user_id'] = $user['user_id'];
         $_SESSION['email'] = $user['email'];
         $_SESSION['full_name'] = $user['full_name'];
-        $_SESSION['role'] = $user['role'];
+        $_SESSION['role'] = $normalizedRole;
         $_SESSION['department_id'] = $user['department_id'];
         $_SESSION['last_activity'] = time();
         $_SESSION['session_token'] = bin2hex(random_bytes(32));
@@ -75,7 +77,7 @@ class AuthenticationService {
             'user_id' => $user['user_id'],
             'email' => $user['email'],
             'full_name' => $user['full_name'],
-            'role' => $user['role'],
+            'role' => $normalizedRole,
             'department_id' => $user['department_id']
         ];
         
@@ -91,9 +93,23 @@ class AuthenticationService {
                 'user_id' => $user['user_id'],
                 'full_name' => $user['full_name'],
                 'email' => $user['email'],
-                'role' => $user['role']
+                'role' => $normalizedRole
             ]
         ];
+    }
+
+    private function normalizeRoleAlias($role) {
+        $role = strtolower(trim((string)$role));
+
+        if ($role === 'admin_maintenance') {
+            return 'maintenance_admin';
+        }
+
+        if ($role === 'eelab_staff' || $role === 'maintenance_personnel' || $role === '') {
+            return ROLE_MAINTENANCE_STAFF;
+        }
+
+        return $role;
     }
     
     public function logout() {
@@ -118,7 +134,7 @@ class AuthenticationService {
             'full_name' => 'required|max:255',
             'email' => 'required|email',
             'password' => 'required|min:' . PASSWORD_MIN_LENGTH,
-            'role' => 'required|in:' . implode(',', [ROLE_SUPER_ADMIN, ROLE_DEPARTMENT_ADMIN, ROLE_MAINTENANCE_STAFF, ROLE_USER])
+            'role' => 'required|in:' . implode(',', [ROLE_SUPER_ADMIN, ROLE_DEPARTMENT_ADMIN, ROLE_MAINTENANCE_ADMIN, ROLE_MAINTENANCE_STAFF, ROLE_USER])
         ])) {
             return [
                 'success' => false,
