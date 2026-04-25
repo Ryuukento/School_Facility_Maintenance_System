@@ -1,2 +1,19 @@
 Options -Indexes
 DirectoryIndex index.php
+
+RewriteEngine On
+
+# Preserve old hardcoded URLs after removing the laravel_app subfolder.
+RewriteRule ^laravel_app/public/(.*)$ $1 [R=302,L,NC]
+
+# Serve legacy public assets and pages from the root project URL.
+RewriteRule ^frontend/(.*)$ public/frontend/$1 [L,NC]
+RewriteRule ^backend/(.*)$ public/backend/$1 [L,NC]
+RewriteRule ^storage/(.*)$ public/storage/$1 [L,NC]
+RewriteRule ^inventory-workflow-api\.php$ public/inventory-workflow-api.php [L,NC]
+RewriteRule ^(favicon\.ico|robots\.txt)$ public/$1 [L,NC]
+
+# Send Laravel/web routes through the real public front controller.
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^ index.php [L]

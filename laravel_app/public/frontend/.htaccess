@@ -1,0 +1,2 @@
+RewriteEngine On
+RewriteRule ^(.*)$ ../../../frontend/$1 [R=302,L,NC]

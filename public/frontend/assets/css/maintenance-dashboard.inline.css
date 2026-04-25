@@ -1,0 +1,553 @@
+﻿.maintenance-admin-dashboard-page {
+    width: calc(100% - var(--sidebar-width));
+    max-width: calc(100% - var(--sidebar-width));
+    margin-left: var(--sidebar-width);
+    margin-right: 0;
+    margin-top: 20px;
+    padding-left: 24px;
+    padding-right: 24px;
+}
+
+.navbar .navbar-container {
+    max-width: none;
+    margin: 0;
+    padding-left: 24px;
+    padding-right: 24px;
+}
+
+#sidebar.collapsed ~ main.maintenance-admin-dashboard-page {
+    width: calc(100% - var(--sidebar-width-collapsed));
+    max-width: calc(100% - var(--sidebar-width-collapsed));
+    margin-left: var(--sidebar-width-collapsed);
+}
+
+@media (max-width: 992px) {
+    .maintenance-admin-dashboard-page {
+        width: calc(100% - var(--sidebar-width-collapsed));
+        max-width: calc(100% - var(--sidebar-width-collapsed));
+        margin-left: var(--sidebar-width-collapsed);
+    }
+}
+
+@media (max-width: 640px) {
+    .navbar .navbar-container,
+    .maintenance-admin-dashboard-page {
+        padding-left: 14px;
+        padding-right: 14px;
+    }
+}
+
+@media (max-width: 768px) {
+    .maintenance-admin-dashboard-page,
+    #sidebar.collapsed ~ main.maintenance-admin-dashboard-page {
+        margin-left: 0 !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        padding-left: 12px;
+        padding-right: 12px;
+    }
+}
+
+/* Colored accent cards to match the reference dashboard */
+main.maintenance-admin-dashboard-page .summary-cards-grid {
+    display: grid;
+    grid-template-columns: repeat(10, minmax(0, 1fr));
+    gap: 12px;
+    margin-top: 18px;
+}
+
+main.maintenance-admin-dashboard-page .summary-cards-grid > .summary-card {
+    grid-column: span 2;
+}
+
+main.maintenance-admin-dashboard-page .summary-cards-grid > .summary-card:nth-child(6),
+main.maintenance-admin-dashboard-page .summary-cards-grid > .summary-card:nth-child(7) {
+    grid-column: span 5;
+}
+
+main.maintenance-admin-dashboard-page .summary-card {
+    position: relative;
+    overflow: hidden;
+    width: 100%;
+    background: linear-gradient(180deg, #111827 0%, #0f172a 100%);
+    border: 1px solid rgba(148, 163, 184, 0.14);
+    border-top: 3px solid var(--card-accent, #8b5cf6);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.03),
+        0 12px 28px rgba(2, 6, 23, 0.38);
+    transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+main.maintenance-admin-dashboard-page .summary-card::before {
+    content: '';
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 4px;
+    background: var(--card-accent, #8b5cf6);
+    border-radius: 16px 16px 0 0;
+    pointer-events: none;
+}
+
+main.maintenance-admin-dashboard-page .summary-card:hover {
+    transform: translateY(-2px);
+    border-color: rgba(148, 163, 184, 0.24);
+    background: linear-gradient(180deg, #121c2d 0%, #101726 100%);
+    box-shadow: 0 16px 36px rgba(2, 6, 23, 0.45);
+}
+
+main.maintenance-admin-dashboard-page .summary-card .summary-card-title,
+main.maintenance-admin-dashboard-page .summary-card .summary-card-value,
+main.maintenance-admin-dashboard-page .summary-card .summary-card-desc {
+    color: #dbe7fb;
+}
+
+main.maintenance-admin-dashboard-page .summary-card .summary-card-icon {
+    width: 48px;
+    height: 48px;
+    display: grid;
+    place-items: center;
+    border-radius: 12px;
+    background: var(--card-icon-bg, rgba(15, 23, 42, 0.82));
+    border: 1px solid var(--card-icon-border, rgba(148, 163, 184, 0.12));
+    color: var(--card-icon-color, #ffffff);
+    box-shadow: 0 10px 18px rgba(2, 6, 23, 0.22);
+    opacity: 1;
+     stroke: currentColor !important;
+     fill: none !important;
+}
+
+main.maintenance-admin-dashboard-page .summary-card:hover .summary-card-icon {
+    filter: brightness(1.06);
+}
+
+main.maintenance-admin-dashboard-page .summary-card-total {
+    --card-accent: #8b5cf6;
+    --card-icon-bg: rgba(15, 23, 42, 0.86);
+    --card-icon-border: rgba(139, 92, 246, 0.18);
+    --card-icon-color: #a78bfa;
+}
+
+main.maintenance-admin-dashboard-page .summary-card-today {
+    --card-accent: #06b6d4;
+    --card-icon-bg: rgba(15, 23, 42, 0.86);
+    --card-icon-border: rgba(6, 182, 212, 0.18);
+    --card-icon-color: #22d3ee;
+}
+
+main.maintenance-admin-dashboard-page .summary-card-pending {
+    --card-accent: #f59e0b;
+    --card-icon-bg: rgba(15, 23, 42, 0.86);
+    --card-icon-border: rgba(245, 158, 11, 0.18);
+    --card-icon-color: #fbbf24;
+}
+
+main.maintenance-admin-dashboard-page .summary-card-progress {
+    --card-accent: #a855f7;
+    --card-icon-bg: rgba(15, 23, 42, 0.86);
+    --card-icon-border: rgba(168, 85, 247, 0.18);
+    --card-icon-color: #c084fc;
+}
+
+main.maintenance-admin-dashboard-page .summary-card-completed {
+    --card-accent: #10b981;
+    --card-icon-bg: rgba(15, 23, 42, 0.86);
+    --card-icon-border: rgba(16, 185, 129, 0.18);
+    --card-icon-color: #34d399;
+}
+
+main.maintenance-admin-dashboard-page .summary-card-low-stock {
+    --card-accent: #ef4444;
+    --card-icon-bg: rgba(15, 23, 42, 0.86);
+    --card-icon-border: rgba(239, 68, 68, 0.18);
+    --card-icon-color: #fb7185;
+}
+
+main.maintenance-admin-dashboard-page .summary-card-buildings {
+    --card-accent: #3b82f6;
+    --card-icon-bg: rgba(15, 23, 42, 0.86);
+    --card-icon-border: rgba(59, 130, 246, 0.18);
+    --card-icon-color: #60a5fa;
+}
+
+main.maintenance-admin-dashboard-page .summary-card-icon svg * {
+     stroke: currentColor !important;
+     fill: none !important;
+}
+
+main.maintenance-admin-dashboard-page .charts-section {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
+    gap: 14px;
+}
+
+main.maintenance-admin-dashboard-page .chart-card {
+    background: linear-gradient(180deg, #111827 0%, #0f172a 100%);
+    border: 1px solid rgba(148, 163, 184, 0.14);
+    border-radius: 14px;
+    box-shadow: 0 14px 28px rgba(2, 6, 23, 0.35);
+    overflow: hidden;
+}
+
+main.maintenance-admin-dashboard-page .chart-card .card-header {
+    border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+    padding: 16px 18px;
+}
+
+main.maintenance-admin-dashboard-page .chart-card .card-header h2 {
+    margin: 0;
+    color: #f8fafc;
+    font-size: 1rem;
+}
+
+main.maintenance-admin-dashboard-page .chart-card .card-header .text-muted,
+main.maintenance-admin-dashboard-page .chart-card .card-header p {
+    margin: 8px 0 0;
+    color: #94a3b8 !important;
+}
+
+main.maintenance-admin-dashboard-page .chart-card .card-body {
+    padding: 16px;
+}
+
+main.maintenance-admin-dashboard-page .status-chart-head-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+main.maintenance-admin-dashboard-page .status-live-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    background: rgba(15, 23, 42, 0.55);
+    color: #64748b;
+    font-size: 11px;
+    line-height: 1;
+    font-weight: 700;
+}
+
+main.maintenance-admin-dashboard-page .status-chart-body {
+    min-height: 260px;
+}
+
+main.maintenance-admin-dashboard-page canvas.chart-canvas {
+    display: block;
+    width: 100% !important;
+    height: 300px !important;
+    margin: 0;
+}
+
+main.maintenance-admin-dashboard-page .priority-chart-card .card-body {
+    padding: 18px 16px 14px;
+}
+
+main.maintenance-admin-dashboard-page .recent-reports-card {
+    margin-top: 22px;
+    margin-bottom: 32px;
+    background: linear-gradient(180deg, #111827 0%, #0f172a 100%);
+    border: 1px solid rgba(148, 163, 184, 0.14);
+    border-radius: 14px;
+    box-shadow: 0 14px 28px rgba(2, 6, 23, 0.35);
+    overflow: hidden;
+}
+
+main.maintenance-admin-dashboard-page .recent-reports-header {
+    border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+    padding: 16px 18px;
+}
+
+main.maintenance-admin-dashboard-page .recent-reports-header h3 {
+    color: #f8fafc;
+    font-size: 1rem;
+}
+
+main.maintenance-admin-dashboard-page .recent-reports-link {
+    color: #c084fc;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+main.maintenance-admin-dashboard-page .recent-reports-link:hover,
+main.maintenance-admin-dashboard-page .recent-reports-link:focus-visible {
+    color: #d8b4fe;
+    text-decoration: underline;
+    outline: none;
+}
+
+main.maintenance-admin-dashboard-page .recent-reports-body {
+    padding: 16px 18px 18px;
+}
+
+main.maintenance-admin-dashboard-page .recent-reports-subtitle {
+    margin: 0 0 12px;
+    color: #94a3b8 !important;
+}
+
+main.maintenance-admin-dashboard-page .recent-reports-table-wrap {
+    border: 1px solid rgba(99, 102, 241, 0.16);
+    border-radius: 18px;
+    overflow: hidden;
+    background: linear-gradient(180deg, rgba(30, 27, 46, 0.98) 0%, rgba(20, 19, 34, 0.98) 100%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03), 0 18px 40px rgba(2, 6, 23, 0.34);
+}
+
+main.maintenance-admin-dashboard-page .recent-reports-table-head,
+main.maintenance-admin-dashboard-page .recent-report-table-row {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) 0.95fr 1.05fr 0.9fr 0.9fr;
+    align-items: center;
+    gap: 18px;
+}
+
+main.maintenance-admin-dashboard-page .recent-reports-table-head {
+    padding: 12px 18px;
+    background: rgba(99, 102, 241, 0.08);
+    border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+main.maintenance-admin-dashboard-page .recent-reports-table-head > div {
+    color: #7c86b4;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+}
+
+main.maintenance-admin-dashboard-page .recent-reports-table-body {
+    display: grid;
+}
+
+main.maintenance-admin-dashboard-page .recent-report-table-row {
+    padding: 14px 18px;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+main.maintenance-admin-dashboard-page .recent-reports-table-body .recent-report-table-row:last-child {
+    border-bottom: none;
+}
+
+main.maintenance-admin-dashboard-page .recent-report-cell {
+    min-width: 0;
+}
+
+main.maintenance-admin-dashboard-page .recent-report-main {
+    display: grid;
+    gap: 4px;
+}
+
+main.maintenance-admin-dashboard-page .recent-report-main strong {
+    color: #f8fafc;
+    font-size: 1.04rem;
+    line-height: 1.2;
+}
+
+main.maintenance-admin-dashboard-page .recent-report-main span {
+    color: #8c91b7;
+    font-size: 0.88rem;
+    line-height: 1.25;
+}
+
+main.maintenance-admin-dashboard-page .recent-report-date,
+main.maintenance-admin-dashboard-page .recent-report-assigned {
+    color: #a5add3;
+    font-size: 0.93rem;
+}
+
+main.maintenance-admin-dashboard-page .recent-report-pill-cell {
+    display: flex;
+    justify-content: flex-start;
+}
+
+main.maintenance-admin-dashboard-page .recent-report-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 28px;
+    padding: 5px 12px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    font-size: 11px;
+    font-weight: 800;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+main.maintenance-admin-dashboard-page .priority-low { background: rgba(100, 116, 139, 0.22); border-color: rgba(148, 163, 184, 0.3); color: #dbe4f0; }
+main.maintenance-admin-dashboard-page .priority-medium { background: rgba(59, 130, 246, 0.18); border-color: rgba(96, 165, 250, 0.34); color: #93c5fd; }
+main.maintenance-admin-dashboard-page .priority-high { background: rgba(245, 158, 11, 0.16); border-color: rgba(245, 158, 11, 0.34); color: #fbbf24; }
+main.maintenance-admin-dashboard-page .priority-urgent { background: rgba(249, 115, 22, 0.16); border-color: rgba(249, 115, 22, 0.34); color: #fdba74; }
+main.maintenance-admin-dashboard-page .priority-critical { background: rgba(239, 68, 68, 0.16); border-color: rgba(239, 68, 68, 0.34); color: #f87171; }
+
+main.maintenance-admin-dashboard-page .status-submitted { background: rgba(99, 102, 241, 0.16); border-color: rgba(129, 140, 248, 0.34); color: #c7d2fe; }
+main.maintenance-admin-dashboard-page .status-assigned { background: rgba(168, 85, 247, 0.16); border-color: rgba(192, 132, 252, 0.34); color: #e9d5ff; }
+main.maintenance-admin-dashboard-page .status-in-progress { background: rgba(59, 130, 246, 0.16); border-color: rgba(96, 165, 250, 0.34); color: #93c5fd; }
+main.maintenance-admin-dashboard-page .status-completed { background: rgba(34, 197, 94, 0.16); border-color: rgba(74, 222, 128, 0.34); color: #86efac; }
+main.maintenance-admin-dashboard-page .status-cancelled { background: rgba(248, 113, 113, 0.16); border-color: rgba(248, 113, 113, 0.34); color: #fca5a5; }
+
+main.maintenance-admin-dashboard-page .recent-reports-empty {
+    margin: 0;
+    color: #cbd5e1;
+}
+
+@media (max-width: 992px) {
+    main.maintenance-admin-dashboard-page .summary-cards-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    main.maintenance-admin-dashboard-page .summary-cards-grid > .summary-card,
+    main.maintenance-admin-dashboard-page .summary-cards-grid > .summary-card:nth-child(6),
+    main.maintenance-admin-dashboard-page .summary-cards-grid > .summary-card:nth-child(7) {
+        grid-column: auto;
+    }
+
+    main.maintenance-admin-dashboard-page .charts-section {
+        grid-template-columns: 1fr;
+    }
+
+    main.maintenance-admin-dashboard-page .recent-reports-table-head {
+        display: none;
+    }
+
+    main.maintenance-admin-dashboard-page .recent-report-table-row {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+}
+
+@media (max-width: 640px) {
+    .maintenance-admin-dashboard-page {
+        width: 100%;
+        max-width: 100%;
+        margin-left: 0;
+        padding-left: 0;
+        padding-right: 0;
+    }
+
+    main.maintenance-admin-dashboard-page .summary-cards-grid {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+
+    main.maintenance-admin-dashboard-page .summary-cards-grid > .summary-card,
+    main.maintenance-admin-dashboard-page .summary-cards-grid > .summary-card:nth-child(6),
+    main.maintenance-admin-dashboard-page .summary-cards-grid > .summary-card:nth-child(7) {
+        grid-column: auto;
+    }
+
+    main.maintenance-admin-dashboard-page .charts-section {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+
+    main.maintenance-admin-dashboard-page .chart-card .card-header,
+    main.maintenance-admin-dashboard-page .chart-card .card-body,
+    main.maintenance-admin-dashboard-page .card .card-header,
+    main.maintenance-admin-dashboard-page .card .card-body {
+        padding-left: 14px;
+        padding-right: 14px;
+    }
+
+    main.maintenance-admin-dashboard-page canvas.chart-canvas {
+        height: 240px !important;
+    }
+
+    main.maintenance-admin-dashboard-page .status-chart-body {
+        min-height: 220px;
+    }
+
+    .last-month-filters {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Light mode: force white dashboard cards and readable black text. */
+:root[data-theme-resolved='light'] main.maintenance-admin-dashboard-page .summary-card,
+:root[data-theme-resolved='light'] main.maintenance-admin-dashboard-page .chart-card,
+:root[data-theme-resolved='light'] main.maintenance-admin-dashboard-page .card {
+    background: #ffffff !important;
+    border-color: #e5e7eb !important;
+    box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08) !important;
+}
+
+:root[data-theme-resolved='light'] main.maintenance-admin-dashboard-page .summary-card:hover,
+:root[data-theme-resolved='light'] main.maintenance-admin-dashboard-page .chart-card:hover,
+:root[data-theme-resolved='light'] main.maintenance-admin-dashboard-page .card:hover {
+    background: #ffffff !important;
+    border-color: #d1d5db !important;
+}
+
+:root[data-theme-resolved='light'] main.maintenance-admin-dashboard-page .summary-card .summary-card-title,
+:root[data-theme-resolved='light'] main.maintenance-admin-dashboard-page .summary-card .summary-card-value,
+:root[data-theme-resolved='light'] main.maintenance-admin-dashboard-page .summary-card .summary-card-desc,
+:root[data-theme-resolved='light'] main.maintenance-admin-dashboard-page .chart-card .card-header h2,
+:root[data-theme-resolved='light'] main.maintenance-admin-dashboard-page .chart-card .card-header p,
+:root[data-theme-resolved='light'] main.maintenance-admin-dashboard-page .card .text-muted,
+:root[data-theme-resolved='light'] main.maintenance-admin-dashboard-page .card h1,
+:root[data-theme-resolved='light'] main.maintenance-admin-dashboard-page .card h2,
+:root[data-theme-resolved='light'] main.maintenance-admin-dashboard-page .card h3,
+:root[data-theme-resolved='light'] main.maintenance-admin-dashboard-page .card h4,
+:root[data-theme-resolved='light'] main.maintenance-admin-dashboard-page .card p,
+:root[data-theme-resolved='light'] main.maintenance-admin-dashboard-page .card td,
+:root[data-theme-resolved='light'] main.maintenance-admin-dashboard-page .card th,
+:root[data-theme-resolved='light'] main.maintenance-admin-dashboard-page .card span {
+    color: #111827 !important;
+}
+
+:root[data-theme-resolved='light'] main.maintenance-admin-dashboard-page .chart-card .card-header,
+:root[data-theme-resolved='light'] main.maintenance-admin-dashboard-page .card-header {
+    background: #ffffff !important;
+    border-bottom-color: #e5e7eb !important;
+}
+
+:root[data-theme-resolved='light'] main.maintenance-admin-dashboard-page .recent-reports-table-wrap {
+    border-color: #e5e7eb;
+    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+    box-shadow: 0 16px 30px rgba(15, 23, 42, 0.08);
+}
+
+:root[data-theme-resolved='light'] main.maintenance-admin-dashboard-page .recent-reports-table-head {
+    background: #f3f4f6;
+    border-bottom-color: #e5e7eb;
+}
+
+:root[data-theme-resolved='light'] main.maintenance-admin-dashboard-page .recent-reports-table-head > div {
+    color: #6b7280;
+}
+
+:root[data-theme-resolved='light'] main.maintenance-admin-dashboard-page .recent-report-table-row {
+    border-bottom-color: #e5e7eb;
+}
+
+:root[data-theme-resolved='light'] main.maintenance-admin-dashboard-page .recent-report-main strong {
+    color: #111827 !important;
+}
+
+:root[data-theme-resolved='light'] main.maintenance-admin-dashboard-page .recent-reports-subtitle,
+:root[data-theme-resolved='light'] main.maintenance-admin-dashboard-page .recent-report-main span,
+:root[data-theme-resolved='light'] main.maintenance-admin-dashboard-page .recent-report-date,
+:root[data-theme-resolved='light'] main.maintenance-admin-dashboard-page .recent-report-assigned,
+:root[data-theme-resolved='light'] main.maintenance-admin-dashboard-page .recent-reports-empty {
+    color: #6b7280 !important;
+}
+
+:root[data-theme-resolved='light'] main.maintenance-admin-dashboard-page .summary-card .summary-card-icon {
+    background: #f8fafc !important;
+    border-color: #d1d5db !important;
+}
+
+:root[data-theme-resolved='light'] main.maintenance-admin-dashboard-page .status-submitted { background: #eef2ff; border-color: #a5b4fc; color: #4338ca !important; }
+:root[data-theme-resolved='light'] main.maintenance-admin-dashboard-page .status-assigned { background: #f3e8ff; border-color: #d8b4fe; color: #7e22ce !important; }
+:root[data-theme-resolved='light'] main.maintenance-admin-dashboard-page .status-in-progress { background: #dbeafe; border-color: #93c5fd; color: #1d4ed8 !important; }
+:root[data-theme-resolved='light'] main.maintenance-admin-dashboard-page .status-completed { background: #dcfce7; border-color: #86efac; color: #166534 !important; }
+:root[data-theme-resolved='light'] main.maintenance-admin-dashboard-page .status-cancelled { background: #fee2e2; border-color: #fca5a5; color: #b91c1c !important; }
+
+:root[data-theme-resolved='light'] main.maintenance-admin-dashboard-page .priority-low { background: #e2e8f0; border-color: #cbd5e1; color: #334155 !important; }
+:root[data-theme-resolved='light'] main.maintenance-admin-dashboard-page .priority-medium { background: #dbeafe; border-color: #93c5fd; color: #1d4ed8 !important; }
+:root[data-theme-resolved='light'] main.maintenance-admin-dashboard-page .priority-high { background: #fef3c7; border-color: #fbbf24; color: #b45309 !important; }
+:root[data-theme-resolved='light'] main.maintenance-admin-dashboard-page .priority-urgent { background: #ffedd5; border-color: #fdba74; color: #c2410c !important; }
+:root[data-theme-resolved='light'] main.maintenance-admin-dashboard-page .priority-critical { background: #fee2e2; border-color: #fca5a5; color: #b91c1c !important; }

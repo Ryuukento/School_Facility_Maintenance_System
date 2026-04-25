@@ -1,4 +1,4 @@
 <?php
-// Root bootstrap redirect after cleanup.
-header('Location: /School_Facility_Maintenance_System/laravel_app/public/frontend/pages/index.php', true, 302);
-exit;
+// Proxy all root requests through Laravel's real public front controller
+// so the project folder itself remains the main URL.
+require __DIR__ . '/public/index.php';
