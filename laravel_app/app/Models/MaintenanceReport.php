@@ -25,6 +25,12 @@ class MaintenanceReport extends Model
         'department_id',
         'due_date',
         'completed_date',
+        'need_change_item_id',
+        'need_change_quantity',
+        'need_change_status',
+        'need_change_approved_by',
+        'need_change_approved_at',
+        'need_change_deducted_at',
     ];
 
     protected function casts(): array
@@ -32,6 +38,8 @@ class MaintenanceReport extends Model
         return [
             'due_date' => 'date',
             'completed_date' => 'date',
+            'need_change_approved_at' => 'datetime',
+            'need_change_deducted_at' => 'datetime',
         ];
     }
 
@@ -48,5 +56,10 @@ class MaintenanceReport extends Model
     public function department(): BelongsTo
     {
         return $this->belongsTo(Department::class, 'department_id', 'department_id');
+    }
+
+    public function needChangeItem(): BelongsTo
+    {
+        return $this->belongsTo(Item::class, 'need_change_item_id', 'id');
     }
 }

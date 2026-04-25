@@ -8,6 +8,7 @@
 - Dashboard stats API for cards (total, today, pending, in_progress, completed, low_stock)
 - Core schema migrations for users, departments, reports, facility data, activity logs, notifications
 - Legacy route bridge so old frontend endpoint style can still work
+- Legacy frontend/backend code can now be synced into `laravel_app/public` using the migration script
 
 ## New Laravel API endpoints
 
@@ -39,6 +40,15 @@
 2. php artisan migrate
 3. php artisan db:seed
 4. php artisan serve
+
+## Consolidate into laravel_app only
+
+1. From project root, run: `powershell -ExecutionPolicy Bypass -File .\laravel_app\scripts\sync_legacy_into_laravel.ps1 -Clean`
+2. Start Laravel server from `laravel_app`: `php artisan serve`
+3. Open: `/laravel_app/public/` (automatically redirects to `/frontend/pages/index.php`)
+4. Use API base: `/School_Facility_Maintenance_System/laravel_app/public/backend/api`
+
+This setup keeps the app operational while endpoints are migrated from legacy PHP routers to native Laravel controllers.
 
 ## Default seeded accounts
 

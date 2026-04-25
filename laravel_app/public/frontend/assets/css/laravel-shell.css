@@ -1,0 +1,292 @@
+/* Laravel shell styles for authenticated pages */
+
+:root {
+    --shell-app-bg: #0c0a14;
+    --shell-header-bg: linear-gradient(180deg, rgba(20, 14, 33, 0.98), rgba(20, 14, 33, 0.94));
+    --shell-panel-bg: rgba(139, 92, 246, 0.12);
+    --shell-border: rgba(168, 139, 250, 0.24);
+    --shell-header-border: rgba(168, 139, 250, 0.18);
+    --shell-text-strong: #f5efff;
+    --shell-text-muted: #bdaed9;
+    --shell-avatar-bg: #a78bfa;
+    --shell-avatar-text: #ffffff;
+    --shell-footer-text: #bbaed6;
+}
+
+:root[data-theme-resolved='light'] {
+    --shell-app-bg: #f3f6fb;
+    --shell-header-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(246, 247, 251, 0.95));
+    --shell-panel-bg: rgba(124, 58, 237, 0.08);
+    --shell-border: rgba(124, 58, 237, 0.2);
+    --shell-header-border: rgba(124, 58, 237, 0.16);
+    --shell-text-strong: #000000;
+    --shell-text-muted: #000000;
+    --shell-avatar-bg: #7c3aed;
+    --shell-avatar-text: #ffffff;
+    --shell-footer-text: #000000;
+
+    --sidebar-bg: linear-gradient(180deg, #f8f7ff 0%, #f2efff 58%, #ece8ff 100%);
+    --sidebar-hover: rgba(124, 58, 237, 0.1);
+    --sidebar-active: #7c3aed;
+    --sidebar-active-border: #8b5cf6;
+    --sidebar-text: #000000;
+    --sidebar-text-hover: #000000;
+    --glow-color: rgba(124, 58, 237, 0.22);
+}
+
+body[data-user-role] {
+    background: var(--shell-app-bg);
+}
+
+body[data-user-role] .top-header {
+    position: fixed;
+    top: 0;
+    left: var(--sidebar-width);
+    right: 0;
+    height: var(--header-height);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 22px;
+    z-index: 1100;
+    background: var(--shell-header-bg);
+    border-bottom: 1px solid var(--shell-header-border);
+    backdrop-filter: blur(10px);
+}
+
+body[data-user-role] .header-left,
+body[data-user-role] .header-right {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+body[data-user-role] .header-title {
+    font-size: 1.05rem;
+    font-weight: 800;
+    color: var(--shell-text-strong);
+    letter-spacing: 0.01em;
+}
+
+body[data-user-role] .sidebar-toggle-mobile {
+    display: none;
+    width: 42px;
+    height: 42px;
+    border: 1px solid var(--shell-border);
+    border-radius: 12px;
+    background: var(--shell-panel-bg);
+    color: var(--shell-text-strong);
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+body[data-user-role] .sidebar-toggle-mobile svg {
+    width: 22px;
+    height: 22px;
+}
+
+body[data-user-role] .header-notifications {
+    display: flex;
+    align-items: center;
+}
+
+body[data-user-role] .notify-btn {
+    position: relative;
+    width: 42px;
+    height: 42px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--shell-border);
+    border-radius: 12px;
+    background: var(--shell-panel-bg);
+    color: var(--shell-text-strong);
+    cursor: pointer;
+}
+
+body[data-user-role] .theme-toggle-button {
+    width: 42px;
+    height: 42px;
+    border: 1px solid var(--shell-border);
+    border-radius: 12px;
+    background: var(--shell-panel-bg);
+    color: var(--shell-text-strong);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+body[data-user-role] .theme-toggle-button:hover,
+body[data-user-role] .notify-btn:hover,
+body[data-user-role] .sidebar-toggle-mobile:hover {
+    transform: translateY(-1px);
+    opacity: 0.95;
+}
+
+body[data-user-role] .theme-toggle-icon {
+    width: 20px;
+    height: 20px;
+}
+
+body[data-user-role] .notify-btn svg {
+    width: 20px;
+    height: 20px;
+}
+
+body[data-user-role] .notify-badge {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: #ef4444;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 800;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 6px 14px rgba(239, 68, 68, 0.35);
+}
+
+body[data-user-role] .header-user {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--shell-text-strong);
+}
+
+body[data-user-role] .header-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: var(--shell-avatar-bg);
+    color: var(--shell-avatar-text);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    font-weight: 700;
+}
+
+body[data-user-role] .user-info {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.2;
+}
+
+body[data-user-role] .user-name {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--shell-text-strong);
+}
+
+body[data-user-role] .user-role {
+    font-size: 0.8rem;
+    color: var(--shell-text-muted);
+}
+
+body[data-user-role] .main-content {
+    margin-left: var(--sidebar-width);
+    padding: calc(var(--header-height) + 24px) 24px 32px;
+    min-height: 100vh;
+}
+
+body[data-user-role] .main-content > .container {
+    margin-left: 0;
+    max-width: 1200px;
+}
+
+body[data-user-role] .app-footer {
+    margin-left: var(--sidebar-width);
+    padding: 18px 24px 28px;
+    color: var(--shell-footer-text);
+}
+
+:root[data-theme-resolved='light'] .sidebar-header {
+    border-bottom-color: rgba(124, 58, 237, 0.16);
+}
+
+:root[data-theme-resolved='light'] .system-name {
+    color: #312e81;
+}
+
+:root[data-theme-resolved='light'] .nav-section-label {
+    color: #000000;
+}
+
+body[data-user-role] .sidebar {
+    top: var(--header-height);
+    height: calc(100vh - var(--header-height));
+}
+
+body[data-user-role] .sidebar-overlay {
+    top: var(--header-height);
+}
+
+@media (max-width: 768px) {
+    body[data-user-role] .top-header {
+        left: 0;
+        width: 100%;
+        padding: 0 14px 0 10px;
+    }
+
+    body[data-user-role] .sidebar-toggle-mobile {
+        display: inline-flex;
+    }
+
+    body[data-user-role] .main-content,
+    body[data-user-role] .app-footer {
+        margin-left: 0;
+    }
+
+    body[data-user-role] .main-content {
+        padding: calc(var(--header-height) + 16px) 14px 24px;
+    }
+
+    body[data-user-role] .main-content > .container,
+    body[data-user-role] .main-content > main.container,
+    body[data-user-role] .main-content > .maintenance-admin-dashboard-page,
+    body[data-user-role] .main-content > .system-dashboard {
+        margin-left: 0;
+        margin-right: 0;
+        max-width: 100%;
+        width: 100%;
+        padding-left: 0;
+        padding-right: 0;
+    }
+
+    body[data-user-role] .sidebar {
+        top: var(--header-height);
+        height: calc(100vh - var(--header-height));
+    }
+
+    body[data-user-role] .sidebar-overlay {
+        top: var(--header-height);
+    }
+}
+
+@media (max-width: 480px) {
+    body[data-user-role] .top-header {
+        left: 0;
+        padding: 0 10px;
+    }
+
+    body[data-user-role] .header-title {
+        font-size: 0.95rem;
+    }
+
+    body[data-user-role] .header-user .user-info {
+        display: none;
+    }
+
+    body[data-user-role] .main-content {
+        padding-left: 10px;
+        padding-right: 10px;
+    }
+}

@@ -1,4 +1,0 @@
-[2026-03-29 18:50:54] [ERROR] Failed to create new-report in-app notification {"report_id":"1","target_user_id":1,"error":"SQLSTATE[42S22]: Column not found: 1054 Unknown column 'report_id' in 'field list'"}
-[2026-03-29 18:50:54] [ERROR] Failed to create new-report in-app notification {"report_id":"1","target_user_id":2,"error":"SQLSTATE[42S22]: Column not found: 1054 Unknown column 'report_id' in 'field list'"}
-[2026-03-29 18:51:00] [INFO] New report email notification sent to super admin {"report_id":"1","recipient_count":1}
-[2026-03-29 18:51:00] [INFO] Report created {"report_id":"1","user_id":3}

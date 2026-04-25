@@ -16,7 +16,7 @@ class UserController extends Controller
     public function index()
     {
         $users = User::query()
-            ->select(['user_id', 'full_name', 'email', 'role', 'status', 'created_at'])
+            ->select(['user_id', 'full_name', 'email', 'role', 'status', 'avatar', 'created_at'])
             ->whereRaw('LOWER(role) <> ?', ['super_admin'])
             ->orderByDesc('created_at')
             ->get();
@@ -64,7 +64,7 @@ class UserController extends Controller
     public function approve(Request $request, User $user)
     {
         $validated = $request->validate([
-            'role' => ['required', 'string', 'in:maintenance_admin,maintenance_staff,user'],
+            'role' => ['required', 'string', 'in:maintenance_admin,maintenance_staff'],
         ]);
 
         if (strtolower((string)$user->status) === 'active') {
