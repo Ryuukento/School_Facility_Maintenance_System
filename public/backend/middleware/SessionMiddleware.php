@@ -41,18 +41,27 @@ class SessionMiddleware {
     
     public static function checkTimeout() {
         if (self::isAuthenticated()) {
-            $lastActivity = $_SESSION['last_activity'] ?? time();
+            $lastActivity = $_SESSION['last_activity'] ?? null;
+
+            // If last_activity was never set, initialize it now — don't expire
+            if ($lastActivity === null) {
+                $_SESSION['last_activity'] = time();
+                return true;
+            }
+
             $timeSinceActivity = time() - $lastActivity;
-            
+
             if ($timeSinceActivity > SESSION_TIMEOUT) {
                 self::destroy();
                 return false;
             }
-            
+
+            // Update last_activity on every request
+            $_SESSION['last_activity'] = time();
+
             // Regenerate session periodically
             if ($timeSinceActivity > SESSION_REGENERATE_INTERVAL) {
                 session_regenerate_id(true);
-                $_SESSION['last_activity'] = time();
             }
         }
         return true;

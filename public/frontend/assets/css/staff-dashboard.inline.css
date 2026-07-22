@@ -148,6 +148,20 @@
     overflow: hidden;
 }
 
+.staff-dashboard-page .recent-reports-stack {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
+    gap: 14px;
+    margin-top: -10px;
+    margin-bottom: 36px;
+}
+
+.staff-dashboard-page .recent-reports-stack .recent-reports-card {
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
 .staff-dashboard-page .recent-reports-header {
     border-bottom: 1px solid rgba(148, 163, 184, 0.14);
     padding: 16px 18px;
@@ -506,6 +520,12 @@
     }
 
     .staff-dashboard-page .recent-reports-card {
+        margin-top: -4px;
+        margin-bottom: 24px;
+    }
+
+    .staff-dashboard-page .recent-reports-stack {
+        grid-template-columns: 1fr;
         margin-top: -4px;
         margin-bottom: 24px;
     }

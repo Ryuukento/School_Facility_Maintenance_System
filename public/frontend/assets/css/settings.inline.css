@@ -344,6 +344,16 @@
     padding-right: 44px;
 }
 
+/* Hide browser native password reveal button */
+.password-input-wrap input::-ms-reveal,
+.password-input-wrap input::-ms-clear,
+.password-input-wrap input::-webkit-credentials-auto-fill-button,
+.password-input-wrap input::-webkit-textfield-decoration-container {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+}
+
 .toggle-password-btn {
     position: absolute;
     top: 50%;
@@ -589,4 +599,52 @@
 .settings-toast.error {
     background: #991b1b;
     color: #fee2e2;
+}
+
+/* ── Light mode ─────────────────────────────────────────────────────────── */
+:root[data-theme-resolved='light'] .force-setup-popup-card {
+    background: #ffffff;
+    border-color: rgba(100, 116, 139, 0.25);
+    box-shadow: 0 24px 50px rgba(15, 23, 42, 0.12);
+}
+:root[data-theme-resolved='light'] .force-setup-popup-card h2 { color: #111827; }
+:root[data-theme-resolved='light'] .force-setup-popup-card p  { color: #4b5563; }
+
+:root[data-theme-resolved='light'] .settings-subtitle { color: #4b5563; }
+
+:root[data-theme-resolved='light'] .settings-nav-card,
+:root[data-theme-resolved='light'] .settings-card {
+    background: #ffffff;
+    border-color: rgba(100, 116, 139, 0.2);
+    box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06);
+}
+:root[data-theme-resolved='light'] .settings-nav-heading,
+:root[data-theme-resolved='light'] .settings-description,
+:root[data-theme-resolved='light'] .settings-help-text,
+:root[data-theme-resolved='light'] .settings-placeholder-box p,
+:root[data-theme-resolved='light'] .settings-toggle-row small {
+    color: #6b7280;
+}
+:root[data-theme-resolved='light'] .settings-title,
+:root[data-theme-resolved='light'] .settings-label,
+:root[data-theme-resolved='light'] .settings-toggle-row strong,
+:root[data-theme-resolved='light'] .settings-checkbox-row,
+:root[data-theme-resolved='light'] .settings-nav-link {
+    color: #111827;
+}
+:root[data-theme-resolved='light'] .settings-input,
+:root[data-theme-resolved='light'] .settings-card .form-control,
+:root[data-theme-resolved='light'] .settings-card select {
+    background: #ffffff;
+    border-color: rgba(100, 116, 139, 0.35);
+    color: #1f2937;
+}
+:root[data-theme-resolved='light'] .settings-toggle-row {
+    background: #f8fafc;
+    color: #1f2937;
+}
+:root[data-theme-resolved='light'] .settings-toast {
+    background: #1f2937;
+    color: #ffffff;
+    border-color: transparent;
 }

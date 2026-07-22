@@ -3,6 +3,60 @@
  */
 
 class UI {
+
+        /**
+         * Show a system modal confirmation (async)
+         */
+        static systemConfirm(message, yesLabel = 'Yes', noLabel = 'No') {
+            return new Promise((resolve) => {
+                // Remove existing modal if any
+                const existing = document.getElementById('system-confirm-modal');
+                if (existing) existing.remove();
+
+                const modal = document.createElement('div');
+                modal.id = 'system-confirm-modal';
+                modal.className = 'system-modal-overlay';
+                modal.innerHTML = `
+                    <div class="system-modal-card">
+                        <div class="system-modal-message">${message}</div>
+                        <div class="system-modal-actions">
+                            <button id="systemConfirmYes" class="btn btn-danger">${yesLabel}</button>
+                            <button id="systemConfirmNo" class="btn btn-secondary">${noLabel}</button>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(modal);
+                document.getElementById('systemConfirmYes').onclick = () => { modal.remove(); resolve(true); };
+                document.getElementById('systemConfirmNo').onclick = () => { modal.remove(); resolve(false); };
+                modal.addEventListener('click', (e) => { if (e.target === modal) { modal.remove(); resolve(false); } });
+            });
+        }
+
+        /**
+         * Show a system modal alert (async)
+         */
+        static systemAlert(message, type = 'info', okLabel = 'OK') {
+            return new Promise((resolve) => {
+                // Remove existing modal if any
+                const existing = document.getElementById('system-alert-modal');
+                if (existing) existing.remove();
+
+                const modal = document.createElement('div');
+                modal.id = 'system-alert-modal';
+                modal.className = 'system-modal-overlay';
+                modal.innerHTML = `
+                    <div class="system-modal-card system-modal-${type}">
+                        <div class="system-modal-message">${message}</div>
+                        <div class="system-modal-actions">
+                            <button id="systemAlertOk" class="btn btn-primary">${okLabel}</button>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(modal);
+                document.getElementById('systemAlertOk').onclick = () => { modal.remove(); resolve(); };
+                modal.addEventListener('click', (e) => { if (e.target === modal) { modal.remove(); resolve(); } });
+            });
+        }
     /**
      * Show a toast notification
      */

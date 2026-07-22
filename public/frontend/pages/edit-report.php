@@ -150,35 +150,36 @@ $user = $_SESSION['user'];
 
 <script src="/School_Facility_Maintenance_System/frontend/assets/js/utils.js"></script>
 <script src="/School_Facility_Maintenance_System/frontend/assets/js/api.js"></script>
+<script src="/frontend/assets/js/components.js"></script>
 
 <script>
 // Ensure API and Session are defined globally
 window.API = window.API || {
-    baseURL: '/School_Facility_Maintenance_System/backend/api',
     async updateReport(data) {
-        const response = await fetch(`${this.baseURL}/reports.php?action=update`, {
-            method: 'POST',
+        // Strip report_id (goes in URL) and status (not editable on this form)
+        const { report_id, status, ...fields } = data;
+        const response = await fetch(window.SFMS_PUBLIC_URL(`/api/reports/${report_id}`), {
+            method: 'PATCH',
             credentials: 'include',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
+            body: JSON.stringify(fields)
         });
         const result = await response.json();
         if (!result.success) throw new Error(result.message);
         return result;
     },
     async deleteReport(reportId) {
-        const response = await fetch(`${this.baseURL}/reports.php?action=delete`, {
-            method: 'POST',
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ report_id: reportId })
+        const response = await fetch(window.SFMS_PUBLIC_URL(`/api/reports/${reportId}`), {
+            method: 'DELETE',
+            credentials: 'include'
         });
         const result = await response.json();
         if (!result.success) throw new Error(result.message);
         return result;
     },
     async logout() {
-        const response = await fetch(`${this.baseURL}/auth.php?action=logout`, {
+        const response = await fetch(window.SFMS_PUBLIC_URL('/api/auth/logout'), {
+            method: 'POST',
             credentials: 'include'
         });
         const data = await response.json();
@@ -253,7 +254,7 @@ document.getElementById('delete-btn').addEventListener('click', async () => {
     const submitBtn = document.getElementById('submit-btn');
     const deleteBtn = document.getElementById('delete-btn');
 
-    const confirmed = window.confirm('Delete this report? This action cannot be undone.');
+    const confirmed = await Components.confirm('Delete this report? This action cannot be undone.', 'Delete', 'Cancel');
     if (!confirmed) return;
 
     const originalText = deleteBtn.innerHTML;

@@ -6,22 +6,33 @@ if (session_status() === PHP_SESSION_NONE) {
 
 $currentUser = $_SESSION['user'] ?? null;
 $currentRole = strtolower(trim((string)($currentUser['role'] ?? '')));
-if ($currentRole === 'admin_maintenance') {
-    $currentRole = 'maintenance_admin';
-} elseif (in_array($currentRole, ['eelab_staff', 'maintenance_personnel'], true)) {
-    $currentRole = 'maintenance_staff';
-}
 $currentUserId = (int)($currentUser['user_id'] ?? 0);
 $isSuperAdmin = ($currentRole === 'super_admin');
-$canCreateReport = in_array($currentRole, ['maintenance_staff', 'eelab_staff', 'maintenance_personnel'], true);
-$canEditOwnReports = in_array($currentRole, ['maintenance_staff', 'eelab_staff', 'maintenance_personnel'], true);
+$canCreateReport = in_array($currentRole, ['maintenance_staff', 'maintenance_admin', 'super_admin'], true);
+$canEditOwnReports = in_array($currentRole, ['maintenance_staff'], true);
+
+
+$isMaintenanceAdmin = ($currentRole === 'maintenance_admin');
+$canFilterByDepartment = in_array($currentRole, ['maintenance_staff', 'maintenance_admin', 'super_admin'], true);
+
+// Fetch departments for filter dropdown (Maintenance Staff, Head, and Administrator)
+$filterDepartments = [];
+if ($canFilterByDepartment) {
+    require_once __DIR__ . '/../../backend/config/database.php';
+    $pdo = getDBConnection();
+    $deptStmt = $pdo->query("SELECT department_id, name FROM departments WHERE status = 'active' ORDER BY name");
+    $filterDepartments = $deptStmt->fetchAll(PDO::FETCH_ASSOC);
+    $myDeptStmt = $pdo->prepare("SELECT department_id FROM users WHERE user_id = ? LIMIT 1");
+    $myDeptStmt->execute([(int)($currentUser['user_id'] ?? 0)]);
+    $myDeptId = $myDeptStmt->fetchColumn();
+}
 
 $pageTitle = 'All Reports - SFMS';
 include __DIR__ . '/../includes/header.php';
 ?>
 
 <main class="container reports-page-container">
-    <div class="card">
+    <div class="card" style="border-left:3px solid var(--primary-color);">
         <div class="card-header d-flex justify-between align-center">
             <div class="reports-title-block">
                 <h2>Maintenance Reports</h2>
@@ -35,11 +46,33 @@ include __DIR__ . '/../includes/header.php';
                     Print Summary Report
                     <?php endif; ?>
                 </button>
-                <a href="/School_Facility_Maintenance_System/frontend/pages/reports.php?last_month=1" id="last-month-report-link" class="btn btn-secondary reports-header-btn reports-header-icon-btn">
-                    <span>📅</span> Last Month Reports
-                </a>
+                <div class="reports-month-dropdown-wrap" style="position:relative;">
+                    <button type="button" id="month-picker-btn" class="btn btn-secondary reports-header-btn reports-header-icon-btn" style="display:inline-flex;align-items:center;gap:6px;">
+                        <span>&#128197;</span> Browse by Month
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M6 9l6 6 6-6"/></svg>
+                    </button>
+                    <div id="month-picker-dropdown" style="display:none;position:absolute;top:calc(100% + 6px);right:0;z-index:999;background:var(--card-color,#1a1f2e);border:1px solid rgba(148,163,184,0.24);border-radius:12px;box-shadow:0 16px 40px rgba(2,6,23,0.45);min-width:200px;overflow:hidden;">
+                        <div style="padding:10px 14px 6px;font-size:11px;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;color:#64748b;">Select Month</div>
+                        <?php
+                        $months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+                        $currentYear = (int)date('Y');
+                        $currentMonth = (int)date('n');
+                        ?>
+                        <?php if ($currentMonth <= 1): ?>
+                        <div style="padding:10px 16px 14px;font-size:13px;color:#64748b;">No previous months yet.</div>
+                        <?php endif; ?>
+                        <?php foreach ($months as $mIdx => $mName):
+                            if ($mIdx + 1 > $currentMonth) continue;
+                            $mNum = str_pad($mIdx + 1, 2, '0', STR_PAD_LEFT);
+                        ?>
+                        <button type="button" class="month-picker-item" data-month="<?php echo $currentYear . '-' . $mNum; ?>" style="display:block;width:100%;text-align:left;padding:9px 16px;background:none;border:none;color:inherit;cursor:pointer;font-size:14px;transition:background 0.15s;">
+                            <?php echo $mName . ' ' . $currentYear; ?>
+                        </button>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
                 <?php if ($canCreateReport): ?>
-                <a href="/School_Facility_Maintenance_System/frontend/pages/create-report.php" class="btn btn-primary reports-header-btn">
+                <a href="<?php echo htmlspecialchars(public_url('/reports/create')); ?>" class="btn btn-primary reports-header-btn">
                     + New Report
                 </a>
                 <?php endif; ?>
@@ -55,8 +88,28 @@ include __DIR__ . '/../includes/header.php';
                     <option value="assigned">Assigned</option>
                     <option value="in_progress">In Progress</option>
                     <option value="completed">Completed</option>
+                    <option value="cancelled">Cancelled</option>
+                    <option value="closed">Closed</option>
+                </select>
+
+                <select id="filter-resolution" class="form-control reports-filter-select">
+                    <option value="">All Resolution</option>
+                    <option value="unresolved">Unresolved</option>
+                    <option value="resolved">Resolved</option>
                 </select>
                 
+                <?php if ($canFilterByDepartment && !empty($filterDepartments)): ?>
+                <select id="filter-department" class="form-control reports-filter-select">
+                    <option value="">All Departments</option>
+                    <?php foreach ($filterDepartments as $dept): ?>
+                    <option value="<?php echo $dept['department_id']; ?>"
+                        <?php echo (isset($myDeptId) && $myDeptId == $dept['department_id']) ? 'data-my-dept="1"' : ''; ?>>
+                        <?php echo htmlspecialchars($dept['name']); ?>
+                        <?php echo (isset($myDeptId) && $myDeptId == $dept['department_id']) ? ' (My Dept)' : ''; ?>
+                    </option>
+                    <?php endforeach; ?>
+                </select>
+                <?php endif; ?>
                 <select id="filter-priority" class="form-control reports-filter-select">
                     <option value="">All Priority</option>
                     <option value="low">Low</option>
@@ -192,9 +245,15 @@ include __DIR__ . '/../includes/header.php';
                 <label for="print-filter-mode"><?php echo $isSuperAdmin ? 'Export Scope' : 'Print Scope'; ?></label>
                 <select id="print-filter-mode" class="form-control">
                     <option value="current">Current filtered results</option>
+                    <option value="month" selected>Specific month</option>
                     <option value="week">Specific week of month</option>
                     <option value="date">Specific date</option>
                 </select>
+            </div>
+
+            <div class="form-group" id="print-month-group">
+                <label for="print-month-input">Month</label>
+                <input type="month" id="print-month-input" class="form-control">
             </div>
 
             <div class="form-group" id="print-week-group" style="display: none;">
@@ -229,9 +288,6 @@ include __DIR__ . '/../includes/header.php';
 
 <?php include __DIR__ . '/../includes/footer.php'; ?>
 
-<script src="/School_Facility_Maintenance_System/frontend/assets/js/utils.js"></script>
-<script src="/School_Facility_Maintenance_System/frontend/assets/js/api.js"></script>
-
 <script>
 let allReports = [];
 let currentPage = 1;
@@ -243,8 +299,8 @@ const CURRENT_USER_ID = <?php echo json_encode($currentUserId); ?>;
 const CURRENT_USER_ROLE = <?php echo json_encode($currentRole); ?>;
 const CAN_CREATE_REPORT = <?php echo json_encode($canCreateReport); ?>;
 const CAN_EDIT_OWN_REPORTS = <?php echo json_encode($canEditOwnReports); ?>;
-const REPORTS_API = '/School_Facility_Maintenance_System/backend/api/maintenance-reports-api.php';
-const LEGACY_REPORTS_API = '/School_Facility_Maintenance_System/backend/api/reports.php';
+const REPORTS_API = window.SFMS_PUBLIC_URL('/api/reports');
+const LEGACY_REPORTS_API = window.SFMS_PUBLIC_URL('/api/reports');
 let activeEditReportId = null;
 
 function applyStatusGroupFilter(reports) {
@@ -256,6 +312,20 @@ function applyStatusGroupFilter(reports) {
         return reports.filter((report) => {
             const status = String(report.status || '').toLowerCase();
             return status === 'submitted' || status === 'assigned';
+        });
+    }
+
+    if (statusGroupFilter === 'unresolved') {
+        return reports.filter((report) => {
+            const status = String(report.status || '').toLowerCase();
+            return status !== 'completed' && status !== 'closed';
+        });
+    }
+
+    if (statusGroupFilter === 'resolved') {
+        return reports.filter((report) => {
+            const status = String(report.status || '').toLowerCase();
+            return status === 'completed' || status === 'closed';
         });
     }
 
@@ -472,7 +542,7 @@ function getReportsLoadingMarkup() {
 
 function getReportsEmptyMarkup() {
     if (CAN_CREATE_REPORT) {
-        return '<div class="ui-empty-state ui-fade-in"><strong>No reports found.</strong><span>You can <a href="/School_Facility_Maintenance_System/frontend/pages/create-report.php">create a new report</a> to get started.</span></div>';
+        return '<div class="ui-empty-state ui-fade-in"><strong>No reports found.</strong><span>You can <a href="' + window.SFMS_PUBLIC_URL('/reports/create') + '">create a new report</a> to get started.</span></div>';
     }
 
     return '<div class="ui-empty-state ui-fade-in"><strong>No reports found.</strong><span>No reports are available for the selected period.</span></div>';
@@ -491,16 +561,16 @@ async function loadReports(filters = {}) {
         }
 
         const params = new URLSearchParams({
-            action: 'list',
             per_page: 200,
             ...filters
         });
 
+        console.log('[DEBUG] API Request URL:', `${REPORTS_API}?${params.toString()}`);
         const res = await fetch(`${REPORTS_API}?${params.toString()}`, {
             credentials: 'include'
         });
         const response = await res.json();
-        console.log('✅ API Response:', response);
+        console.log('[DEBUG] API Response:', response);
         
         if (!response.success) {
             throw new Error(response.message || 'Failed to fetch reports');
@@ -557,12 +627,13 @@ function displayReports(reports) {
     html += '<tr>';
     html += '<th>ID</th>';
     html += '<th>Title</th>';
+    html += '<th>Department</th>';
     html += '<th>Priority</th>';
     html += '<th>Status</th>';
+    html += '<th>Resolution</th>';
     html += '<th>Location</th>';
     html += '<th>Created By</th>';
     html += '<th>Date</th>';
-    html += '<th>Need Change</th>';
     html += '<th>Actions</th>';
     html += '</tr>';
     html += '</thead>';
@@ -572,7 +643,7 @@ function displayReports(reports) {
         const reportId = report.report_id;
         const title = escapeHtml(report.title);
         const priority = (report.priority || 'medium').toLowerCase();
-        const status = (report.status || 'unknown').toLowerCase();
+        const status = (report.status || 'submitted').toLowerCase();
         const location = escapeHtml(report.location);
         const creatorName = escapeHtml(report.creator_name || 'Unknown');
         const createdAt = formatDate(report.created_at);
@@ -597,17 +668,22 @@ function displayReports(reports) {
         
         const priorityClass = getPriorityBadgeClass(priority);
         const statusClass = getStatusBadgeClass(status);
+        const resolutionClass = (status === 'completed' || status === 'closed') ? 'badge-success' : 'badge-warning';
+        const resolutionLabel = (status === 'completed' || status === 'closed') ? 'Resolved' : 'Unresolved';
+        const statusLabel = status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
         
         // set data-id for highlighting later
         html += `<tr data-id="${reportId}">`;
+        const deptName = escapeHtml(report.department_name || '\u2014');
         html += `<td>#${reportId}</td>`;
         html += `<td><strong>${title}</strong></td>`;
+        html += `<td>${deptName}</td>`;
         html += `<td><span class="badge ${priorityClass}">${priority.toUpperCase()}</span></td>`;
-        html += `<td><span class="badge ${statusClass}">${status.replace(/_/g, ' ').toUpperCase()}</span></td>`;
+        html += `<td><span class="badge ${statusClass}">${statusLabel}</span></td>`;
+        html += `<td><span class="badge ${resolutionClass}">${resolutionLabel}</span></td>`;
         html += `<td class="reports-cell-compact">${location}</td>`;
         html += `<td>${creatorName}</td>`;
         html += `<td class="reports-cell-compact">${createdAt}</td>`;
-        html += `<td>${needChangeBadge}${needChangeItem ? `<div class="text-muted" style="margin-top:4px; font-size:12px;">${needChangeItem}</div>` : ''}</td>`;
         html += `<td>
             <a href="maintenance-report-detail.php?id=${reportId}&back=all_reports" class="btn btn-sm btn-primary">View</a>${canEditReport(report) ? ` <button type="button" class="btn btn-sm btn-secondary" onclick="openEditReportModal(${reportId})">Edit</button>` : ''}
         </td>`;
@@ -686,7 +762,7 @@ async function openEditReportModal(reportId) {
         openEditModal();
         setEditLoading(true);
 
-        const response = await fetch(`${LEGACY_REPORTS_API}?action=get&report_id=${activeEditReportId}`, {
+        const response = await fetch(`${LEGACY_REPORTS_API}/${activeEditReportId}`, {
             credentials: 'include'
         });
         const result = await response.json();
@@ -733,8 +809,8 @@ async function saveEditedReport(event) {
 
     try {
         setEditLoading(true);
-        const response = await fetch(`${LEGACY_REPORTS_API}?action=update&report_id=${activeEditReportId}`, {
-            method: 'POST',
+        const response = await fetch(`${LEGACY_REPORTS_API}/${activeEditReportId}`, {
+            method: 'PATCH',
             credentials: 'include',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
@@ -862,12 +938,13 @@ function getStatusBadgeClass(status) {
         case 'closed':
             return 'badge-success';
         case 'in_progress':
-        case 'assigned':
             return 'badge-primary';
+        case 'assigned':
+            return 'badge-info';
         case 'submitted':
             return 'badge-warning';
         default:
-            return 'badge-info';
+            return 'badge-secondary';
     }
 }
 
@@ -889,14 +966,20 @@ function getPrintFilterSummary() {
     return filters.length ? filters.join(' | ') : 'No active filters';
 }
 
-function getPrintableReportsByMode(mode, weekValue, dateValue) {
+function getPrintableReportsByMode(mode, weekValue, dateValue, monthValue) {
     const sourceReports = [...allReports];
+
+    if (mode === 'month') {
+        if (!monthValue) return sourceReports;
+        return sourceReports.filter((report) => {
+            const dateKey = extractReportDateKey(report.created_at);
+            return dateKey && dateKey.startsWith(monthValue);
+        });
+    }
 
     if (mode === 'week') {
         const parsedWeek = Number(weekValue);
-        if (Number.isNaN(parsedWeek) || parsedWeek < 1 || parsedWeek > 4) {
-            return [];
-        }
+        if (Number.isNaN(parsedWeek) || parsedWeek < 1 || parsedWeek > 4) return [];
         return sourceReports.filter((report) => getReportWeekNumber(report.created_at) === parsedWeek);
     }
 
@@ -910,22 +993,29 @@ function getPrintableReportsByMode(mode, weekValue, dateValue) {
 
 function togglePrintFilterFields() {
     const modeEl = document.getElementById('print-filter-mode');
+    const monthGroup = document.getElementById('print-month-group');
     const weekGroup = document.getElementById('print-week-group');
     const dateGroup = document.getElementById('print-date-group');
-    if (!modeEl || !weekGroup || !dateGroup) return;
+    if (!modeEl) return;
 
-    weekGroup.style.display = modeEl.value === 'week' ? 'block' : 'none';
-    dateGroup.style.display = modeEl.value === 'date' ? 'block' : 'none';
+    if (monthGroup) monthGroup.style.display = modeEl.value === 'month' ? 'block' : 'none';
+    if (weekGroup) weekGroup.style.display = modeEl.value === 'week' ? 'block' : 'none';
+    if (dateGroup) dateGroup.style.display = modeEl.value === 'date' ? 'block' : 'none';
 }
 
 function openPrintReportModal() {
     const modal = document.getElementById('print-report-modal');
     const modeEl = document.getElementById('print-filter-mode');
     const dateInput = document.getElementById('print-date-input');
-    if (!modal || !modeEl || !dateInput) return;
+    const monthInput = document.getElementById('print-month-input');
+    if (!modal || !modeEl) return;
 
-    modeEl.value = 'current';
-    dateInput.value = formatLocalDate(new Date());
+    modeEl.value = 'month';
+    if (dateInput) dateInput.value = formatLocalDate(new Date());
+    if (monthInput) {
+        const now = new Date();
+        monthInput.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    }
     togglePrintFilterFields();
 
     modal.classList.add('show');
@@ -944,20 +1034,26 @@ function printSummaryReport() {
     const modeEl = document.getElementById('print-filter-mode');
     const weekEl = document.getElementById('print-week-select');
     const dateEl = document.getElementById('print-date-input');
-    if (!modeEl || !weekEl || !dateEl) return;
+    const monthEl = document.getElementById('print-month-input');
+    if (!modeEl) return;
 
     const mode = modeEl.value;
-    const weekValue = weekEl.value;
-    const dateValue = dateEl.value;
-    const printableReports = getPrintableReportsByMode(mode, weekValue, dateValue);
+    const weekValue = weekEl ? weekEl.value : '';
+    const dateValue = dateEl ? dateEl.value : '';
+    const monthValue = monthEl ? monthEl.value : '';
+    const printableReports = getPrintableReportsByMode(mode, weekValue, dateValue, monthValue);
 
     if (!Array.isArray(printableReports) || printableReports.length === 0) {
-        alert('No reports available to print.');
+        Components.alert('No reports available to print for the selected period.', 'warning');
         return;
     }
 
     let printSelectionSummary = 'Current filtered results';
-    if (mode === 'week') {
+    if (mode === 'month' && monthValue) {
+        const [y, m] = monthValue.split('-');
+        const monthName = new Date(Number(y), Number(m) - 1, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' });
+        printSelectionSummary = `Monthly Report: ${monthName}`;
+    } else if (mode === 'week') {
         printSelectionSummary = `Specific week: Week ${weekValue}`;
     } else if (mode === 'date') {
         printSelectionSummary = `Specific date: ${dateValue}`;
@@ -1007,7 +1103,7 @@ function printSummaryReport() {
 
     const printWindow = window.open('', '_blank', 'width=1200,height=900');
     if (!printWindow) {
-        alert('Unable to open print preview. Please allow pop-ups for this site.');
+        Components.alert('Unable to open print preview. Please allow pop-ups for this site.', 'warning');
         return;
     }
 
@@ -1058,15 +1154,17 @@ function exportReportsToExcel() {
     const modeEl = document.getElementById('print-filter-mode');
     const weekEl = document.getElementById('print-week-select');
     const dateEl = document.getElementById('print-date-input');
-    if (!modeEl || !weekEl || !dateEl) return;
+    const monthEl = document.getElementById('print-month-input');
+    if (!modeEl) return;
 
     const mode = modeEl.value;
-    const weekValue = weekEl.value;
-    const dateValue = dateEl.value;
-    const exportReports = getPrintableReportsByMode(mode, weekValue, dateValue);
+    const weekValue = weekEl ? weekEl.value : '';
+    const dateValue = dateEl ? dateEl.value : '';
+    const monthValue = monthEl ? monthEl.value : '';
+    const exportReports = getPrintableReportsByMode(mode, weekValue, dateValue, monthValue);
 
     if (!Array.isArray(exportReports) || exportReports.length === 0) {
-        alert('No reports available to export.');
+        Components.alert('No reports available to export.', 'warning');
         return;
     }
 
@@ -1111,14 +1209,20 @@ function exportReportsToExcel() {
 // Filter reports
 function filterReports() {
     const status = document.getElementById('filter-status').value;
+    const resolution = document.getElementById('filter-resolution').value;
     const priority = document.getElementById('filter-priority').value;
+    const department = document.getElementById('filter-department')?.value || '';
     const dateFrom = document.getElementById('filter-date-from').value;
     const dateTo = document.getElementById('filter-date-to').value;
     const hasManualDateRange = Boolean(dateFrom || dateTo);
     const filters = {};
 
-    // Quick mode applies only when date inputs are blank.
-    if (!hasManualDateRange) {
+    // If 'All Departments' at walang manual date range, huwag magpadala ng date filter (show all reports)
+    const deptEl = document.getElementById('filter-department');
+    const isAllDepartments = deptEl && (department === '' || department === 'all');
+    if (!hasManualDateRange && isAllDepartments) {
+        // Do not set date_from/date_to, show all
+    } else if (!hasManualDateRange) {
         if (lastMonthOnly) {
             const range = getLastMonthDateRange();
             filters.date_from = formatLocalDate(range.start);
@@ -1135,20 +1239,25 @@ function filterReports() {
 
     if (status) filters.status = status;
     if (priority) filters.priority = priority;
+    // Always send department_id so backend knows if 'All Departments' was explicitly chosen
+    if (deptEl) filters.department_id = department;
 
-    // Explicit status/priority selection disables group-based dashboard shortcuts.
-    if (status || priority) {
-        statusGroupFilter = '';
+    // Resolution filter is client-side
+    statusGroupFilter = resolution === 'unresolved' ? 'unresolved' : (resolution === 'resolved' ? 'resolved' : '');
+
+    if (statusGroupFilter && !['unresolved', 'resolved'].includes(statusGroupFilter)) {
+        filters.status_group = statusGroupFilter;
     }
 
-    if (statusGroupFilter) filters.status_group = statusGroupFilter;
-
+    console.log('[DEBUG] Filters sent to backend:', filters);
     currentPage = 1;
     loadReports(filters);
 }
 
 // Event listeners
 document.getElementById('filter-status').addEventListener('change', filterReports);
+document.getElementById('filter-department')?.addEventListener('change', filterReports);
+document.getElementById('filter-resolution').addEventListener('change', filterReports);
 document.getElementById('filter-priority').addEventListener('change', filterReports);
 document.getElementById('filter-date-from').addEventListener('change', () => {
     // Manual date range should take priority over quick last-month mode.
@@ -1170,18 +1279,60 @@ document.getElementById('filter-date-to').addEventListener('change', () => {
     }
     filterReports();
 });
-document.getElementById('last-month-report-link').addEventListener('click', (event) => {
-    event.preventDefault();
-    lastMonthOnly = true;
-    const range = getLastMonthDateRange();
-    document.getElementById('filter-date-from').value = formatLocalDate(range.start);
-    document.getElementById('filter-date-to').value = formatLocalDate(range.end);
-    filterReports();
+// month picker dropdown
+const monthPickerBtn = document.getElementById('month-picker-btn');
+const monthPickerDropdown = document.getElementById('month-picker-dropdown');
 
-    const nextUrl = new URL(window.location.href);
-    nextUrl.searchParams.set('last_month', '1');
-    window.history.replaceState({}, '', nextUrl.toString());
-});
+if (monthPickerBtn && monthPickerDropdown) {
+    monthPickerBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isOpen = monthPickerDropdown.style.display !== 'none';
+        monthPickerDropdown.style.display = isOpen ? 'none' : 'block';
+    });
+
+    monthPickerDropdown.querySelectorAll('.month-picker-item').forEach((item) => {
+        item.addEventListener('mouseenter', () => { item.style.background = 'rgba(148,163,184,0.12)'; });
+        item.addEventListener('mouseleave', () => { item.style.background = 'none'; });
+        item.addEventListener('click', () => {
+            const month = item.getAttribute('data-month');
+            if (!month) return;
+            const [y, m] = month.split('-');
+            const dateFrom = month + '-01';
+            const lastDay = new Date(Number(y), Number(m), 0).getDate();
+            const dateTo = month + '-' + String(lastDay).padStart(2, '0');
+            document.getElementById('filter-date-from').value = dateFrom;
+            document.getElementById('filter-date-to').value = dateTo;
+            lastMonthOnly = false;
+            selectedWeek = 0;
+            currentPage = 1;
+            monthPickerDropdown.style.display = 'none';
+            filterReports();
+            const nextUrl = new URL(window.location.href);
+            nextUrl.searchParams.delete('last_month');
+            window.history.replaceState({}, '', nextUrl.toString());
+
+            try {
+                localStorage.setItem('sfms:dashboardMonthSelection', JSON.stringify({
+                    year: Number(y),
+                    month: Number(m)
+                }));
+            } catch (storageError) {
+                console.warn('Unable to persist selected month', storageError);
+            }
+
+            // --- Dispatch custom event for dashboard sync ---
+            window.dispatchEvent(new CustomEvent('sfms:monthSelected', {
+                detail: { year: Number(y), month: Number(m) }
+            }));
+        });
+    });
+
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.reports-month-dropdown-wrap')) {
+            monthPickerDropdown.style.display = 'none';
+        }
+    });
+}
 
 document.getElementById('clear-date-filters').addEventListener('click', () => {
     const range = getCurrentMonthDateRange();

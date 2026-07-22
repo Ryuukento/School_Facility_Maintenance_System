@@ -213,11 +213,27 @@
     margin-bottom: 1rem;
 }
 
+.users-modal-inline-fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+}
+
+.users-modal-field-inline {
+    margin-bottom: 0;
+}
+
 .users-modal-label {
     display: block;
     margin-bottom: 0.4rem;
     font-weight: 600;
     color: #c8d7ee;
+}
+
+@media (max-width: 640px) {
+    .users-modal-inline-fields {
+        grid-template-columns: 1fr;
+    }
 }
 
 .users-modal-select {
@@ -600,6 +616,16 @@
 .users-card-icon {
     color: #a78bfa;
     font-size: 13px;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+}
+
+.users-card-row-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
 }
 
 .users-mini-avatar {

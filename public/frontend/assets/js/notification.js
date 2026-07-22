@@ -8,11 +8,6 @@ const NotificationManager = {
     currentFilter: 'all',
     lastNotifications: [],
 
-    getBackendApiUrl(action) {
-        const base = window.SFMS_PUBLIC_URL ? window.SFMS_PUBLIC_URL('/backend/api/notifications.php') : '/backend/api/notifications.php';
-        return `${base}?action=${encodeURIComponent(action)}`;
-    },
-    
     init() {
         const bell = document.getElementById('notificationBell');
         const dropdown = document.getElementById('notificationDropdown');
@@ -99,12 +94,15 @@ const NotificationManager = {
                     ? Number(countResult.data.count)
                     : notifications.length;
             } else {
-                const listRes = await fetch(this.getBackendApiUrl('getUnread') + '&limit=10', {
-                    credentials: 'include'
-                });
+                const listRes = await fetch(
+                    window.SFMS_PUBLIC_URL('/api/notifications/unread') + '?limit=10',
+                    { credentials: 'include' }
+                );
                 const listData = await listRes.json();
                 notifications = (listData && listData.data && Array.isArray(listData.data.notifications)) ? listData.data.notifications : [];
-                count = notifications.length;
+                count = (listData && listData.data && typeof listData.data.count !== 'undefined')
+                    ? Number(listData.data.count)
+                    : notifications.length;
             }
             
             const badge = document.getElementById('notificationCount');
@@ -206,17 +204,10 @@ const NotificationManager = {
             return API.markNotificationAsRead(notificationId);
         }
 
-        const form = new URLSearchParams();
-        form.append('notification_id', String(notificationId));
-
-        const response = await fetch(this.getBackendApiUrl('markAsRead'), {
-            method: 'POST',
-            credentials: 'include',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded'
-            },
-            body: form.toString()
-        });
+        const response = await fetch(
+            window.SFMS_PUBLIC_URL(`/api/notifications/${notificationId}/read`),
+            { method: 'POST', credentials: 'include', headers: { 'Accept': 'application/json' } }
+        );
 
         const result = await response.json();
         if (!result.success) {
@@ -261,8 +252,8 @@ const NotificationManager = {
             : '';
 
         const normalizedRole = String(role || '').toLowerCase();
-        const allReportsContextRoles = ['super_admin', 'maintenance_admin', 'admin_maintenance'];
-        const maintenanceDetailRoles = ['maintenance_staff', 'eelab_staff', 'maintenance_personnel'];
+        const allReportsContextRoles = ['super_admin', 'maintenance_admin'];
+        const maintenanceDetailRoles = ['maintenance_staff'];
 
         if (allReportsContextRoles.includes(normalizedRole)) {
             return `${window.SFMS_PUBLIC_URL ? window.SFMS_PUBLIC_URL('/frontend/pages/maintenance-report-detail.php') : '/frontend/pages/maintenance-report-detail.php'}?id=${safeReportId}&back=all_reports`;
@@ -278,9 +269,10 @@ const NotificationManager = {
     
     async markAllAsRead() {
         try {
-            await fetch(this.getBackendApiUrl('markAllAsRead'), {
-                method: 'POST'
-            });
+            await fetch(
+                window.SFMS_PUBLIC_URL('/api/notifications/read-all'),
+                { method: 'POST', credentials: 'include' }
+            );
             this.loadNotifications();
         } catch (error) {
             console.error('Error marking all as read:', error);

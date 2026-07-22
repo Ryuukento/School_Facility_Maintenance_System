@@ -34,15 +34,8 @@ return new class extends Migration
             }
         });
 
-        // 2. Add foreign keys sa hiwalay na step para sure na existing na ang columns
-        Schema::table('maintenance_reports', function (Blueprint $table): void {
-            if (Schema::hasColumn('maintenance_reports', 'need_change_item_id')) {
-                $table->foreign('need_change_item_id')->references('id')->on('items')->nullOnDelete();
-            }
-            if (Schema::hasColumn('maintenance_reports', 'need_change_approved_by')) {
-                $table->foreign('need_change_approved_by')->references('user_id')->on('users')->nullOnDelete();
-            }
-        });
+        // 2. (TEMPORARY FIX) Huwag munang maglagay ng foreign key constraint para sa need_change_item_id at need_change_approved_by
+        // Pwede itong idagdag manually kapag sure na ang data at structure
     }
 
     public function down(): void

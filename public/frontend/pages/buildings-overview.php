@@ -25,8 +25,23 @@ $pageTitle = 'Buildings Overview - SFMS';
 include __DIR__ . '/../includes/header.php';
 ?>
 
+<link rel="stylesheet" href="<?php echo htmlspecialchars(public_url('/frontend/assets/css/buildings-redesign.css?v=20260714-1')); ?>">
+
 <main class="container buildings-page-container">
-    <div class="card">
+    <section class="buildings-page-hero">
+        <div class="buildings-page-hero-copy">
+            <p class="eyebrow">Facility workspace</p>
+            <h2>Buildings, rooms, and deployed inventory</h2>
+            <p>Navigate the campus inventory map with a clearer, faster view of every building and deployment.</p>
+        </div>
+        <div class="buildings-page-hero-metrics">
+            <div><strong>Rooms</strong><span>Filter instantly</span></div>
+            <div><strong>Deployments</strong><span>Print-ready reports</span></div>
+            <div><strong>Inventory</strong><span>Room-by-room view</span></div>
+        </div>
+    </section>
+
+    <div class="card buildings-overview-card">
         <div class="card-header" id="overviewHeader">
             <div>
                 <h2 id="overviewTitle">Buildings</h2>
@@ -202,25 +217,69 @@ include __DIR__ . '/../includes/header.php';
     </div>
 </div>
 
-<link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/buildings-overview.inline.css">
-<link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/buildings-cards-badges.css">
+    <div id="printFilterModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Print Deployed Items</h2>
+                <span class="modal-close" onclick="closePrintFilterModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <form id="printFilterForm">
+                    <div class="form-group">
+                        <label for="printBuildingSelect">Building</label>
+                        <select id="printBuildingSelect" class="form-control" onchange="onPrintBuildingChange()">
+                            <option value="">All Buildings</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="printRoomSelect">Room</label>
+                        <select id="printRoomSelect" class="form-control">
+                            <option value="">All Rooms</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closePrintFilterModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="previewPrintItems()">Preview Print</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="printPreviewContainer" class="print-preview-page" hidden>
+        <div class="print-preview-sheet">
+            <div class="print-preview-header">
+                <div class="print-preview-branding">
+                    <img src="<?php echo htmlspecialchars(public_url('/frontend/assets/images/logo.png')); ?>" alt="PHILCST Logo" class="print-preview-logo" onerror="this.style.display='none'" />
+                    <div>
+                        <div class="print-preview-school">PHILCST Centralized School Facility Maintenance Reporting System</div>
+                        <div class="print-preview-title">Deployed Items Inventory Report</div>
+                    </div>
+                </div>
+                <div class="print-preview-meta">
+                    <div><strong>Building:</strong> <span id="printBuildingLabel">All Buildings</span></div>
+                    <div><strong>Room:</strong> <span id="printRoomLabel">All Rooms</span></div>
+                    <div><strong>Date Generated:</strong> <span id="printDateLabel"></span></div>
+                </div>
+            </div>
+            <div id="printPreviewBody" class="print-preview-body"></div>
+            <div class="print-preview-footer">
+                <div class="print-preview-summary">Total Items: <span id="printTotalItems">0</span></div>
+                <div class="print-preview-signatures">
+                    <div>Prepared by: _______________</div>
+                    <div>Noted by: _______________</div>
+                    <div>Date: _______________</div>
+                </div>
+            </div>
+            <div class="print-preview-actions screen-only">
+                <button class="btn btn-primary" onclick="window.print()">Print</button>
+                <button class="btn btn-secondary" onclick="closePrintPreview()">Back</button>
+            </div>
+        </div>
+    </div>
+</div>
 
 <script>
-let currentLevel = 'building';
-let currentBuildingId = null;
-let currentBuildingName = '';
-let currentFloorId = null;
-let currentFloorName = '';
-let currentRoomId = null;
-let currentEditBuildingId = null;
-let buildingsCache = {};
-let currentRoomsCache = [];
-let currentItemsCache = [];
-let roomSearchTerm = '';
-let roomCategoryFilter = 'all';
-let itemSearchTerm = '';
-const defaultBackUrl = <?php echo json_encode($defaultBackUrl, JSON_UNESCAPED_SLASHES); ?>;
-
 function extractList(payload, key) {
     if (!payload || payload.success !== true) {
         return [];
@@ -345,6 +404,240 @@ function addActionButton(text, onClick, variant = 'secondary') {
     document.getElementById('overviewActions').appendChild(btn);
 }
 
+async function openPrintFilterModal() {
+    const buildingSelect = document.getElementById('printBuildingSelect');
+    const roomSelect = document.getElementById('printRoomSelect');
+
+    buildingSelect.innerHTML = '<option value="">All Buildings</option>';
+    roomSelect.innerHTML = '<option value="">All Rooms</option>';
+
+    try {
+        const res = await fetch(window.SFMS_PUBLIC_URL('/api/buildings'), {
+            credentials: 'include'
+        });
+        const data = await res.json();
+        if (data.success) {
+            const buildings = extractList(data, 'buildings');
+            buildings.forEach((building) => {
+                const option = document.createElement('option');
+                option.value = building.id;
+                option.textContent = building.name;
+                buildingSelect.appendChild(option);
+            });
+
+            if (currentBuildingId) {
+                buildingSelect.value = String(currentBuildingId);
+                await onPrintBuildingChange();
+                if (currentRoomId) {
+                    roomSelect.value = String(currentRoomId);
+                }
+            }
+        } else {
+            alert(data.message || 'Failed to load buildings');
+        }
+    } catch (err) {
+        console.error('Error loading buildings for print filter', err);
+        alert('Error loading buildings for print filter. Check console for details.');
+    }
+
+    document.getElementById('printFilterModal').classList.add('show');
+}
+
+function closePrintFilterModal() {
+    document.getElementById('printFilterModal').classList.remove('show');
+    document.getElementById('printFilterForm').reset();
+}
+
+async function onPrintBuildingChange() {
+    const buildingId = document.getElementById('printBuildingSelect').value;
+    const roomSelect = document.getElementById('printRoomSelect');
+    roomSelect.innerHTML = '<option value="">All Rooms</option>';
+
+    if (!buildingId) {
+        return;
+    }
+
+    try {
+        const res = await fetch(window.SFMS_PUBLIC_URL('/api/rooms?building_id=' + encodeURIComponent(buildingId) + '&per_page=200'), {
+            credentials: 'include'
+        });
+        const data = await res.json();
+        if (data.success) {
+            const rooms = extractList(data, 'rooms');
+            rooms.forEach((room) => {
+                const option = document.createElement('option');
+                option.value = room.id;
+                option.textContent = room.name;
+                roomSelect.appendChild(option);
+            });
+        } else {
+            alert(data.message || 'Failed to load rooms');
+        }
+    } catch (err) {
+        console.error('Error loading rooms for print filter', err);
+        alert('Error loading rooms for print filter. Check console for details.');
+    }
+}
+
+function closePrintPreview() {
+    const preview = document.getElementById('printPreviewContainer');
+    if (preview) {
+        preview.hidden = true;
+    }
+}
+
+async function previewPrintItems() {
+    closePrintFilterModal();
+
+    const buildingSelect = document.getElementById('printBuildingSelect');
+    const roomSelect = document.getElementById('printRoomSelect');
+    const buildingId = buildingSelect.value;
+    const roomId = roomSelect.value;
+    const buildingName = buildingId ? buildingSelect.options[buildingSelect.selectedIndex].text : 'All Buildings';
+    const roomName = roomId ? roomSelect.options[roomSelect.selectedIndex].text : 'All Rooms';
+    const previewBody = document.getElementById('printPreviewBody');
+
+    document.getElementById('printBuildingLabel').textContent = buildingName;
+    document.getElementById('printRoomLabel').textContent = roomName;
+    document.getElementById('printDateLabel').textContent = new Date().toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+    });
+    document.getElementById('printPreviewContainer').hidden = false;
+    previewBody.innerHTML = '<div class="print-preview-loading">Loading deployed items…</div>';
+
+    try {
+        const queryParams = [];
+        if (buildingId) {
+            queryParams.push('building_id=' + encodeURIComponent(buildingId));
+        }
+        if (roomId) {
+            queryParams.push('room_id=' + encodeURIComponent(roomId));
+        }
+        const queryString = queryParams.length ? '?' + queryParams.join('&') : '';
+        const res = await fetch(window.SFMS_PUBLIC_URL('/api/buildings/deployed-items' + queryString), {
+            credentials: 'include'
+        });
+        const data = await res.json();
+        if (data.success) {
+            const items = extractList(data, 'items');
+            renderPrintPreview(items);
+        } else {
+            alert(data.message || 'Failed to load deployed items');
+            previewBody.innerHTML = '<div class="print-preview-empty">Unable to load deployed items.</div>';
+            document.getElementById('printTotalItems').textContent = '0';
+        }
+    } catch (err) {
+        console.error('Error loading deployed items', err);
+        alert('Error loading deployed items. Check console for details.');
+        previewBody.innerHTML = '<div class="print-preview-empty">Error loading deployed items.</div>';
+        document.getElementById('printTotalItems').textContent = '0';
+    }
+}
+
+function renderPrintPreview(items) {
+    const previewBody = document.getElementById('printPreviewBody');
+    if (!previewBody) {
+        return;
+    }
+
+    if (!Array.isArray(items) || items.length === 0) {
+        previewBody.innerHTML = '<div class="print-preview-empty">No deployed items found for the selected scope.</div>';
+        document.getElementById('printTotalItems').textContent = '0';
+        return;
+    }
+
+    previewBody.innerHTML = '';
+    const showGrouped = document.getElementById('printRoomSelect').value === '';
+
+    if (showGrouped) {
+        const grouped = items.reduce((map, item) => {
+            const roomName = item.room_name || 'Unassigned Room';
+            if (!map[roomName]) {
+                map[roomName] = [];
+            }
+            map[roomName].push(item);
+            return map;
+        }, {});
+
+        Object.entries(grouped).forEach(([roomName, roomItems]) => {
+            const group = document.createElement('div');
+            group.className = 'print-room-group';
+
+            const heading = document.createElement('div');
+            heading.className = 'print-room-heading';
+            heading.textContent = 'Room: ' + roomName;
+            group.appendChild(heading);
+
+            group.appendChild(createPrintTable(roomItems));
+
+            const subtotal = document.createElement('div');
+            subtotal.className = 'print-room-subtotal';
+            subtotal.textContent = 'Subtotal: ' + roomItems.length + ' item' + (roomItems.length === 1 ? '' : 's');
+            group.appendChild(subtotal);
+
+            previewBody.appendChild(group);
+        });
+    } else {
+        previewBody.appendChild(createPrintTable(items));
+    }
+
+    document.getElementById('printTotalItems').textContent = String(items.length);
+}
+
+function createPrintTable(items) {
+    const table = document.createElement('table');
+    table.className = 'print-preview-table';
+
+    const thead = document.createElement('thead');
+    thead.innerHTML = '<tr><th>#</th><th>Item Name</th><th>Category</th><th>Quantity</th><th>Unit</th><th>Condition</th><th>Date Dispatched</th><th>Dispatch Code</th></tr>';
+    table.appendChild(thead);
+
+    const tbody = document.createElement('tbody');
+    items.forEach((item, index) => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${index + 1}</td>
+            <td>${escapeHtml(item.item_name)}</td>
+            <td>${escapeHtml(item.category || '')}</td>
+            <td>${escapeHtml(item.quantity)}</td>
+            <td>${escapeHtml(item.unit || '')}</td>
+            <td>${escapeHtml(item.condition || '')}</td>
+            <td>${escapeHtml(formatPrintDate(item.date_dispatched))}</td>
+            <td>${escapeHtml(item.dispatch_code || '')}</td>
+        `;
+        tbody.appendChild(row);
+    });
+
+    table.appendChild(tbody);
+    return table;
+}
+
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function formatPrintDate(value) {
+    if (!value) {
+        return '';
+    }
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+        return String(value);
+    }
+    return date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+    });
+}
+
 async function loadBuildings() {
     currentLevel = 'building';
     currentBuildingId = null; currentBuildingName = '';
@@ -359,6 +652,7 @@ async function loadBuildings() {
     document.getElementById('overviewTitle').textContent = 'Buildings';
     document.getElementById('overviewSubtitle').textContent = 'Select a building to view floors';
     clearActions();
+    addActionButton('Print Deployed Items', () => openPrintFilterModal());
     addActionButton('Add Building', () => openBuildingModal(), 'primary');
     // replaced refresh with a back button that navigates to previous page
     addActionButton('Back', () => {
@@ -375,8 +669,8 @@ async function loadBuildings() {
     container.className = 'summary-cards-grid';
 
     try {
-        const res = await fetch('/School_Facility_Maintenance_System/backend/api/buildings.php?action=list', {
-            credentials: 'same-origin'
+        const res = await fetch(window.SFMS_PUBLIC_URL('/api/buildings'), {
+            credentials: 'include'
         });
         const data = await res.json();
         if (data.success) {
@@ -415,6 +709,7 @@ async function loadFloors(buildingId, buildingName) {
     document.getElementById('overviewTitle').textContent = 'Floors of ' + buildingName;
     document.getElementById('overviewSubtitle').textContent = 'Select a floor to view rooms';
     clearActions();
+    addActionButton('Print Deployed Items', () => openPrintFilterModal());
     addActionButton('Add Floor', () => openFloorModal());
     addActionButton('Back', loadBuildings);
 
@@ -423,8 +718,8 @@ async function loadFloors(buildingId, buildingName) {
     container.className = 'floors-grid';
 
     try {
-        const res = await fetch('/School_Facility_Maintenance_System/backend/api/floors.php?action=getByBuilding&building_id=' + encodeURIComponent(buildingId), {
-            credentials: 'same-origin'
+        const res = await fetch(window.SFMS_PUBLIC_URL(`/api/buildings/${encodeURIComponent(buildingId)}/floors`), {
+            credentials: 'include'
         });
         if (!res.ok) {
             const txt = await res.text();
@@ -465,6 +760,7 @@ async function loadRooms(floorId, floorName) {
     document.getElementById('overviewTitle').textContent = 'Rooms of ' + floorName;
     document.getElementById('overviewSubtitle').textContent = 'Select a room to view items';
     clearActions();
+    addActionButton('Print Deployed Items', () => openPrintFilterModal());
     addActionButton('Add New Room', () => openRoomModal(currentBuildingId, currentFloorId), 'primary');
     addActionButton('Back', () => loadFloors(currentBuildingId, currentBuildingName));
     setRoomSearchVisibility(true, 'Search rooms...', true);
@@ -474,8 +770,8 @@ async function loadRooms(floorId, floorName) {
     container.className = 'summary-cards-grid';
 
     try {
-        const res = await fetch('/School_Facility_Maintenance_System/backend/api/rooms.php?action=getByFloor&floor_id=' + floorId, {
-            credentials: 'same-origin'
+        const res = await fetch(window.SFMS_PUBLIC_URL('/api/rooms?floor_id=' + floorId), {
+            credentials: 'include'
         });
         const data = await res.json();
         if (data.success) {
@@ -581,6 +877,7 @@ async function loadItems(roomId, roomName) {
     document.getElementById('overviewTitle').textContent = 'Items in ' + roomName;
     document.getElementById('overviewSubtitle').textContent = 'Search items in this room';
     clearActions();
+    addActionButton('Print Deployed Items', () => openPrintFilterModal());
     addActionButton('Add Item', () => openItemModal());
     addActionButton('Back', () => loadRooms(currentFloorId, currentFloorName));
 
@@ -588,7 +885,7 @@ async function loadItems(roomId, roomName) {
     container.innerHTML = '';
 
     try {
-        const res = await fetch('/School_Facility_Maintenance_System/backend/api/items.php?action=getByRoom&room_id=' + roomId, {
+        const res = await fetch(window.SFMS_PUBLIC_URL('/api/items?room_id=' + roomId), {
             credentials: 'same-origin'
         });
         const data = await res.json();
@@ -770,27 +1067,42 @@ document.addEventListener('DOMContentLoaded', () => {
 // Delete helper
 async function deleteEntity(type, id) {
     if (!confirm('Are you sure you want to delete this ' + type + '?')) return;
-    let endpoint = '';
-    switch(type) {
-        case 'building': endpoint = '/School_Facility_Maintenance_System/backend/api/buildings.php?action=delete'; break;
-        case 'floor': endpoint = '/School_Facility_Maintenance_System/backend/api/floors.php?action=delete'; break;
-        case 'room': endpoint = '/School_Facility_Maintenance_System/backend/api/rooms.php?action=delete'; break;
-        case 'item': endpoint = '/School_Facility_Maintenance_System/backend/api/items.php?action=delete'; break;
+
+    // Item deletes use the Laravel REST endpoint
+    if (type === 'item') {
+        try {
+            const resp = await fetch(window.SFMS_PUBLIC_URL(`/api/items/${id}`), {
+                method: 'DELETE',
+                credentials: 'same-origin',
+            });
+            const data = await resp.json();
+            if (data.success) {
+                loadItems(currentRoomId, '');
+            } else {
+                alert('Delete failed: ' + data.message);
+            }
+        } catch (e) {
+            console.error('Delete error', e);
+            alert('An error occurred while deleting. See console.');
+        }
+        return;
+    }
+
+    // Building / floor / room deletes — Laravel REST routes
+    let deleteUrl = '';
+    switch (type) {
+        case 'building': deleteUrl = window.SFMS_PUBLIC_URL(`/api/buildings/${id}`); break;
+        case 'floor':    deleteUrl = window.SFMS_PUBLIC_URL(`/api/buildings/${currentBuildingId}/floors/${id}`); break;
+        case 'room':     deleteUrl = window.SFMS_PUBLIC_URL(`/api/rooms/${id}`); break;
     }
     try {
-        const isJsonDelete = (type === 'building' || type === 'room');
-        const resp = await fetch(endpoint, {
-            method: 'POST',
-            credentials: 'same-origin',
-            headers: {
-                'Content-Type': isJsonDelete ? 'application/json' : 'application/x-www-form-urlencoded'
-            },
-            body: isJsonDelete ? JSON.stringify({ id }) : ('id=' + encodeURIComponent(id))
+        const resp = await fetch(deleteUrl, {
+            method: 'DELETE',
+            credentials: 'same-origin'
         });
         const data = await resp.json();
         if (data.success) {
-            // reload current view
-            switch(currentLevel) {
+            switch (currentLevel) {
                 case 'building': loadBuildings(); break;
                 case 'floor': loadFloors(currentBuildingId, currentBuildingName); break;
                 case 'room': loadRooms(currentFloorId, currentFloorName); break;
@@ -836,11 +1148,11 @@ async function saveEditBuilding() {
         return;
     }
     try {
-        const res = await fetch('/School_Facility_Maintenance_System/backend/api/buildings.php?action=update', {
-            method: 'POST',
+        const res = await fetch(window.SFMS_PUBLIC_URL(`/api/buildings/${currentEditBuildingId}`), {
+            method: 'PATCH',
             credentials: 'same-origin',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: currentEditBuildingId, name, description })
+            body: JSON.stringify({ name, description })
         });
         const data = await res.json();
         if (data.success) {
@@ -875,7 +1187,7 @@ async function saveBuildingData() {
     }
 
     try {
-        const response = await fetch('/School_Facility_Maintenance_System/backend/api/buildings.php?action=create', {
+        const response = await fetch(window.SFMS_PUBLIC_URL('/api/buildings'), {
             method: 'POST',
             credentials: 'same-origin',
             headers: { 'Content-Type': 'application/json' },
@@ -917,12 +1229,12 @@ async function saveFloorData() {
     console.log('Saving floor', {buildingId: currentBuildingId, buildingName: currentBuildingName, name});
     try {
         const res = await fetch(
-            '/School_Facility_Maintenance_System/backend/api/floors.php?action=create',
+            window.SFMS_PUBLIC_URL(`/api/buildings/${currentBuildingId}/floors`),
             {
                 method: 'POST',
                 credentials: 'same-origin',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ building_id: currentBuildingId, name })
+                body: JSON.stringify({ name })
             }
         );
         if (!res.ok) {
@@ -961,7 +1273,7 @@ function loadBuildingsInModal(preselectBuildingId = '', preselectFloorId = '') {
     buildingSelect.innerHTML = '<option value="">Choose a building</option>';
     floorSelect.innerHTML = '<option value="">Choose a floor</option>';
 
-    fetch('/School_Facility_Maintenance_System/backend/api/buildings.php?action=list', {
+    fetch(window.SFMS_PUBLIC_URL('/api/buildings'), {
         credentials: 'same-origin'
     })
         .then(res => res.json())
@@ -989,7 +1301,7 @@ function loadFloorsForRoom(buildingId, preselectFloorId = '') {
     const floorSelect = document.getElementById('roomFloorSelect');
     floorSelect.innerHTML = '<option value="">Choose a floor</option>';
     if (!buildingId) return;
-    fetch('/School_Facility_Maintenance_System/backend/api/floors.php?action=getByBuilding&building_id=' + encodeURIComponent(buildingId), {
+    fetch(window.SFMS_PUBLIC_URL(`/api/buildings/${encodeURIComponent(buildingId)}/floors`), {
         credentials: 'same-origin'
     })
         .then(res => res.json())
@@ -1027,7 +1339,7 @@ async function saveRoomData() {
     }
 
     try {
-        const response = await fetch('/School_Facility_Maintenance_System/backend/api/rooms.php?action=create', {
+        const response = await fetch(window.SFMS_PUBLIC_URL('/api/rooms'), {
             method: 'POST',
             credentials: 'same-origin',
             headers: { 'Content-Type': 'application/json' },
@@ -1065,8 +1377,9 @@ async function saveItemData() {
     const status = document.getElementById('itemStatusSelect').value;
     const quantity = document.getElementById('itemQuantityInput').value;
     if (!name) { alert('Please enter item name'); return; }
-    const res = await fetch('/School_Facility_Maintenance_System/backend/api/items.php?action=create', {
+    const res = await fetch(window.SFMS_PUBLIC_URL('/api/items'), {
         method:'POST', headers:{'Content-Type':'application/json'},
+        credentials: 'same-origin',
         body: JSON.stringify({ room_id: currentRoomId, name, status, quantity })
     });
     const data = await res.json();

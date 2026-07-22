@@ -15,27 +15,18 @@ include __DIR__ . '/../includes/header.php';
 ?>
 
 <main class="container maintenance-admin-dashboard-page inventory-page">
-    <div class="page-header mb-lg" style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
-        <div>
-            <h1 style="margin: 0;">Notifications</h1>
-            <p class="text-muted" style="margin-top:6px;">Inbox for system alerts and assignments.</p>
-        </div>
-        <button id="mark-all-read-btn" class="btn btn-secondary">Mark All Read</button>
-    </div>
-
     <div class="card">
         <div class="card-body">
             <div id="notif-alert"></div>
             <div id="notifications-list"><div class="loading">Loading notifications...</div></div>
         </div>
     </div>
+    </div>
 </main>
 
 <?php include __DIR__ . '/../includes/footer.php'; ?>
 
 <script>
-const NOTIF_API = '/School_Facility_Maintenance_System/backend/api/notifications.php';
-
 function showNotifAlert(message, type = 'info') {
     const box = document.getElementById('notif-alert');
     if (!box) return;
@@ -47,7 +38,7 @@ async function loadNotifications() {
     if (!list) return;
 
     try {
-        const res = await fetch(`${NOTIF_API}?action=getAll&limit=100`);
+        const res = await fetch(window.SFMS_PUBLIC_URL('/api/notifications') + '?limit=100');
         const data = await res.json();
         if (!data.success) throw new Error(data.message || 'Failed to load notifications');
 
@@ -83,9 +74,10 @@ async function loadNotifications() {
 
 async function markNotificationRead(notificationId) {
     try {
-        const form = new FormData();
-        form.append('notification_id', String(notificationId));
-        const res = await fetch(`${NOTIF_API}?action=markAsRead`, { method: 'POST', body: form });
+        const res = await fetch(
+            window.SFMS_PUBLIC_URL(`/api/notifications/${notificationId}/read`),
+            { method: 'POST' }
+        );
         const data = await res.json();
         if (!data.success) throw new Error(data.message || 'Failed to mark read');
         await loadNotifications();
@@ -96,9 +88,10 @@ async function markNotificationRead(notificationId) {
 
 async function deleteNotification(notificationId) {
     try {
-        const form = new FormData();
-        form.append('notification_id', String(notificationId));
-        const res = await fetch(`${NOTIF_API}?action=delete`, { method: 'POST', body: form });
+        const res = await fetch(window.SFMS_PUBLIC_URL(`/api/notifications/${notificationId}`), {
+            method: 'DELETE',
+            credentials: 'include'
+        });
         const data = await res.json();
         if (!data.success) throw new Error(data.message || 'Failed to delete');
         await loadNotifications();
@@ -113,7 +106,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (markAllBtn) {
         markAllBtn.addEventListener('click', async () => {
             try {
-                const res = await fetch(`${NOTIF_API}?action=markAllAsRead`, { method: 'POST' });
+                const res = await fetch(window.SFMS_PUBLIC_URL('/api/notifications/read-all'), { method: 'POST' });
                 const data = await res.json();
                 if (!data.success) throw new Error(data.message || 'Failed to mark all read');
                 showNotifAlert('All notifications marked as read.', 'success');

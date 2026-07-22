@@ -124,7 +124,7 @@ let currentFilters = {};
 let lastMonthOnly = false;
 let selectedWeek = 0;
 
-const API_BASE = '/School_Facility_Maintenance_System/backend/api/maintenance-reports-api.php';
+const API_BASE = window.SFMS_PUBLIC_URL('/api/reports');
 
 function getReportWeekNumber(createdAt) {
     if (!createdAt) return null;
@@ -291,13 +291,12 @@ window.UI = window.UI || {
 async function loadReports(page = 1) {
     try {
         const params = new URLSearchParams({
-            action: 'list',
             page: page,
             per_page: 200,
             ...currentFilters
         });
 
-        const response = await fetch(`${API_BASE}?${params}`);
+        const response = await fetch(`${API_BASE}?${params}`, { credentials: 'include' });
         const data = await response.json();
 
         if (data.success) {

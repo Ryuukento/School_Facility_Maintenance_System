@@ -106,6 +106,16 @@ class ReportService {
         }
         
         $data['created_by'] = $userId;
+
+        // Auto-assign department from creator's profile
+        if (empty($data['department_id'])) {
+            $deptStmt = $this->pdo->prepare("SELECT department_id FROM users WHERE user_id = ? LIMIT 1");
+            $deptStmt->execute([$userId]);
+            $deptId = $deptStmt->fetchColumn();
+            if ($deptId) {
+                $data['department_id'] = (int)$deptId;
+            }
+        }
         
         try {
             $reportId = $this->reportModel->create($data);
@@ -499,11 +509,13 @@ class ReportService {
                 $sql = "SELECT r.report_id, r.title, r.description, r.priority, r.status, r.location,
                                r.created_at, r.created_by, r.assigned_to, u.full_name as assigned_name,
                                c.full_name as creator_name, r.need_change_item_id,
-                               r.need_change_status, i.name as need_change_item_name
+                               r.need_change_status, i.name as need_change_item_name,
+                               r.department_id, d.name as department_name
                         FROM maintenance_reports r
                         LEFT JOIN users u ON r.assigned_to = u.user_id
                         LEFT JOIN users c ON r.created_by = c.user_id
-                        LEFT JOIN items i ON r.need_change_item_id = i.id";
+                        LEFT JOIN items i ON r.need_change_item_id = i.id
+                        LEFT JOIN departments d ON r.department_id = d.department_id";
             } else {
                 $sql = "SELECT r.report_id, r.title, r.description, r.priority, r.status, r.location,
                                r.created_at, r.created_by, r.assigned_to, u.full_name as assigned_name,
@@ -515,10 +527,24 @@ class ReportService {
             }
 
             $params = [];
+            $explicitDept = isset($filters['department_id']) ? trim((string)$filters['department_id']) : null;
 
-            if ($role === ROLE_SUPER_ADMIN || $role === 'maintenance_admin' || $role === ROLE_MAINTENANCE_STAFF) {
+            if ($role === ROLE_SUPER_ADMIN || $role === ROLE_MAINTENANCE_STAFF) {
                 $sql .= " WHERE DATE(r.created_at) = CURDATE() ORDER BY r.created_at DESC LIMIT ?";
                 $params[] = (int)$limit;
+            } elseif ($role === 'maintenance_admin') {
+                $deptStmt = $this->pdo->prepare("SELECT department_id FROM users WHERE user_id = ? LIMIT 1");
+                $deptStmt->execute([$userId]);
+                $deptId = $deptStmt->fetchColumn();
+
+                if ($deptId) {
+                    $sql .= " WHERE r.department_id = ? AND DATE(r.created_at) = CURDATE() ORDER BY r.created_at DESC LIMIT ?";
+                    $params[] = $deptId;
+                    $params[] = (int)$limit;
+                } else {
+                    $sql .= " WHERE DATE(r.created_at) = CURDATE() ORDER BY r.created_at DESC LIMIT ?";
+                    $params[] = (int)$limit;
+                }
             } else {
                 $sql .= " WHERE (r.created_by = ? OR r.assigned_to = ?) AND DATE(r.created_at) = CURDATE() ORDER BY r.created_at DESC LIMIT ?";
                 $params[] = $userId;
@@ -616,6 +642,7 @@ class ReportService {
             $statusGroup = strtolower(trim((string)($filters['status_group'] ?? '')));
             $dateFrom = $this->normalizeFilterDate($filters['date_from'] ?? null);
             $dateTo = $this->normalizeFilterDate($filters['date_to'] ?? null);
+            $explicitDept = isset($filters['department_id']) ? trim((string)$filters['department_id']) : null;
             $page = max(1, (int)($filters['page'] ?? 1));
             $perPage = max(1, min(200, (int)($filters['per_page'] ?? 20)));
             $offset = ($page - 1) * $perPage;
@@ -624,11 +651,13 @@ class ReportService {
                   $sql = "SELECT r.report_id, r.title, r.priority, r.status, r.location,
                            r.created_at, r.created_by, r.assigned_to, u.full_name as assigned_name,
                            c.full_name as creator_name, r.need_change_item_id,
-                           r.need_change_status, i.name as need_change_item_name
+                           r.need_change_status, i.name as need_change_item_name,
+                               r.department_id, d.name as department_name
                        FROM maintenance_reports r
                        LEFT JOIN users u ON r.assigned_to = u.user_id
                        LEFT JOIN users c ON r.created_by = c.user_id
-                       LEFT JOIN items i ON r.need_change_item_id = i.id";
+                       LEFT JOIN items i ON r.need_change_item_id = i.id
+                        LEFT JOIN departments d ON r.department_id = d.department_id";
                  } else {
                   $sql = "SELECT r.report_id, r.title, r.priority, r.status, r.location,
                            r.created_at, r.created_by, r.assigned_to, u.full_name as assigned_name,
@@ -654,28 +683,47 @@ class ReportService {
                 $sql .= " WHERE r.assigned_to = ? AND r.status = 'assigned' AND DATE(r.updated_at) >= DATE_SUB(CURRENT_DATE, INTERVAL 7 DAY)";
                 $params[] = $userId;
             } elseif ($role === ROLE_MAINTENANCE_STAFF) {
-                $sql .= " WHERE 1=1";
+                if ($explicitDept !== null && $explicitDept !== '' && $explicitDept !== 'all') {
+                    $sql .= " WHERE r.department_id = ?";
+                    $params[] = (int)$explicitDept;
+                } else {
+                    $sql .= " WHERE 1=1";
+                }
             } elseif ($role === 'maintenance_admin') {
-                $sql .= " WHERE 1=1";
+                // If a specific department_id filter is passed (including 'all' = empty), respect it
+                // Only auto-filter by own department when no explicit department filter is provided
+                if ($explicitDept !== null && $explicitDept !== '' && $explicitDept !== 'all') {
+                    // Specific department selected
+                    $sql .= " WHERE r.department_id = ?";
+                    $params[] = (int)$explicitDept;
+                } else {
+                    // 'All Departments' selected or no filter — show all
+                    $sql .= " WHERE 1=1";
+                }
             } elseif ($role !== ROLE_SUPER_ADMIN) {
                 $sql .= " WHERE (r.created_by = ? OR r.assigned_to = ?)";
                 $params[] = $userId;
                 $params[] = $userId;
             } else {
-                $sql .= " WHERE 1=1";
+                if ($explicitDept !== null && $explicitDept !== '' && $explicitDept !== 'all') {
+                    $sql .= " WHERE r.department_id = ?";
+                    $params[] = (int)$explicitDept;
+                } else {
+                    $sql .= " WHERE 1=1";
+                }
             }
 
-            if ($status) {
+            if ($status !== null && $status !== '') {
                 $sql .= " AND r.status = ?";
                 $params[] = $status;
             }
 
-            if ($priority) {
+            if ($priority !== null && $priority !== '') {
                 $sql .= " AND r.priority = ?";
                 $params[] = $priority;
             }
 
-            if ($search) {
+            if ($search !== null && $search !== '') {
                 $searchTerm = '%' . $search . '%';
                 $sql .= " AND (r.title LIKE ? OR r.description LIKE ? OR r.location LIKE ?)";
                 $params[] = $searchTerm;
@@ -683,12 +731,12 @@ class ReportService {
                 $params[] = $searchTerm;
             }
 
-            if ($dateFrom) {
+            if ($dateFrom !== null && $dateFrom !== '') {
                 $sql .= " AND DATE(r.created_at) >= ?";
                 $params[] = $dateFrom;
             }
 
-            if ($dateTo) {
+            if ($dateTo !== null && $dateTo !== '') {
                 $sql .= " AND DATE(r.created_at) <= ?";
                 $params[] = $dateTo;
             }
@@ -866,7 +914,7 @@ class ReportService {
                     // especially on local Windows/XAMPP where detached background tasks may not run.
                     $sent = EmailService::sendNewReportNotification($payload, $superAdminEmailRecipients);
                     if ($sent) {
-                        Logger::info('New report email notification sent to super admin', [
+                        Logger::info('New report email notification sent to Administrator', [
                             'report_id' => $reportId,
                             'recipient_count' => count($superAdminEmailRecipients)
                         ]);
@@ -877,7 +925,7 @@ class ReportService {
                         ]);
                     }
                 } else {
-                    Logger::warning('No super admin email recipients found for new report notification', [
+                    Logger::warning('No Administrator email recipients found for new report notification', [
                         'report_id' => $reportId
                     ]);
                 }

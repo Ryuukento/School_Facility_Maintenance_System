@@ -1,5 +1,155 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+if (!isset($_SESSION['user'])) {
+    header('Location: /School_Facility_Maintenance_System/frontend/pages/index.php');
+    exit;
+}
+
+$type = $_GET['type'] ?? 'inventory';
+$pageTitle = 'Report - ' . ucfirst($type);
+include __DIR__ . '/../includes/header.php';
+?>
+
+<main class="container">
+    <div class="card">
+        <div class="card-body">
+            <div id="report-controls" class="report-controls-grid">
+                <div>
+                    <label>Date from</label>
+                    <input type="date" id="date_from">
+                </div>
+                <div>
+                    <label>Date to</label>
+                    <input type="date" id="date_to">
+                </div>
+                <div>
+                    <label>Category</label>
+                    <select id="filter_category"><option value="">All</option></select>
+                </div>
+                <div>
+                    <label>Department</label>
+                    <select id="filter_department"><option value="">All</option></select>
+                </div>
+                <div>
+                    <label>Room</label>
+                    <select id="filter_room"><option value="">All</option></select>
+                </div>
+                <div>
+                    <label>Status</label>
+                    <select id="filter_status"><option value="">All</option></select>
+                </div>
+                <div style="display:flex;align-items:flex-end;gap:8px;">
+                    <button id="loadReport" class="btn btn-primary">Load</button>
+                    <button id="exportCsv" class="btn btn-secondary">Export CSV</button>
+                    <button id="printReport" class="btn btn-secondary">Print / PDF</button>
+                </div>
+            </div>
+            <div id="reportResults" style="margin-top:12px; white-space:pre-wrap; font-family:monospace;"></div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('loadReport').addEventListener('click', async function(){
+            const type = '<?php echo htmlspecialchars($type); ?>';
+                const from = document.getElementById('date_from').value;
+                const to = document.getElementById('date_to').value;
+                const category = document.getElementById('filter_category').value;
+                const department = document.getElementById('filter_department').value;
+                const room = document.getElementById('filter_room').value;
+                const status = document.getElementById('filter_status').value;
+
+                let url = '/School_Facility_Maintenance_System/api/analytics/';
+            if (type === 'inventory') url += 'inventory-summary';
+            else if (type === 'low_stock') url += 'low-stock';
+            else if (type === 'damaged') url += 'damaged-items';
+            else if (type === 'dispatch') url += 'dispatch-report';
+            else if (type === 'repair') url += 'repair-report';
+            else if (type === 'replacement') url += 'replacement-report';
+                const params = [];
+                if (from) params.push('date_from=' + encodeURIComponent(from));
+                if (to) params.push('date_to=' + encodeURIComponent(to));
+                if (category) params.push('category_id=' + encodeURIComponent(category));
+                if (department) params.push('department_id=' + encodeURIComponent(department));
+                if (room) params.push('room_id=' + encodeURIComponent(room));
+                if (status) params.push('status=' + encodeURIComponent(status));
+                if (params.length) url += '?' + params.join('&');
+            const res = await fetch(url);
+            const json = await res.json();
+            document.getElementById('reportResults').innerText = JSON.stringify(json.data || {}, null, 2);
+        });
+
+            function jsonToCsv(obj){
+                // Flatten simple arrays/objects to CSV for lightweight exports
+                const rows = [];
+                if (Array.isArray(obj)){
+                    const keys = Array.from(new Set(obj.flatMap(o => Object.keys(o))));
+                    rows.push(keys.join(','));
+                    obj.forEach(o => rows.push(keys.map(k => '"' + String((o[k] ?? '')).replace(/"/g,'""') + '"').join(',')));
+                } else if (typeof obj === 'object'){
+                    const keys = Object.keys(obj);
+                    rows.push(keys.join(','));
+                    rows.push(keys.map(k => '"' + String(obj[k]).replace(/"/g,'""') + '"').join(','));
+                } else {
+                    rows.push('value');
+                    rows.push('"' + String(obj).replace(/"/g,'""') + '"');
+                }
+                return rows.join('\n');
+            }
+
+            document.getElementById('exportCsv').addEventListener('click', function(){
+                const raw = document.getElementById('reportResults').innerText || '';
+                if (!raw) return alert('Load a report first');
+                let data;
+                try { data = JSON.parse(raw); } catch(e){ return alert('Invalid report data'); }
+                // pick top-level data node if present
+                const payload = data.items ?? data.replacements ?? data.dispatches ?? data.repairs ?? data.most_damaged ?? data;
+                const csv = jsonToCsv(Array.isArray(payload) ? payload : (payload.data ?? payload));
+                const blob = new Blob(["\uFEFF" + csv], {type: 'text/csv;charset=utf-8;'});
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = type + '-report-' + (new Date()).toISOString().slice(0,10) + '.csv';
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                URL.revokeObjectURL(url);
+            });
+
+            document.getElementById('printReport').addEventListener('click', function(){
+                const content = document.getElementById('reportResults').innerText || 'No report loaded';
+                const w = window.open('', '_blank');
+                w.document.write('<pre style="font-family:monospace">' + content.replace(/</g,'&lt;') + '</pre>');
+                w.document.close();
+                w.focus();
+                w.print();
+            });
+
+            // fetch options to populate selects
+            (async function loadOptions(){
+                try{
+                    const res = await fetch('/School_Facility_Maintenance_System/api/analytics/options');
+                    const json = await res.json();
+                    const data = json.data || {};
+                    const cat = document.getElementById('filter_category');
+                    (data.categories || []).forEach(c => { const o = document.createElement('option'); o.value = c.id; o.text = c.name; cat.appendChild(o); });
+                    const dept = document.getElementById('filter_department');
+                    (data.departments || []).forEach(d => { const o = document.createElement('option'); o.value = d.department_id; o.text = d.name; dept.appendChild(o); });
+                    const room = document.getElementById('filter_room');
+                    (data.rooms || []).forEach(r => { const o = document.createElement('option'); o.value = r.id; o.text = r.name; room.appendChild(o); });
+                    const status = document.getElementById('filter_status');
+                    (data.statuses.items || []).forEach(s => { const o = document.createElement('option'); o.value = s; o.text = s; status.appendChild(o); });
+                } catch (e) { console.warn('Failed to load options', e); }
+            })();
+    </script>
+
+    </div>
+</main>
+
+<?php include __DIR__ . '/../includes/footer.php'; ?>
+<?php
+if (session_status() === PHP_SESSION_NONE) {
     session_set_cookie_params(['lifetime'=>0,'path'=>'/','secure'=>false,'httponly'=>true,'samesite'=>'Lax']);
     session_start();
 }
@@ -39,7 +189,7 @@ $isSuperAdmin = ($user['role'] ?? '') === 'super_admin';
             </a>
         </div>
     </div>
-    <?php elseif (in_array($user['role'], ['department_admin', 'maintenance_staff'])): ?>
+    <?php elseif (in_array($user['role'], ['maintenance_admin', 'maintenance_staff'])): ?>
     <div class="card" style="margin-top: 20px;">
         <div class="card-header">
             <h2>Update Report Status</h2>
@@ -164,7 +314,7 @@ async function loadReport() {
 }
 
 // Handle status update
-<?php if (in_array($user['role'], ['department_admin', 'maintenance_staff'])): ?>
+<?php if (in_array($user['role'], ['maintenance_admin', 'maintenance_staff'])): ?>
 document.getElementById('update-form')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     
@@ -211,9 +361,8 @@ document.addEventListener('DOMContentLoaded', () => {
 <script>
 // Ensure API and Session are defined globally - CRITICAL
 window.API = window.API || {
-    baseURL: '/School_Facility_Maintenance_System/backend/api',
     async getReport(id) {
-        const response = await fetch(`${this.baseURL}/reports.php?action=get&id=${id}`, {
+        const response = await fetch(window.SFMS_PUBLIC_URL(`/api/reports/${id}`), {
             credentials: 'include'
         });
         const data = await response.json();
@@ -221,18 +370,20 @@ window.API = window.API || {
         return data;
     },
     async updateReport(data) {
-        const response = await fetch(`${this.baseURL}/reports.php?action=update`, {
-            method: 'POST',
+        const { report_id, ...fields } = data;
+        const response = await fetch(window.SFMS_PUBLIC_URL(`/api/reports/${report_id}`), {
+            method: 'PATCH',
             credentials: 'include',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
+            body: JSON.stringify(fields)
         });
         const result = await response.json();
         if (!result.success) throw new Error(result.message);
         return result;
     },
     async logout() {
-        const response = await fetch(`${this.baseURL}/auth.php?action=logout`, {
+        const response = await fetch(window.SFMS_PUBLIC_URL('/api/auth/logout'), {
+            method: 'POST',
             credentials: 'include'
         });
         const data = await response.json();

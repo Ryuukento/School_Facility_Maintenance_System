@@ -6,10 +6,6 @@ include __DIR__ . '/../includes/header.php';
 ?>
 
 <main class="container settings-page <?php echo $forceProfileUpdate ? 'force-profile-setup' : ''; ?>">
-    <div class="page-header">
-        <h1 class="page-title">Account</h1>
-    </div>
-
     <div class="settings-shell">
         <section class="settings-content-column">
             <div class="settings-section-pane active">
@@ -28,15 +24,18 @@ include __DIR__ . '/../includes/header.php';
                                 </div>
 
                                 <div class="settings-form-group">
-                                    <label for="email_address" class="settings-label">Email Address</label>
-                                    <input type="email" id="email_address" name="email_address" class="form-control settings-input" placeholder="Enter your email" value="<?php echo htmlspecialchars($user['email'] ?? ''); ?>">
+                                    <label for="username" class="settings-label">Username</label>
+                                    <input type="text" id="username" name="username" class="form-control settings-input" placeholder="e.g. juan_dela_cruz" value="<?php echo htmlspecialchars($user['username'] ?? ''); ?>" autocomplete="off" autocapitalize="off">
+                                    <small style="color:#64748b;font-size:12px;">3-50 characters, lowercase letters, numbers, underscores only.</small>
                                 </div>
 
                                 <div class="settings-form-group">
                                     <label for="current_password" class="settings-label">Current Password</label>
                                     <div class="password-input-wrap">
                                         <input type="password" id="current_password" name="current_password" class="form-control settings-input" placeholder="Enter current password">
-                                        <button type="button" class="toggle-password-btn" data-target="current_password" aria-label="Show current password" aria-pressed="false" title="Show password">👁</button>
+                                        <button type="button" class="toggle-password-btn" data-target="current_password" aria-label="Show current password" aria-pressed="false" title="Show password">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px;pointer-events:none;"><path d="M2 12C3.8 7.9 7.5 5 12 5C16.5 5 20.2 7.9 22 12C20.2 16.1 16.5 19 12 19C7.5 19 3.8 16.1 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>
+                                        </button>
                                     </div>
                                 </div>
 
@@ -44,7 +43,9 @@ include __DIR__ . '/../includes/header.php';
                                     <label for="new_password" class="settings-label">New Password</label>
                                     <div class="password-input-wrap">
                                         <input type="password" id="new_password" name="new_password" class="form-control settings-input" placeholder="Enter new password (leave blank to keep current)">
-                                        <button type="button" class="toggle-password-btn" data-target="new_password" aria-label="Show new password" aria-pressed="false" title="Show password">👁</button>
+                                        <button type="button" class="toggle-password-btn" data-target="new_password" aria-label="Show new password" aria-pressed="false" title="Show password">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px;pointer-events:none;"><path d="M2 12C3.8 7.9 7.5 5 12 5C16.5 5 20.2 7.9 22 12C20.2 16.1 16.5 19 12 19C7.5 19 3.8 16.1 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>
+                                        </button>
                                     </div>
                                 </div>
 
@@ -75,7 +76,7 @@ include __DIR__ . '/../includes/header.php';
 <div class="force-setup-popup" id="force-setup-popup" role="dialog" aria-modal="true" aria-labelledby="force-setup-title">
     <div class="force-setup-popup-card">
         <h2 id="force-setup-title">Profile Setup Required</h2>
-        <p>This account was created by Super Admin. Before continuing, please update your Full Name, Email, and set a new Password.</p>
+        <p>This account was created by an Administrator. Before continuing, please update your Full Name and set a new Password.</p>
         <button type="button" id="force-setup-continue" class="btn btn-primary settings-primary-btn">Update Now</button>
     </div>
 </div>
@@ -87,15 +88,17 @@ include __DIR__ . '/../includes/header.php';
 
 <script>
 window.API = window.API || {
-    baseURL: '/School_Facility_Maintenance_System/backend/api',
     async logout() {
-        const response = await fetch(`${this.baseURL}/auth.php?action=logout`);
+        const response = await fetch(window.SFMS_PUBLIC_URL('/api/auth/logout'), {
+            method: 'POST',
+            credentials: 'include'
+        });
         const data = await response.json();
         return data;
     },
     async updateProfile(formData) {
-        const response = await fetch(`${this.baseURL}/users-api.php?action=update_profile`, {
-            method: 'POST',
+        const response = await fetch(window.SFMS_PUBLIC_URL('/api/users/profile'), {
+            method: 'PATCH',
             body: formData,
             credentials: 'include'
         });
@@ -145,7 +148,9 @@ document.querySelectorAll('.toggle-password-btn').forEach((button) => {
         button.setAttribute('aria-pressed', isHidden ? 'true' : 'false');
         button.setAttribute('aria-label', (isHidden ? 'Hide' : 'Show') + ' password');
         button.setAttribute('title', isHidden ? 'Hide password' : 'Show password');
-        button.textContent = isHidden ? '🙈' : '👁';
+        button.innerHTML = isHidden
+            ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px;pointer-events:none;"><path d="M3 3L21 21" stroke-linecap="round"/><path d="M10.6 10.7C10.2 11.1 10 11.5 10 12C10 13.1 10.9 14 12 14C12.5 14 12.9 13.8 13.3 13.4" stroke-linecap="round"/><path d="M9.9 5.2C10.6 5.1 11.3 5 12 5C16.5 5 20.2 7.9 22 12C21.3 13.6 20.2 15 18.8 16.1" stroke-linecap="round"/><path d="M6.3 6.3C4.6 7.5 3.2 9.4 2 12C3.8 16.1 7.5 19 12 19C13.7 19 15.3 18.6 16.6 17.9" stroke-linecap="round"/></svg>'
+            : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px;pointer-events:none;"><path d="M2 12C3.8 7.9 7.5 5 12 5C16.5 5 20.2 7.9 22 12C20.2 16.1 16.5 19 12 19C7.5 19 3.8 16.1 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>';
     });
 });
 
@@ -203,12 +208,17 @@ document.getElementById('profile_picture').addEventListener('change', function(e
 document.getElementById('account-settings-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const fullName = document.getElementById('full_name').value.trim();
-    const email = document.getElementById('email_address').value.trim();
+    const username = document.getElementById('username')?.value.trim().toLowerCase() || '';
     const currentPassword = document.getElementById('current_password').value;
     const newPassword = document.getElementById('new_password').value.trim();
 
-    if (!fullName || !email) {
-        showSettingsToast('Please fill in all required fields', 'error');
+    if (!fullName) {
+        showSettingsToast('Please enter your full name', 'error');
+        return;
+    }
+
+    if (username && !/^[a-z0-9_]{3,50}$/.test(username)) {
+        showSettingsToast('Username must be 3-50 characters: lowercase letters, numbers, underscores only.', 'error');
         return;
     }
 
@@ -231,7 +241,7 @@ document.getElementById('account-settings-form').addEventListener('submit', asyn
             throw new Error(response.message || 'Failed to save account settings');
         }
 
-        const updatedUser = response.data?.user || { full_name: fullName, email: email };
+        const updatedUser = response.data?.user || { full_name: fullName };
         renderHeaderAvatar(updatedUser);
         renderSettingsAvatar(updatedUser);
 
@@ -240,11 +250,24 @@ document.getElementById('account-settings-form').addEventListener('submit', asyn
             Session.set('user', { ...sessionUser, ...updatedUser });
         }
 
-        if (updatedUser.force_profile_update === 0 || updatedUser.force_profile_update === '0' || updatedUser.force_profile_update === false) {
-            document.querySelector('.settings-page')?.classList.remove('force-profile-setup');
+        // ALWAYS remove the force-profile-setup overlay on success to unblock sidebar
+        // This class creates position: fixed; inset: 0; z-index: 1500 which blocks the entire page
+        const settingsPage = document.querySelector('main.settings-page');
+        if (settingsPage && settingsPage.classList.contains('force-profile-setup')) {
+            settingsPage.classList.remove('force-profile-setup');
+        }
+        
+        // Also hide the popup modal
+        const popup = document.getElementById('force-setup-popup');
+        if (popup) {
+            popup.classList.add('is-hidden');
         }
 
         showSettingsToast('Account settings saved successfully!');
+
+        if (forceProfileSetup) {
+            setTimeout(() => { window.location.href = window.SFMS_PUBLIC_URL('/frontend/pages/dashboard.php'); }, 1000);
+        }
     } catch (error) {
         console.error('Save account settings error:', error);
         showSettingsToast(error.message || 'Failed to save account settings', 'error');

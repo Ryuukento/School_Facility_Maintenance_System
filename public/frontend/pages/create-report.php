@@ -82,14 +82,12 @@ include __DIR__ . '/../includes/header.php';
                             </span>
                         </label>
                         <div id="need-change-wrap" class="need-change-wrap" style="display:none;">
-                            <label for="need-change-item" class="need-change-item-label">Replacement Inventory Item</label>
-                            <input type="text" id="need-change-search" class="form-control need-change-search" placeholder="Search inventory item...">
+                            <label for="need-change-search" class="need-change-item-label">Search Replacement Item</label>
+                            <input type="text" id="need-change-search" class="form-control need-change-search" placeholder="Type item name to search..." autocomplete="off">
                             <input type="hidden" id="need-change-item" value="">
                             <div id="need-change-selected" class="need-change-selected" style="display:none;"></div>
-                            <div id="need-change-results" class="need-change-results">
-                                <div class="need-change-empty">Loading inventory items...</div>
-                            </div>
-                            <small class="text-muted d-block need-change-note">Stock will only be deducted after Super Admin approval.</small>
+                            <div id="need-change-results" class="need-change-results" style="display:none;"></div>
+                            <small class="text-muted d-block need-change-note">Stock will only be deducted after Administrator approval.</small>
                         </div>
                     </div>
                 </div>
@@ -105,6 +103,7 @@ include __DIR__ . '/../includes/header.php';
             </form>
         </div>
     </div>
+    </div>
 </main>
 
 <link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/create-report.inline.css">
@@ -112,9 +111,8 @@ include __DIR__ . '/../includes/header.php';
 <script>
 // Ensure API and Session are defined globally
 window.API = window.API || {
-    baseURL: '/School_Facility_Maintenance_System/backend/api',
     async createReport(data) {
-        const response = await fetch(`${this.baseURL}/reports.php?action=create`, {
+        const response = await fetch(window.SFMS_PUBLIC_URL('/api/reports'), {
             method: 'POST',
             credentials: 'include',
             headers: { 'Content-Type': 'application/json' },
@@ -135,7 +133,10 @@ window.API = window.API || {
         return result;
     },
     async logout() {
-        const response = await fetch(`${this.baseURL}/auth.php?action=logout`);
+        const response = await fetch(window.SFMS_PUBLIC_URL('/api/auth/logout'), {
+            method: 'POST',
+            credentials: 'include'
+        });
         const data = await response.json();
         return data;
     }
@@ -196,8 +197,8 @@ document.getElementById('report-form').addEventListener('submit', async (e) => {
     try {
         const response = await window.API.createReport(formData);
         
-        if (response.success) {
-            alertContainer.innerHTML = '<div class="alert alert-success">Report submitted successfully! Na-notify na via email ang Super Admin. Redirecting...</div>';
+            if (response.success) {
+            alertContainer.innerHTML = '<div class="alert alert-success">Report submitted successfully! Na-notify na via email ang Administrator. Redirecting...</div>';
             
             // Redirect after 1 second, include new report ID so we can highlight it on the list
             const newId = response.data && response.data.report_id ? response.data.report_id : '';
@@ -223,16 +224,18 @@ async function loadNeedChangeItems() {
     if (!hiddenInput || !results) return;
 
     try {
-        const response = await fetch('/School_Facility_Maintenance_System/backend/api/items.php?action=list', {
+        const response = await fetch(window.SFMS_PUBLIC_URL('/api/items') + '?per_page=200', {
             credentials: 'include'
         });
         const result = await response.json();
 
-        if (!result.success || !Array.isArray(result.items)) {
+        // Supports both paginator shape (result.data.data) and legacy shape (result.items / result.data.items)
+        const rawItems = result?.data?.data ?? result?.data?.items ?? result?.items ?? [];
+        if (!result.success || !Array.isArray(rawItems)) {
             throw new Error(result.message || 'Failed to load inventory items');
         }
 
-        needChangeItemsCache = result.items.filter((item) => Number(item.quantity || 0) > 0);
+        needChangeItemsCache = rawItems.filter((item) => Number(item.quantity || 0) > 0);
         renderNeedChangeOptions();
     } catch (error) {
         results.innerHTML = '<div class="need-change-empty">Unable to load items</div>';
@@ -246,16 +249,21 @@ function renderNeedChangeOptions() {
     if (!results) return;
 
     const keyword = String(searchInput?.value || '').trim().toLowerCase();
-    const filteredItems = needChangeItemsCache.filter((item) => {
-        if (!keyword) {
-            return true;
-        }
 
-        return String(item.name || '').toLowerCase().includes(keyword);
-    });
+    // Hide dropdown if nothing typed
+    if (!keyword) {
+        results.style.display = 'none';
+        results.innerHTML = '';
+        return;
+    }
+
+    const filteredItems = needChangeItemsCache.filter((item) =>
+        String(item.name || '').toLowerCase().includes(keyword)
+    );
 
     if (!filteredItems.length) {
         results.innerHTML = '<div class="need-change-empty">No matching inventory items</div>';
+        results.style.display = 'block';
         return;
     }
 
@@ -263,6 +271,7 @@ function renderNeedChangeOptions() {
         const isActive = selectedNeedChangeItem && String(selectedNeedChangeItem.id) === String(item.id);
         return `<button type="button" class="need-change-result-item${isActive ? ' active' : ''}" data-item-id="${item.id}">${item.name} <span>(Stock: ${item.quantity})</span></button>`;
     }).join('');
+    results.style.display = 'block';
 }
 
 function updateNeedChangeSelection(item) {
@@ -280,6 +289,9 @@ function updateNeedChangeSelection(item) {
         if (searchInput) {
             searchInput.value = item.name || '';
         }
+        // Hide dropdown after selection
+        const results = document.getElementById('need-change-results');
+        if (results) { results.style.display = 'none'; results.innerHTML = ''; }
     } else {
         selectedDisplay.style.display = 'none';
         selectedDisplay.textContent = '';
@@ -292,6 +304,7 @@ document.getElementById('need-change-toggle')?.addEventListener('change', (event
     const wrap = document.getElementById('need-change-wrap');
     if (wrap) {
         wrap.style.display = event.target.checked ? 'block' : 'none';
+        if (event.target.checked) loadNeedChangeItems();
     }
 });
 
@@ -308,7 +321,13 @@ document.getElementById('need-change-results')?.addEventListener('click', (event
     updateNeedChangeSelection(matchedItem);
 });
 
-loadNeedChangeItems();
+// Close dropdown when clicking outside
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('.need-change-wrap')) {
+        const results = document.getElementById('need-change-results');
+        if (results) results.style.display = 'none';
+    }
+});
 </script>
 
 <?php include __DIR__ . '/../includes/footer.php'; ?>

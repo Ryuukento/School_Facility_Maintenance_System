@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 /**
  * Maintenance Staff Dashboard
  */
@@ -67,7 +67,7 @@ try {
     <link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/styles.css">
     <link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/color-scheme.css">
     <link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/maintenance-dashboard.css">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    <script src="/School_Facility_Maintenance_System/frontend/assets/js/chart-lite.js?v=20260504-5"></script>
 </head>
 <body>
 
@@ -81,7 +81,7 @@ try {
                 <h3 class="stat-value" id="my-assigned-reports"><?php echo (int)$assignedReportsCount; ?></h3>
                 <p class="stat-meta text-muted">Reports waiting on your action</p>
             </div>
-            <div class="stat-icon-chip" aria-hidden="true">📄</div>
+            <div class="stat-icon-chip" aria-hidden="true">&#128196;</div>
         </div>
 
         <div class="stat-card stat-card-pending stat-card-clickable" role="button" tabindex="0" data-href="/School_Facility_Maintenance_System/frontend/pages/buildings-overview.php" aria-label="Open buildings overview">
@@ -90,7 +90,7 @@ try {
                 <h3 class="stat-value" id="my-buildings"><?php echo (int)$buildingsCount; ?></h3>
                 <p class="stat-meta text-muted">Tracked buildings in the system</p>
             </div>
-            <div class="stat-icon-chip" aria-hidden="true">🏢</div>
+            <div class="stat-icon-chip" aria-hidden="true">&#127970;</div>
         </div>
 
         <div class="stat-card stat-card-total stat-card-clickable" role="button" tabindex="0" data-href="/School_Facility_Maintenance_System/frontend/pages/reports.php" aria-label="Open all reports">
@@ -99,7 +99,7 @@ try {
                 <h3 class="stat-value" id="total-reports"><?php echo (int)$totalReportsCount; ?></h3>
                 <p class="stat-meta text-muted">All reports in system</p>
             </div>
-            <div class="stat-icon-chip" aria-hidden="true">📊</div>
+            <div class="stat-icon-chip" aria-hidden="true">&#128202;</div>
         </div>
 
         <div class="stat-card stat-card-pending stat-card-clickable" role="button" tabindex="0" data-href="/School_Facility_Maintenance_System/frontend/pages/reports.php?status=submitted" aria-label="Open pending reports">
@@ -108,7 +108,7 @@ try {
                 <h3 class="stat-value" id="my-pending">0</h3>
                 <p class="stat-meta text-muted">Need action</p>
             </div>
-            <div class="stat-icon-chip" aria-hidden="true">⏳</div>
+            <div class="stat-icon-chip" aria-hidden="true">&#9203;</div>
         </div>
 
         <div class="stat-card stat-card-progress stat-card-clickable" role="button" tabindex="0" data-href="/School_Facility_Maintenance_System/frontend/pages/reports.php?status=in_progress" aria-label="Open in progress reports">
@@ -117,7 +117,7 @@ try {
                 <h3 class="stat-value" id="my-in-progress">0</h3>
                 <p class="stat-meta text-muted">Currently working</p>
             </div>
-            <div class="stat-icon-chip" aria-hidden="true">🔧</div>
+            <div class="stat-icon-chip" aria-hidden="true">&#128295;</div>
         </div>
 
         <div class="stat-card stat-card-completed stat-card-clickable" role="button" tabindex="0" data-href="/School_Facility_Maintenance_System/frontend/pages/reports.php?status=completed" aria-label="Open completed reports">
@@ -126,58 +126,182 @@ try {
                 <h3 class="stat-value" id="my-completed">0</h3>
                 <p class="stat-meta text-muted">Finished reports</p>
             </div>
-            <div class="stat-icon-chip" aria-hidden="true">✅</div>
+            <div class="stat-icon-chip" aria-hidden="true">&#9989;</div>
         </div>
     </div>
 
     <div class="charts-section">
-        <div class="card chart-card status-chart-card">
+        <div class="card chart-card status-chart-card chart-card-clickable" role="button" tabindex="0" data-href="/School_Facility_Maintenance_System/frontend/pages/reports.php" aria-label="Open reports by status">
             <div class="card-header">
                 <div class="status-chart-head-row">
                     <h2>Reports by Status</h2>
-                    <span class="status-live-badge">Live</span>
                 </div>
                 <p class="text-muted mb-0">Current distribution of report statuses.</p>
             </div>
             <div class="card-body status-chart-body">
-                <canvas id="statusChart" class="chart-canvas"></canvas>
+                <div style="position:relative;height:280px;">
+                    <canvas id="statusChart" class="chart-canvas" style="display:block;width:100%;height:280px;"></canvas>
+                </div>
             </div>
         </div>
 
-        <div class="card chart-card priority-chart-card">
+        <div class="card chart-card priority-chart-card chart-card-clickable" role="button" tabindex="0" data-href="/School_Facility_Maintenance_System/frontend/pages/reports.php" aria-label="Open reports by priority">
             <div class="card-header">
                 <h2>Reports by Priority</h2>
                 <p class="text-muted mb-0">Priority levels across assigned reports.</p>
             </div>
             <div class="card-body">
-                <canvas id="priorityChart" class="chart-canvas"></canvas>
+                <div style="position:relative;height:280px;">
+                    <canvas id="priorityChart" class="chart-canvas" style="display:block;width:100%;height:280px;"></canvas>
+                </div>
             </div>
         </div>
     </div>
 
-    <div class="card recent-reports-card">
-        <div class="card-header d-flex justify-between align-center recent-reports-header">
-            <h3 style="margin: 0;">Recent Reports</h3>
-            <a href="/School_Facility_Maintenance_System/frontend/pages/reports.php?status_group=assigned_to_me" class="recent-reports-link">View all &rarr;</a>
+    <div class="recent-reports-stack">
+        <div class="card recent-reports-card">
+            <div class="card-header d-flex justify-between align-center recent-reports-header">
+                <h3 style="margin: 0;">Recent Reports</h3>
+                <a href="/School_Facility_Maintenance_System/frontend/pages/reports.php?status_group=assigned_to_me" class="recent-reports-link">View all &rarr;</a>
+            </div>
+            <div class="card-body recent-reports-body">
+                <p class="text-muted recent-reports-subtitle">Showing today's reports assigned to you or created by you.</p>
+                <div id="staff-recent-reports-container" class="recent-reports-container">
+                    <div class="loading">Loading reports...</div>
+                </div>
+            </div>
         </div>
-        <div class="card-body recent-reports-body">
-            <p class="text-muted recent-reports-subtitle">Showing today's reports assigned to you or created by you.</p>
-            <div id="staff-recent-reports-container" class="recent-reports-container">
-                <div class="loading">Loading reports...</div>
+
+        <div class="card recent-reports-card inventory-status-card">
+            <div class="card-header d-flex justify-between align-center recent-reports-header">
+                <h3 style="margin:0;">Inventory Status</h3>
+                <div style="display:flex;align-items:center;gap:10px;">
+                    <span id="staff-inventory-summary" style="font-size:13px;color:#94a3b8;"></span>
+                    <button type="button" id="staff-inventory-export-btn" class="btn btn-secondary" style="font-size:12px;padding:6px 12px;border-radius:8px;">Export CSV</button>
+                    <a href="/School_Facility_Maintenance_System/frontend/pages/inventory.php" class="recent-reports-link">View all &rarr;</a>
+                </div>
+            </div>
+            <div class="card-body">
+                <p class="text-muted recent-reports-subtitle">Items needing attention — low stock and out of stock.</p>
+                <div id="staff-inventory-widget"><div class="loading">Loading inventory...</div></div>
             </div>
         </div>
     </div>
-
 </main>
 
-<link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/staff-dashboard.inline.css?v=20260424-2">
+<link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/staff-dashboard.inline.css?v=20260507-1">
 
 <?php include __DIR__ . '/../includes/footer.php'; ?>
 
 <script>
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadDashboardMonthSelection();
+    window.addEventListener('sfms:monthSelected', onDashboardMonthSelected);
+    loadStaffDashboardData();
+});
+
+const DASHBOARD_MONTH_STORAGE_KEY = 'sfms:dashboardMonthSelection';
+let selectedMonth = (new Date().getMonth() + 1);
+let selectedYear = (new Date().getFullYear());
+
+function normalizeMonthSelection(year, month) {
+    const normalizedYear = Number(year);
+    const normalizedMonth = Number(month);
+
+    if (!Number.isInteger(normalizedYear) || normalizedYear < 2000) {
+        return null;
+    }
+
+    if (!Number.isInteger(normalizedMonth) || normalizedMonth < 1 || normalizedMonth > 12) {
+        return null;
+    }
+
+    return { year: normalizedYear, month: normalizedMonth };
+}
+
+function loadDashboardMonthSelection() {
+    try {
+        const storedValue = localStorage.getItem(DASHBOARD_MONTH_STORAGE_KEY);
+        if (!storedValue) {
+            return;
+        }
+
+        const parsedValue = JSON.parse(storedValue);
+        const normalized = normalizeMonthSelection(parsedValue.year, parsedValue.month);
+        if (normalized) {
+            selectedYear = normalized.year;
+            selectedMonth = normalized.month;
+        }
+    } catch (error) {
+        console.warn('Unable to load staff dashboard month selection', error);
+    }
+}
+
+function saveDashboardMonthSelection(year, month) {
+    const normalized = normalizeMonthSelection(year, month);
+    if (!normalized) {
+        return;
+    }
+
+    selectedYear = normalized.year;
+    selectedMonth = normalized.month;
+
+    try {
+        localStorage.setItem(DASHBOARD_MONTH_STORAGE_KEY, JSON.stringify(normalized));
+    } catch (error) {
+        console.warn('Unable to persist staff dashboard month selection', error);
+    }
+}
+
+function onDashboardMonthSelected(event) {
+    const detail = event && event.detail ? event.detail : {};
+    const normalized = normalizeMonthSelection(detail.year, detail.month);
+
+    if (!normalized) {
+        return;
+    }
+
+    saveDashboardMonthSelection(normalized.year, normalized.month);
+    loadStaffDashboardData();
+}
+
 let staffStatusChart = null;
 let staffPriorityChart = null;
 const currentStaffUserId = <?php echo $currentUserId; ?>;
+
+window.UI = window.UI || {
+    getPriorityBadge(priority) {
+        const colors = {
+            'low': 'badge-priority-low',
+            'medium': 'badge-priority-medium',
+            'high': 'badge-priority-high',
+            'urgent': 'badge-priority-urgent',
+            'critical': 'badge-priority-critical'
+        };
+        return colors[priority] || 'badge-priority-low';
+    },
+
+    getStatusBadge(status) {
+        const colors = {
+            'submitted': 'badge-info',
+            'assigned': 'badge-warning',
+            'in_progress': 'badge-warning',
+            'completed': 'badge-success',
+            'closed': 'badge-success',
+            'draft': 'badge-info'
+        };
+        return colors[status] || 'badge-info';
+    },
+
+    formatDate(date) {
+        return new Date(date).toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
+        });
+    }
+};
 
 function refreshStaffChartsForTheme() {
     const isLightMode = document.documentElement.getAttribute('data-theme-resolved') === 'light';
@@ -216,9 +340,10 @@ function refreshStaffChartsForTheme() {
     }
 }
 
+// ========== LOAD STAFF DASHBOARD DATA WITH MONTH/YEAR =============
 async function loadStaffDashboardData() {
     try {
-        const response = await fetch('/School_Facility_Maintenance_System/backend/api/maintenance-reports-api.php?action=list&per_page=200');
+        const response = await fetch(window.SFMS_PUBLIC_URL('/api/reports?per_page=200&status_group=assigned_to_me'), { credentials: 'include' });
         const data = await response.json();
 
         if (!data.success || !data.data || !Array.isArray(data.data.reports)) {
@@ -439,16 +564,69 @@ function renderRecentReports(reports) {
 
 async function loadStaffChartData() {
     try {
-        const response = await fetch('/School_Facility_Maintenance_System/backend/api/maintenance-dashboard-api.php?action=charts');
+        const response = await fetch(
+            window.SFMS_PUBLIC_URL(`/api/dashboard/maintenance/charts?year=${selectedYear}&month=${selectedMonth}`),
+            { credentials: 'include' }
+        );
         const chartData = await response.json();
 
         if (!chartData.success || !chartData.data) {
+            await _loadStaffChartFromReports();
+            return;
+        }
+
+        // Fall back to all-time when the selected month has no data
+        const hasData = (chartData.data.status_data?.values || []).some((v) => Number(v) > 0);
+        if (!hasData) {
+            await _loadStaffChartFromReports();
             return;
         }
 
         initializeStaffCharts(chartData.data);
     } catch (error) {
         console.error('Failed to load staff chart data', error);
+        await _loadStaffChartFromReports();
+    }
+}
+
+async function _loadStaffChartFromReports() {
+    try {
+        const response = await fetch(
+            window.SFMS_PUBLIC_URL('/api/reports?per_page=200'),
+            { credentials: 'include' }
+        );
+        const data = await response.json();
+        if (!data.success) return;
+
+        const reports = Array.isArray(data.data?.reports) ? data.data.reports
+            : Array.isArray(data.data?.data) ? data.data.data : [];
+
+        const statuses   = { submitted: 0, in_progress: 0, completed: 0 };
+        const priorities = { low: 0, medium: 0, high: 0, critical: 0 };
+
+        reports.forEach((r) => {
+            const s = String(r.status || '').toLowerCase();
+            if (s === 'submitted' || s === 'assigned')       statuses.submitted++;
+            else if (s === 'in_progress')                    statuses.in_progress++;
+            else if (s === 'completed' || s === 'closed')    statuses.completed++;
+
+            const p  = String(r.priority || '').toLowerCase();
+            const np = p === 'urgent' ? 'critical' : p;
+            if (priorities[np] !== undefined) priorities[np]++;
+        });
+
+        initializeStaffCharts({
+            status_data: {
+                labels: ['submitted', 'in_progress', 'completed'],
+                values: [statuses.submitted, statuses.in_progress, statuses.completed],
+            },
+            priority_data: {
+                labels: ['low', 'medium', 'high', 'critical'],
+                values: [priorities.low, priorities.medium, priorities.high, priorities.critical],
+            },
+        });
+    } catch (e) {
+        console.error('Failed to load all-time staff chart data', e);
     }
 }
 
@@ -506,13 +684,13 @@ function initializeStaffCharts(data) {
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
 
-            ctx.font = '700 22px "Segoe UI", sans-serif';
+            ctx.font = '700 28px "Segoe UI", sans-serif';
             ctx.fillStyle = centerTextColor;
-            ctx.fillText(String(statusTotal), x, y - 4);
+            ctx.fillText(String(statusTotal), x, y - 7);
 
-            ctx.font = '500 11px "Segoe UI", sans-serif';
+            ctx.font = '500 13px "Segoe UI", sans-serif';
             ctx.fillStyle = centerMutedColor;
-            ctx.fillText('total', x, y + 14);
+            ctx.fillText('total', x, y + 15);
             ctx.restore();
         }
     };
@@ -542,6 +720,7 @@ function initializeStaffCharts(data) {
                 responsive: true,
                 maintainAspectRatio: false,
                 cutout: '68%',
+                radiusScale: 1.15,
                 plugins: {
                     legend: {
                         position: 'right',
@@ -550,9 +729,13 @@ function initializeStaffCharts(data) {
                             color: chartMutedText,
                             usePointStyle: true,
                             pointStyle: 'circle',
-                            boxWidth: 8,
-                            boxHeight: 8,
-                            padding: 14
+                            boxWidth: 10,
+                            boxHeight: 10,
+                            padding: 16,
+                            font: {
+                                size: 14,
+                                weight: '600'
+                            }
                         }
                     },
                     tooltip: {
@@ -616,6 +799,20 @@ function initializeStaffCharts(data) {
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                onClick: (event, elements) => {
+                    if (!elements || !elements.length) {
+                        return;
+                    }
+
+                    const idx = elements[0].index;
+                    const priorities = ['low', 'medium', 'high', 'critical'];
+                    const priority = priorities[idx];
+                    if (!priority) {
+                        return;
+                    }
+
+                    window.location.href = `/School_Facility_Maintenance_System/frontend/pages/reports.php?priority=${encodeURIComponent(priority)}`;
+                },
                 scales: {
                     y: {
                         beginAtZero: true,
@@ -651,7 +848,7 @@ function initializeStaffCharts(data) {
 }
 
 function initializeClickableCards() {
-    document.querySelectorAll('.stat-card-clickable').forEach((card) => {
+    document.querySelectorAll('.stat-card-clickable, .chart-card-clickable').forEach((card) => {
         const navigate = () => {
             const target = card.getAttribute('data-href');
             if (target) {
@@ -671,6 +868,8 @@ function initializeClickableCards() {
 
 document.addEventListener('DOMContentLoaded', () => {
     loadStaffDashboardData();
+    loadStaffInventoryWidget();
+    document.getElementById('staff-inventory-export-btn')?.addEventListener('click', exportInventoryCSV);
     loadStaffChartData();
     initializeClickableCards();
 
@@ -686,8 +885,97 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     themeObserver.observe(root, { attributes: true, attributeFilter: ['data-theme-resolved'] });
 });
+let staffInventoryAllItems = [];
+
+async function loadStaffInventoryWidget() {
+    const widget = document.getElementById('staff-inventory-widget');
+    const summary = document.getElementById('staff-inventory-summary');
+    if (!widget) return;
+    try {
+        const res = await fetch(window.SFMS_PUBLIC_URL('/api/inventory-stock'), { credentials: 'same-origin' });
+        if (!res.ok) {
+            throw new Error(`HTTP error! status: ${res.status}`);
+        }
+        const data = await res.json();
+        if (!data.success || !Array.isArray(data.data?.items)) {
+            console.warn('Invalid inventory response:', data);
+            widget.innerHTML = '<p class="recent-reports-empty">No inventory data available.</p>';
+            return;
+        }
+
+        staffInventoryAllItems = data.data.items;
+        const low = staffInventoryAllItems.filter(i => i.status === 'low_stock');
+        const out = staffInventoryAllItems.filter(i => i.status === 'out_of_stock');
+        const ok = staffInventoryAllItems.filter(i => i.status === 'available');
+
+        if (summary) {
+            summary.innerHTML = `<span style="color:#f87171;margin-right:8px;">&#9679; ${out.length} Out of Stock</span><span style="color:#fbbf24;margin-right:8px;">&#9679; ${low.length} Low Stock</span><span style="color:#34d399;">&#9679; ${ok.length} OK</span>`;
+        }
+
+        const attention = [...out, ...low];
+        if (!attention.length) {
+            widget.innerHTML = '<p class="recent-reports-empty">&#10003; All items are sufficiently stocked.</p>';
+            return;
+        }
+
+        const rows = attention.map(item => {
+            const badge = item.status === 'out_of_stock'
+                ? '<span class="badge badge-danger">OUT OF STOCK</span>'
+                : '<span class="badge badge-warning">LOW STOCK</span>';
+            return `<div class="recent-report-table-row">
+                <div class="recent-report-cell recent-report-main">
+                    <strong>${item.name || '-'}</strong>
+                    <span>${item.inventory_room_name || 'Inventory Room'}</span>
+                </div>
+                <div class="recent-report-cell">${item.category_name || 'Uncategorized'}</div>
+                <div class="recent-report-cell">${Number(item.quantity ?? 0)} remaining</div>
+                <div class="recent-report-cell">${badge}</div>
+            </div>`;
+        }).join('');
+
+        widget.innerHTML = `<div class="recent-reports-table-wrap">
+            <div class="recent-reports-table-head">
+                <div>Item</div><div>Category</div><div>Quantity</div><div>Status</div>
+            </div>
+            <div class="recent-reports-table-body">${rows}</div>
+        </div>`;
+    } catch (e) {
+        console.error('Failed to load inventory:', e);
+        widget.innerHTML = '<p class="recent-reports-empty">Could not load inventory data.</p>';
+    }
+}
+
+function exportInventoryCSV() {
+    const items = staffInventoryAllItems;
+    if (!items.length) { alert('No inventory data to export.'); return; }
+
+    const headers = ['Item', 'Category', 'Location', 'Quantity', 'Threshold', 'Status'];
+    const rows = items.map(i => [
+        i.name || '',
+        i.category_name || 'Uncategorized',
+        i.inventory_room_name || '',
+        String(i.quantity ?? 0),
+        String(i.reorder_level ?? '-'),
+        String(i.status || '').replace(/_/g, ' ').toUpperCase()
+    ]);
+
+    const csvEscape = v => `"${String(v).replace(/"/g, '""')}"`;
+    const csv = '\uFEFF' + [headers, ...rows].map(r => r.map(csvEscape).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'inventory_status_' + new Date().toISOString().slice(0,10) + '.csv';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+}
 </script>
 
 </body>
 </html>
+
+
+
 

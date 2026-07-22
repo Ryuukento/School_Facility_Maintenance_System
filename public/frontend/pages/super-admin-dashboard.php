@@ -1,5 +1,5 @@
 <?php
-// Super Admin Dashboard
+// Admin Dashboard
 // System-wide overview, statistics, and management
 
 if (session_status() === PHP_SESSION_NONE) {
@@ -28,8 +28,8 @@ $pageTitle = 'System Administration Dashboard';
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?php echo $pageTitle; ?></title>
     <link rel="stylesheet" href="../assets/css/maintenance-dashboard.css">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
-        <link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/super-admin-dashboard.inline.css?v=20260424-1">
+    <script src="/School_Facility_Maintenance_System/frontend/assets/js/chart-lite.js?v=20260504-5"></script>
+    <link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/super-admin-dashboard.inline.css?v=20260424-1">
 </head>
 <body>
     <!-- Include Header/Navigation -->
@@ -41,9 +41,16 @@ $pageTitle = 'System Administration Dashboard';
                 <h1>System Administration Dashboard</h1>
                 <p class="dashboard-subtitle">System-wide overview and statistics</p>
             </div>
-            <div style="display: flex; gap: 10px;">
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <label for="dashboard-month-picker" style="font-size:13px;margin-right:6px;">Browse by Month:</label>
+                <select id="dashboard-month-picker" style="padding:6px 10px;border-radius:6px;">
+                    <!-- Month options will be populated by JS -->
+                </select>
+                <select id="dashboard-year-picker" style="padding:6px 10px;border-radius:6px;">
+                    <!-- Year options will be populated by JS -->
+                </select>
                 <a href="/School_Facility_Maintenance_System/frontend/pages/maintenance-reports-list.php?last_month=1" class="btn btn-primary" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; text-decoration: none; border-radius: 6px; background: #8F00CC; color: white; font-weight: 500; white-space: nowrap;">
-                    <span>ðŸ“…</span> Last Month Reports
+                    <span>📅</span> Last Month Reports
                 </a>
             </div>
         </div>
@@ -55,7 +62,7 @@ $pageTitle = 'System Administration Dashboard';
 
         <!-- Charts Section -->
         <div class="charts-section">
-            <div class="chart-container">
+            <div class="chart-container chart-card-clickable" role="button" tabindex="0" data-href="/School_Facility_Maintenance_System/frontend/pages/reports.php" aria-label="Open reports by status">
                 <div class="chart-title">Reports by Status</div>
                 <div class="chart-canvas">
                     <canvas id="statusChart"></canvas>
@@ -64,7 +71,7 @@ $pageTitle = 'System Administration Dashboard';
                     <div class="loading">Loading status summary...</div>
                 </div>
             </div>
-            <div class="chart-container priority-chart-card">
+            <div class="chart-container priority-chart-card chart-card-clickable" role="button" tabindex="0" data-href="/School_Facility_Maintenance_System/frontend/pages/reports.php" aria-label="Open reports by priority">
                 <div class="chart-title">Reports by Priority</div>
                 <div class="chart-canvas">
                     <canvas id="priorityChart"></canvas>
@@ -159,6 +166,153 @@ $pageTitle = 'System Administration Dashboard';
     </div>
 
     <script>
+        // ========== MONTH/YEAR PICKER LOGIC ==========
+        // ========== MONTH/YEAR PICKER LOGIC ==========
+        const DASHBOARD_MONTH_STORAGE_KEY = 'sfms:dashboardMonthSelection';
+
+        function normalizeMonthSelection(year, month) {
+            const parsedYear = Number(year);
+            const parsedMonth = Number(month);
+
+            if (!Number.isInteger(parsedYear) || !Number.isInteger(parsedMonth)) {
+                return null;
+            }
+
+            if (parsedMonth < 1 || parsedMonth > 12) {
+                return null;
+            }
+
+            return {
+                year: parsedYear,
+                month: parsedMonth
+            };
+        }
+
+        function loadDashboardMonthSelection() {
+            try {
+                const storedValue = localStorage.getItem(DASHBOARD_MONTH_STORAGE_KEY);
+                if (!storedValue) {
+                    return;
+                }
+
+                const parsedValue = JSON.parse(storedValue);
+                const normalized = normalizeMonthSelection(parsedValue.year, parsedValue.month);
+                if (normalized) {
+                    selectedYear = normalized.year;
+                    selectedMonth = normalized.month;
+                }
+            } catch (error) {
+                console.warn('Unable to load dashboard month selection', error);
+            }
+        }
+
+        function saveDashboardMonthSelection(year, month) {
+            const normalized = normalizeMonthSelection(year, month);
+            if (!normalized) {
+                return;
+            }
+
+            selectedYear = normalized.year;
+            selectedMonth = normalized.month;
+
+            try {
+                localStorage.setItem(DASHBOARD_MONTH_STORAGE_KEY, JSON.stringify(normalized));
+            } catch (error) {
+                console.warn('Unable to persist dashboard month selection', error);
+            }
+        }
+
+        function populateMonthYearPickers() {
+            const monthPicker = document.getElementById('dashboard-month-picker');
+            const yearPicker = document.getElementById('dashboard-year-picker');
+            if (!monthPicker || !yearPicker) return;
+            const months = [
+                'January', 'February', 'March', 'April', 'May', 'June',
+                'July', 'August', 'September', 'October', 'November', 'December'
+            ];
+            monthPicker.innerHTML = months.map((m, i) => `<option value="${i+1}">${m}</option>`).join('');
+            const currentYear = new Date().getFullYear();
+            let years = [];
+            for (let y = currentYear; y >= currentYear - 5; y--) years.push(y);
+            yearPicker.innerHTML = years.map(y => `<option value="${y}">${y}</option>`).join('');
+            monthPicker.value = String(selectedMonth);
+            yearPicker.value = String(selectedYear);
+        }
+
+        let selectedMonth = (new Date().getMonth() + 1);
+        let selectedYear = (new Date().getFullYear());
+
+        function onMonthYearChange() {
+            const monthPicker = document.getElementById('dashboard-month-picker');
+            const yearPicker = document.getElementById('dashboard-year-picker');
+            selectedMonth = parseInt(monthPicker.value, 10);
+            selectedYear = parseInt(yearPicker.value, 10);
+            saveDashboardMonthSelection(selectedYear, selectedMonth);
+            loadDashboardData();
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            loadDashboardMonthSelection();
+            populateMonthYearPickers();
+            document.getElementById('dashboard-month-picker').addEventListener('change', onMonthYearChange);
+            document.getElementById('dashboard-year-picker').addEventListener('change', onMonthYearChange);
+
+            window.addEventListener('sfms:monthSelected', function(event) {
+                const detail = event.detail || {};
+                const year = Number(detail.year);
+                const month = Number(detail.month);
+
+                if (!year || !month) {
+                    return;
+                }
+
+                saveDashboardMonthSelection(year, month);
+
+                const monthPicker = document.getElementById('dashboard-month-picker');
+                const yearPicker = document.getElementById('dashboard-year-picker');
+                if (monthPicker) {
+                    monthPicker.value = String(month);
+                }
+                if (yearPicker) {
+                    yearPicker.value = String(year);
+                }
+
+                loadDashboardData();
+            });
+
+            window.addEventListener('storage', function(event) {
+                if (event.key !== DASHBOARD_MONTH_STORAGE_KEY || !event.newValue) {
+                    return;
+                }
+
+                try {
+                    const parsedValue = JSON.parse(event.newValue);
+                    const normalized = normalizeMonthSelection(parsedValue.year, parsedValue.month);
+                    if (!normalized) {
+                        return;
+                    }
+
+                    selectedYear = normalized.year;
+                    selectedMonth = normalized.month;
+
+                    const monthPicker = document.getElementById('dashboard-month-picker');
+                    const yearPicker = document.getElementById('dashboard-year-picker');
+                    if (monthPicker) {
+                        monthPicker.value = String(normalized.month);
+                    }
+                    if (yearPicker) {
+                        yearPicker.value = String(normalized.year);
+                    }
+
+                    loadDashboardData();
+                } catch (error) {
+                    console.warn('Unable to sync dashboard month selection from storage', error);
+                }
+            });
+
+            loadDashboardData();
+            initializeClickableCards();
+        });
         let statusChart, priorityChart, departmentChart, trendChart;
         let latestChartData = null;
         const APP_BASE = '/School_Facility_Maintenance_System';
@@ -334,26 +488,52 @@ $pageTitle = 'System Administration Dashboard';
             }
         }
 
+        function initializeClickableCards() {
+            document.querySelectorAll('.stat-card-clickable, .chart-card-clickable').forEach((card) => {
+                if (card.dataset.sfmsClickableBound === 'true') {
+                    return;
+                }
+
+                card.dataset.sfmsClickableBound = 'true';
+
+                const navigate = () => {
+                    const target = card.getAttribute('data-href');
+                    if (target) {
+                        window.location.href = target;
+                    }
+                };
+
+                card.addEventListener('click', navigate);
+                card.addEventListener('keydown', (event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        navigate();
+                    }
+                });
+            });
+        }
+
         // Load all dashboard data
         async function loadDashboardData() {
             try {
-                // Load statistics
-                const statsResponse = await fetch(`${APP_BASE}/backend/api/super-admin-dashboard-api.php?action=getDashboardStats`);
+                // Laging may month/year sa API calls
+                const statsUrl = window.SFMS_PUBLIC_URL(`/api/dashboard/super-admin/stats?year=${selectedYear}&month=${selectedMonth}`);
+                const chartUrl = window.SFMS_PUBLIC_URL(`/api/dashboard/super-admin/charts?year=${selectedYear}&month=${selectedMonth}`);
+
+                const statsResponse = await fetch(statsUrl, { cache: 'no-store' });
                 const statsData = await statsResponse.json();
                 renderStatistics(statsData);
 
-                // Load chart data
-                const chartResponse = await fetch(`${APP_BASE}/backend/api/super-admin-dashboard-api.php?action=getChartData`);
+                const chartResponse = await fetch(chartUrl, { cache: 'no-store' });
                 const chartData = await chartResponse.json();
                 renderCharts(chartData);
 
-                // Load system overview
-                const overviewResponse = await fetch(`${APP_BASE}/backend/api/super-admin-dashboard-api.php?action=getSystemOverview`);
+                // System overview and activity are not month-filtered
+                const overviewResponse = await fetch(window.SFMS_PUBLIC_URL('/api/dashboard/super-admin/overview'));
                 const overviewData = await overviewResponse.json();
                 renderOverview(overviewData);
 
-                // Load recent activity
-                const activityResponse = await fetch(`${APP_BASE}/backend/api/super-admin-dashboard-api.php?action=getRecentActivity`);
+                const activityResponse = await fetch(window.SFMS_PUBLIC_URL('/api/dashboard/super-admin/activity'));
                 const activityData = await activityResponse.json();
                 renderActivity(activityData);
 
@@ -377,9 +557,9 @@ $pageTitle = 'System Administration Dashboard';
                     </div>
                     <div class="stat-value">${data.totalUsers}</div>
                     <div class="stat-detail">
-                        Super Admin: ${data.roleBreakdown.super_admin || 0}<br>
-                        Dept Admin: ${data.roleBreakdown.department_admin || 0}<br>
-                        Staff: ${data.roleBreakdown.maintenance_staff || 0}
+                        Administrator: ${data.roleBreakdown.super_admin || 0}<br>
+                        Head: ${data.roleBreakdown.maintenance_admin || 0}<br>
+                        Maintenance Staff: ${data.roleBreakdown.maintenance_staff || 0}
                     </div>
                 </div>
 
@@ -402,6 +582,17 @@ $pageTitle = 'System Administration Dashboard';
                     <div class="stat-value">${data.totalDepartments}</div>
                     <div class="stat-detail">
                         Active maintenance departments
+                    </div>
+                </div>
+
+                <div class="stat-card buildings stat-card-clickable stat-card-action" role="button" tabindex="0" data-href="/School_Facility_Maintenance_System/frontend/pages/buildings-overview.php" aria-label="Open buildings overview">
+                    <div class="stat-head">
+                        <span class="stat-icon-chip" aria-hidden="true">&#127970;</span>
+                        <div class="stat-label">Buildings Overview</div>
+                    </div>
+                    <div class="stat-value">${data.buildingsOverview || 0}</div>
+                    <div class="stat-detail">
+                        Browse buildings and rooms
                     </div>
                 </div>
 
@@ -452,6 +643,7 @@ $pageTitle = 'System Administration Dashboard';
 
             // Render reports overview badges
             renderReportsOverview(data);
+            initializeClickableCards();
         }
 
         function renderReportsOverview(data) {
@@ -664,6 +856,20 @@ $pageTitle = 'System Administration Dashboard';
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    onClick: (event, elements) => {
+                        if (!elements || !elements.length) {
+                            return;
+                        }
+
+                        const idx = elements[0].index;
+                        const priorities = ['low', 'medium', 'high', 'critical', 'urgent'];
+                        const priority = priorities[idx] || priorities[Math.min(idx, priorities.length - 1)];
+                        if (!priority) {
+                            return;
+                        }
+
+                        window.location.href = `/School_Facility_Maintenance_System/frontend/pages/reports.php?priority=${encodeURIComponent(priority)}`;
+                    },
                     plugins: {
                         legend: {
                             display: false
@@ -955,14 +1161,13 @@ $pageTitle = 'System Administration Dashboard';
                 const dateTo = lastMonthFilters.date_to || defaultRange.end;
                 
                 const params = new URLSearchParams({
-                    action: 'list',
                     per_page: 100,
                     date_from: dateFrom,
                     date_to: dateTo,
                     ...lastMonthFilters
                 });
 
-                const response = await fetch(`${APP_BASE}/backend/api/maintenance-reports-api.php?${params}`);
+                const response = await fetch(window.SFMS_PUBLIC_URL('/api/reports') + '?' + params.toString(), { credentials: 'include' });
                 const data = await response.json();
 
                 if (data.success && data.data.reports) {

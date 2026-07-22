@@ -31,6 +31,7 @@ class MaintenanceReport extends Model
         'need_change_approved_by',
         'need_change_approved_at',
         'need_change_deducted_at',
+        'completion_proof_image',
     ];
 
     protected function casts(): array

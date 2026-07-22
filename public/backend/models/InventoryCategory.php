@@ -11,14 +11,19 @@ class InventoryCategory {
     }
 
     public function getAll($activeOnly = false) {
-        $sql = "SELECT * FROM inventory_categories";
+        $sql = "SELECT c.*,
+                       COUNT(i.id) AS total_items,
+                       COALESCE(SUM(CASE WHEN i.item_type = 'inventory_stock' THEN i.quantity ELSE 0 END), 0) AS total_stock_quantity
+                FROM inventory_categories c
+                LEFT JOIN items i ON i.category_id = c.id";
         $params = [];
 
         if ($activeOnly) {
-            $sql .= " WHERE is_active = 1";
+            $sql .= " WHERE c.is_active = 1";
         }
 
-        $sql .= " ORDER BY sort_order ASC, name ASC";
+        $sql .= " GROUP BY c.id, c.name, c.code, c.default_low_stock_threshold, c.allow_threshold_override, c.is_active, c.sort_order, c.created_at, c.updated_at
+                  ORDER BY c.sort_order ASC, c.name ASC";
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute($params);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);

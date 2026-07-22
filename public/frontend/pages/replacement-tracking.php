@@ -10,7 +10,7 @@ if (!isset($_SESSION['user'])) {
 }
 
 $user = $_SESSION['user'];
-$allowedRoles = ['super_admin', 'admin_maintenance', 'maintenance_admin', 'maintenance_staff'];
+$allowedRoles = ['super_admin', 'maintenance_admin', 'maintenance_staff'];
 if (!in_array($user['role'] ?? '', $allowedRoles, true)) {
     header('Location: /School_Facility_Maintenance_System/frontend/pages/dashboard.php');
     exit;
@@ -26,16 +26,6 @@ include __DIR__ . '/../includes/header.php';
 <link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/replacement-tracking.inline.css?v=20260424-1">
 
 <main class="container maintenance-admin-dashboard-page inventory-page replacement-tracking-page">
-    <div class="page-header mb-lg inventory-header-row replacement-header-row">
-        <div>
-            <h1 class="inventory-title">Replacement Tracking</h1>
-            <p class="text-muted inventory-subtitle">Monitor damaged, broken, and worn-out items that need replacement or disposal.</p>
-        </div>
-        <div class="inventory-header-actions">
-            <a href="/School_Facility_Maintenance_System/frontend/pages/inventory.php" class="btn btn-secondary">Back to Inventory</a>
-        </div>
-    </div>
-
     <div class="replacement-summary-grid" id="replacement-summary-grid">
         <div class="summary-card replacement-summary-card tone-pending">
             <div class="summary-card-content">
@@ -100,7 +90,7 @@ include __DIR__ . '/../includes/header.php';
 <?php include __DIR__ . '/../includes/footer.php'; ?>
 
 <script>
-const REPLACEMENT_TRACKING_API_BASE = '/School_Facility_Maintenance_System/backend/api/replacement-tracking-api.php';
+const REPLACEMENT_TRACKING_API_BASE = window.SFMS_PUBLIC_URL('/api/replacement-tracking');
 
 let replacementTrackingRecords = [];
 let replacementTrackingFilters = {

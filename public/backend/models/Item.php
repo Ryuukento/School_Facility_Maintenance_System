@@ -30,6 +30,52 @@ class Item {
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    public function getAllPaginated($itemType = null, $q = '', $perPage = 20, $offset = 0) {
+        $whereClauses = [];
+        $params = [];
+
+        if ($itemType !== null && $itemType !== '') {
+            $whereClauses[] = 'i.item_type = ?';
+            $params[] = $itemType;
+        }
+
+        $q = trim((string)$q);
+        if ($q !== '') {
+            $like = '%' . strtolower($q) . '%';
+            $whereClauses[] = "(LOWER(i.name) LIKE ? OR LOWER(COALESCE(i.brand, '')) LIKE ? OR LOWER(COALESCE(i.model, '')) LIKE ?)";
+            $params[] = $like;
+            $params[] = $like;
+            $params[] = $like;
+        }
+
+        $whereSql = '';
+        if (count($whereClauses) > 0) {
+            $whereSql = ' WHERE ' . implode(' AND ', $whereClauses);
+        }
+
+        // total count
+        $countSql = "SELECT COUNT(*) as total FROM items i {$whereSql}";
+        $countStmt = $this->pdo->prepare($countSql);
+        $countStmt->execute($params);
+        $total = (int)($countStmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0);
+
+        $sql = "SELECT i.*, r.name as room_name, c.name as category_name,
+                       COALESCE(i.low_stock_threshold_override, c.default_low_stock_threshold) as effective_low_stock_threshold
+                FROM items i
+                LEFT JOIN rooms r ON i.room_id = r.id
+                LEFT JOIN inventory_categories c ON i.category_id = c.id
+                {$whereSql}
+                ORDER BY i.name
+                LIMIT ? OFFSET ?";
+
+        $execParams = array_merge($params, [$perPage, $offset]);
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($execParams);
+        $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        return ['items' => $items, 'total' => $total];
+    }
+
     public function getByRoom($roomId) {
         $stmt = $this->pdo->prepare(
             "SELECT i.*, c.name as category_name,

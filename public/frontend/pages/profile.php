@@ -15,54 +15,45 @@ if (!isset($_SESSION['user'])) {
 
 $pageTitle = 'Profile - SFMS';
 $currentUser = $_SESSION['user'];
+include __DIR__ . '/../includes/header.php';
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo htmlspecialchars($pageTitle); ?></title>
-    <link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/styles.css">
-    <link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/color-scheme.css">
-</head>
-<body>
 
 <main class="container">
-    <div class="card" style="max-width: 600px; margin: 0 auto;">
-        <div class="card-header">
-            <h2>User Profile</h2>
-            <p class="text-muted mb-0">Your account information</p>
-        </div>
-        
-        <div class="card-body">
-            <div id="alert-container"></div>
+    <div class="card" style="max-width: 760px; margin: 0 auto;">
+            <div class="card-header">
+                <h2>User Profile</h2>
+                <p class="text-muted mb-0">Your account information</p>
+            </div>
             
-            <?php if ($currentUser): ?>
-                <div style="text-align: center; margin-bottom: 30px;">
-                    <div style="width: 80px; height: 80px; background: #4a9eff; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 2rem; margin: 0 auto;">
-                        <?php echo strtoupper(substr($currentUser['full_name'], 0, 1)); ?>
+            <div class="card-body">
+                <div id="alert-container"></div>
+                
+                <?php if ($currentUser): ?>
+                    <div style="text-align: center; margin-bottom: 30px;">
+                        <div style="width: 80px; height: 80px; background: linear-gradient(135deg, #7c3aed, #6d28d9); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 2rem; margin: 0 auto;">
+                            <?php echo strtoupper(substr($currentUser['full_name'], 0, 1)); ?>
+                        </div>
                     </div>
-                </div>
-                
-                <div class="form-group">
-                    <label>Full Name</label>
-                    <input type="text" value="<?php echo htmlspecialchars($currentUser['full_name'] ?? ''); ?>" readonly style="background-color: #f9fafb;">
-                </div>
-                
-                <div class="form-group">
-                    <label>Email</label>
-                    <input type="email" value="<?php echo htmlspecialchars($currentUser['email'] ?? ''); ?>" readonly style="background-color: #f9fafb;">
-                </div>
-                
-                <div class="form-group">
-                    <label>Role</label>
-                    <input type="text" value="<?php echo htmlspecialchars(ucwords(str_replace('_', ' ', $currentUser['role'] ?? ''))); ?>" readonly style="background-color: #f9fafb;">
-                </div>
-            <?php else: ?>
-                <p class="text-muted">User information not available</p>
-            <?php endif; ?>
+                    
+                    <div class="form-group">
+                        <label>Full Name</label>
+                        <input type="text" value="<?php echo htmlspecialchars($currentUser['full_name'] ?? ''); ?>" readonly style="background-color: #f9fafb;">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Email</label>
+                        <input type="email" value="<?php echo htmlspecialchars($currentUser['email'] ?? ''); ?>" readonly style="background-color: #f9fafb;">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Role</label>
+                        <input type="text" value="<?php echo htmlspecialchars(ucwords(str_replace('_', ' ', $currentUser['role'] ?? ''))); ?>" readonly style="background-color: #f9fafb;">
+                    </div>
+                <?php else: ?>
+                    <p class="text-muted">User information not available</p>
+                <?php endif; ?>
+            </div>
         </div>
-    </div>
 </main>
 
 <script src="/School_Facility_Maintenance_System/frontend/assets/js/utils.js"></script>

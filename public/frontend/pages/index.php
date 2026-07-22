@@ -10,7 +10,7 @@ if (session_status() === PHP_SESSION_NONE) {
 require_once __DIR__ . '/../../backend/config/settings.php';
 
 // If already logged in, redirect to dashboard
-if (isset($_SESSION['user'])) {
+if (isset($_SESSION['auth_user']) || isset($_SESSION['user'])) {
     header('Location: ' . public_url('/frontend/pages/dashboard.php'));
     exit;
 }
@@ -48,14 +48,13 @@ if (isset($_SESSION['user'])) {
                     <p class="auth-subtitle">Use your school account credentials to continue</p>
 
                     <div class="form-group">
-                        <label for="email">Email</label>
+                        <label for="email">Username</label>
                         <input
-                            type="email"
+                            type="text"
                             id="email"
                             name="email"
-                            placeholder="Email"
+                            placeholder="Enter your username"
                             autocomplete="off"
-                            readonly
                             value=""
                             required>
                     </div>
@@ -69,7 +68,6 @@ if (isset($_SESSION['user'])) {
                                 name="password"
                                 placeholder="Password"
                                 autocomplete="new-password"
-                                readonly
                                 value=""
                                 required>
                             <button type="button" id="toggle-login-password" class="password-toggle-btn" aria-label="Show password" title="Show password">
@@ -94,32 +92,31 @@ if (isset($_SESSION['user'])) {
 
                 <form id="forgot-password-form" class="form-hidden" autocomplete="off">
                     <h2 class="auth-title">Forgot Password</h2>
-                    <p class="auth-subtitle">Send a password reset request to Super Admin</p>
+                    <p class="auth-subtitle">Enter your username to request a password reset</p>
 
                     <div class="form-group">
-                        <label for="forgot_email">Email</label>
+                        <label for="forgot_email">Username</label>
                         <input
-                            type="email"
+                            type="text"
                             id="forgot_email"
                             name="forgot_email"
-                            placeholder="Enter your email"
+                            placeholder="Enter your username"
                             autocomplete="off"
-                            readonly
                             value=""
                             required>
                     </div>
 
                     <div class="alert alert-info" style="margin-bottom: 16px;">
-                        Super Admin will receive your request and reset your password manually in User Management.
+                        Enter your username below. Your Administrator will review your request and reset your password.
                     </div>
 
-                    <button type="button" class="btn btn-primary btn-block" id="notify-super-admin-btn">Notify Super Admin</button>
+                    <button type="button" class="btn btn-primary btn-block" id="notify-super-admin-btn">Submit Request</button>
                     <button type="button" class="btn btn-secondary btn-block" id="forgot-back-login-btn">Back to Sign In</button>
                 </form>
 
                 <form id="register-form" class="form-hidden" autocomplete="off">
                     <h1 class="auth-title">Create Account</h1>
-                    <p class="auth-subtitle">Register and wait for Super Admin approval</p>
+                    <p class="auth-subtitle">Register and wait for Administrator approval</p>
 
                     <div class="form-group" id="register-name-group">
                         <label for="register_full_name">Name</label>
@@ -299,7 +296,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Ensure API is defined globally
 window.API = window.API || {
-    baseURL: '<?php echo htmlspecialchars(public_url('/api')); ?>',
+    baseURL: '<?php echo htmlspecialchars(rtrim(public_url('/api'), '/')); ?>',
     async login(email, password) {
         const response = await fetch(`${this.baseURL}/auth/login`, {
             method: 'POST',
@@ -346,7 +343,7 @@ window.API = window.API || {
             method: 'POST',
             credentials: 'include',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email })
+            body: JSON.stringify({ email: email })
         });
         const raw = await response.text();
         let data;
@@ -356,7 +353,7 @@ window.API = window.API || {
             throw new Error('Server returned an invalid response. Please verify API routes and try again.');
         }
         if (!data.success) {
-            const error = new Error(data.message || 'Failed to notify Super Admin');
+            const error = new Error(data.message || 'Failed to notify Admin');
             error.status = response.status;
             error.data = data.data || {};
             throw error;
@@ -375,19 +372,6 @@ window.Session = window.Session || {
     clear() { localStorage.clear(); }
 };
 
-async function syncPhpSessionUser(userPayload) {
-    const response = await fetch('<?php echo htmlspecialchars(public_url('/frontend/pages/set-session.php')); ?>', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(userPayload)
-    });
-
-    const data = await response.json();
-    if (!data.success) {
-        throw new Error('Failed to sync frontend PHP session');
-    }
-}
 
 const loginForm = document.getElementById('login-form');
 const registerForm = document.getElementById('register-form');
@@ -687,7 +671,6 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
             }
 
             window.Session.set('user', response.data.user);
-            await syncPhpSessionUser(response.data.user);
             alertContainer.innerHTML = '<div class="alert alert-success">Login successful! Redirecting...</div>';
             setTimeout(() => {
                 const role = response.data.user.role;
@@ -895,7 +878,7 @@ document.getElementById('register-form').addEventListener('submit', async (e) =>
             password
         });
 
-        alertContainer.innerHTML = '<div class="alert alert-success">Registration submitted. Please wait for Super Admin approval.</div>';
+        alertContainer.innerHTML = '<div class="alert alert-success">Registration submitted. Please wait for Administrator approval.</div>';
         registerForm.reset();
         document.getElementById('register-name-group').classList.remove('form-field-valid', 'form-field-error');
         document.getElementById('register-email-group').classList.remove('form-field-valid', 'form-field-error');
@@ -916,21 +899,26 @@ if (notifySuperAdminBtn) {
         const forgotEmailInput = document.getElementById('forgot_email');
         const email = forgotEmailInput ? forgotEmailInput.value.trim() : '';
 
-        if (!isValidEmail(email)) {
-            alertContainer.innerHTML = '<div class="alert alert-danger">Please enter a valid email address.</div>';
+        if (!email || email.length < 3) {
+            alertContainer.innerHTML = '<div class="alert alert-danger">Please enter your username.</div>';
             return;
         }
 
         const originalText = notifySuperAdminBtn.innerHTML;
         notifySuperAdminBtn.disabled = true;
-        notifySuperAdminBtn.innerHTML = 'Sending request...';
+        notifySuperAdminBtn.innerHTML = 'Submitting...';
 
         try {
             const response = await window.API.forgotPasswordRequest(email);
-            const successMessage = response?.message || 'Super Admin has been notified to reset your password.';
-            alertContainer.innerHTML = `<div class="alert alert-success">${successMessage}</div>`;
+            // Always show a clear, consistent message regardless of API response
+            alertContainer.innerHTML = `<div class="alert alert-success" style="text-align:center;padding:16px;">
+                <strong>&#10003; Request Submitted Successfully</strong><br>
+                <span>Your password reset request has been submitted.<br>Your Administrator will review and reset your password shortly.</span>
+            </div>`;
+            // Go back to login after 4 seconds
+            setTimeout(() => { showLoginForm(); }, 4000);
         } catch (error) {
-            alertContainer.innerHTML = `<div class="alert alert-danger">${error.message}</div>`;
+            alertContainer.innerHTML = '<div class="alert alert-danger">Could not submit request. Please try again or contact your Administrator directly.</div>';
         } finally {
             notifySuperAdminBtn.disabled = false;
             notifySuperAdminBtn.innerHTML = originalText;

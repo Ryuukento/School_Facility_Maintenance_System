@@ -42,6 +42,30 @@ const API = {
         const data = await response.json();
         return data;
     },
+
+    /**
+     * Update the current user's profile, including optional avatar upload
+     */
+    async updateProfile(formData) {
+        const response = await fetch(
+            window.SFMS_PUBLIC_URL
+                ? window.SFMS_PUBLIC_URL('/api/users/profile')
+                : '/api/users/profile',
+            {
+                method: 'PATCH',
+                credentials: 'include',
+                body: formData
+            }
+        );
+
+        const data = await response.json();
+
+        if (!response.ok && !data.success) {
+            throw new Error(data.message || 'Failed to update profile');
+        }
+
+        return data;
+    },
     
     /**
      * Check session
@@ -166,11 +190,10 @@ const API = {
      * Notifications - stored as part of reports (pending implementation)
      */
     async getNotifications(limit = 10) {
-        const response = await fetch(`${window.SFMS_PUBLIC_URL ? window.SFMS_PUBLIC_URL('/backend/api/notifications.php') : '/backend/api/notifications.php'}?action=getUnread&limit=` + encodeURIComponent(limit), {
+        const url = window.SFMS_PUBLIC_URL('/api/notifications/unread') + '?limit=' + encodeURIComponent(limit);
+        const response = await fetch(url, {
             credentials: 'include',
-            headers: {
-                'Content-Type': 'application/json'
-            }
+            headers: { 'Accept': 'application/json' }
         });
 
         const data = await response.json();
@@ -182,11 +205,11 @@ const API = {
     },
 
     async getNotificationCount() {
-        const response = await fetch(`${window.SFMS_PUBLIC_URL ? window.SFMS_PUBLIC_URL('/backend/api/notifications.php') : '/backend/api/notifications.php'}?action=count`, {
+        // Reuse the unread endpoint — limit=1 is cheap, and count field reflects real total.
+        const url = window.SFMS_PUBLIC_URL('/api/notifications/unread') + '?limit=1';
+        const response = await fetch(url, {
             credentials: 'include',
-            headers: {
-                'Content-Type': 'application/json'
-            }
+            headers: { 'Accept': 'application/json' }
         });
 
         const data = await response.json();
@@ -198,16 +221,11 @@ const API = {
     },
 
     async markNotificationAsRead(notificationId) {
-        const form = new URLSearchParams();
-        form.append('notification_id', String(notificationId));
-
-        const response = await fetch(`${window.SFMS_PUBLIC_URL ? window.SFMS_PUBLIC_URL('/backend/api/notifications.php') : '/backend/api/notifications.php'}?action=markAsRead`, {
+        const url = window.SFMS_PUBLIC_URL(`/api/notifications/${notificationId}/read`);
+        const response = await fetch(url, {
             method: 'POST',
             credentials: 'include',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded'
-            },
-            body: form.toString()
+            headers: { 'Accept': 'application/json' }
         });
 
         const data = await response.json();
@@ -236,30 +254,8 @@ const API = {
         }
         
         return data;
-    }
-};
-
-/**
- * UI Helper functions
- */
-const UI = {
-    /**
-     * Show alert message
-     */
-    showAlert(message, type = 'info') {
-        const alertDiv = document.createElement('div');
-        alertDiv.className = `alert alert-${type}`;
-        alertDiv.textContent = message;
-        
-        const container = document.querySelector('.container') || document.body;
-        container.insertBefore(alertDiv, container.firstChild);
-        
-        // Auto remove after 5 seconds
-        setTimeout(() => {
-            alertDiv.remove();
-        }, 5000);
     },
-    
+
     /**
      * Show loading state
      */
@@ -267,13 +263,12 @@ const UI = {
         const originalContent = element.innerHTML;
         element.innerHTML = '<span class="loading">Loading...</span>';
         element.disabled = true;
-        
         return () => {
             element.innerHTML = originalContent;
             element.disabled = false;
         };
     },
-    
+
     /**
      * Format date
      */
@@ -285,7 +280,7 @@ const UI = {
             day: 'numeric'
         });
     },
-    
+
     /**
      * Format datetime
      */

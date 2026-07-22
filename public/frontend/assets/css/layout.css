@@ -1,6 +1,7 @@
 /* Navigation Styles */
 .navbar {
-    background-color: white;
+    background: var(--shell-header-bg);
+    color: var(--shell-header-text);
     box-shadow: var(--shadow-sm);
     position: sticky;
     top: 0;
@@ -21,7 +22,7 @@
 .navbar-brand {
     font-size: 1.5rem;
     font-weight: 700;
-    color: var(--primary-color);
+    color: var(--shell-header-text);
     text-decoration: none;
 }
 
@@ -72,15 +73,15 @@
     cursor: pointer;
     padding: 0;
     font-size: 1rem;
-    color: var(--text-color);
+    color: var(--shell-header-text);
 }
 
 .dropdown-menu {
     position: absolute;
     top: 100%;
     right: 0;
-    background-color: white;
-    border: 1px solid var(--border-color);
+    background-color: var(--surface);
+    border: 1px solid var(--border);
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-lg);
     min-width: 200px;
@@ -95,14 +96,14 @@
 
 .dropdown-item {
     padding: var(--spacing-sm) var(--spacing-lg);
-    color: var(--text-color);
+    color: var(--text-light);
     text-decoration: none;
     display: block;
     transition: background-color 0.3s ease;
 }
 
 .dropdown-item:hover {
-    background-color: var(--light-color);
+    background-color: var(--surface-muted);
     color: var(--primary-color);
 }
 
@@ -110,7 +111,7 @@
 .sidebar {
     width: var(--sidebar-width);
     background: var(--sidebar-bg);
-    color: white;
+    color: var(--sidebar-text);
     padding: 0;
     min-height: 100vh;
     position: fixed;
@@ -131,7 +132,7 @@
 .sidebar-logo {
     font-size: 1.5rem;
     font-weight: 700;
-    color: white;
+    color: var(--sidebar-text);
 }
 
 .sidebar-nav {
@@ -145,19 +146,19 @@
 .sidebar-link {
     display: block;
     padding: var(--spacing-sm) var(--spacing-lg);
-    color: #d1d5db;
+    color: var(--sidebar-text);
     text-decoration: none;
     transition: all 0.3s ease;
 }
 
 .sidebar-link:hover,
 .sidebar-link.active {
-    background-color: var(--primary-color);
-    color: white;
+    background-color: var(--sidebar-active-bg);
+    color: var(--sidebar-active-text);
 }
 
 .sidebar-link.active {
-    border-left: 4px solid white;
+    border-left: 4px solid var(--sidebar-active-border);
     padding-left: calc(var(--spacing-lg) - 4px);
 }
 
@@ -175,6 +176,7 @@
     flex: 1;
     padding: var(--spacing-xl);
     margin-left: var(--sidebar-width);
+    background: var(--app-bg);
 }
 
 .page-header {
@@ -202,10 +204,11 @@
 }
 
 .stat-card {
-    background-color: white;
+    background-color: var(--surface);
     padding: var(--spacing-lg);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-sm);
+    border: 1px solid var(--border);
 }
 
 .stat-label {
@@ -220,7 +223,7 @@
 .stat-value {
     font-size: 2rem;
     font-weight: 700;
-    color: var(--dark-color);
+    color: var(--text-light);
 }
 
 .stat-change {
@@ -255,12 +258,14 @@
 }
 
 .modal-content {
-    background-color: white;
+    background-color: var(--surface);
     padding: var(--spacing-xl);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-lg);
     max-width: 500px;
     width: 90%;
+    border: 1px solid var(--border);
+    color: var(--text-light);
 }
 
 .modal-header {
@@ -269,7 +274,7 @@
     align-items: center;
     margin-bottom: var(--spacing-lg);
     padding-bottom: var(--spacing-lg);
-    border-bottom: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border);
 }
 
 .modal-title {
@@ -282,7 +287,7 @@
     border: none;
     font-size: 1.5rem;
     cursor: pointer;
-    color: var(--text-color);
+    color: var(--text-light);
 }
 
 .modal-body {
@@ -294,7 +299,7 @@
     gap: var(--spacing-md);
     justify-content: flex-end;
     padding-top: var(--spacing-lg);
-    border-top: 1px solid var(--border-color);
+    border-top: 1px solid var(--border);
 }
 
 /* Global Logout Modal */
@@ -311,8 +316,9 @@
     max-height: calc(100vh - 32px);
     padding: 0;
     border-radius: 16px;
-    border: 1px solid rgba(138, 43, 226, 0.25);
-    box-shadow: 0 18px 45px rgba(26, 11, 48, 0.35);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    box-shadow: var(--shadow-card);
     overflow: hidden;
     animation: logoutModalPop 0.18s ease-out;
 }
@@ -324,8 +330,8 @@
     gap: 12px;
     margin: 0;
     padding: 20px 64px 14px 22px;
-    border-bottom: 1px solid rgba(138, 43, 226, 0.15);
-    background: linear-gradient(180deg, #f7f0ff 0%, #ffffff 88%);
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
 }
 
 #global-logout-modal .logout-modal-text {
@@ -337,14 +343,14 @@
     margin: 0;
     font-size: clamp(2rem, 4vw, 2.5rem);
     line-height: 1.12;
-    color: #2b2b34;
+    color: var(--text-light);
     letter-spacing: -0.2px;
 }
 
 #global-logout-modal .logout-modal-subtitle {
     margin: 8px 0 0;
     font-size: 15px;
-    color: #5f5a73;
+    color: var(--muted-text);
 }
 
 #global-logout-modal .logout-modal-close {
@@ -354,9 +360,9 @@
     width: 32px;
     height: 32px;
     border-radius: 50%;
-    border: 1px solid rgba(138, 43, 226, 0.2);
-    color: #6a1bbe;
-    background: #ffffff;
+    border: 1px solid var(--border);
+    color: var(--primary-color);
+    background: var(--surface);
     font-size: 22px;
     line-height: 1;
     display: inline-flex;
@@ -366,16 +372,16 @@
 }
 
 #global-logout-modal .logout-modal-close:hover {
-    background: #f5edff;
+    background: var(--surface-muted);
 }
 
 #global-logout-modal .logout-modal-footer {
     margin: 0;
     padding: 14px 22px 20px;
-    border-top: 1px solid rgba(138, 43, 226, 0.15);
+    border-top: 1px solid var(--border);
     justify-content: flex-end;
     gap: 10px;
-    background: #ffffff;
+    background: var(--surface);
 }
 
 #global-logout-modal .logout-modal-cancel,
@@ -389,7 +395,9 @@
 }
 
 #global-logout-modal .logout-modal-cancel {
-    background: linear-gradient(145deg, #b993e8, #9d7fcc);
+    background: var(--surface-muted);
+    color: var(--text-light);
+    border: 1px solid var(--border);
 }
 
 #global-logout-modal .logout-modal-confirm {

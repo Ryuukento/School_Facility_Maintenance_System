@@ -4,41 +4,139 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\MaintenanceReport;
+use App\Services\NeedChangeService;
+use App\Services\RoleNormalizerService;
 use App\Support\ApiResponder;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Validation\ValidationException;
 
 class ReportController extends Controller
 {
     use ApiResponder;
 
-    public function index(Request $request)
+    public function __construct(
+        private readonly NeedChangeService $needChangeService
+    ) {
+    }
+
+    public function index(Request $request): JsonResponse
     {
-        $authUser = $request->session()->get('auth_user', []);
-        $userId = (int)($authUser['user_id'] ?? 0);
-        $role = $this->normalizeRole((string)($authUser['role'] ?? ''));
+        $authUser    = $request->session()->get('auth_user', []);
+        $userId      = (int)($authUser['user_id'] ?? 0);
+        $role        = $this->normalizeRole((string)($authUser['role'] ?? ''));
 
-        $query = MaintenanceReport::query()->with(['creator:user_id,full_name', 'assignee:user_id,full_name']);
+        $perPage     = max(1, min(200, (int)$request->query('per_page', 20)));
+        $page        = max(1, (int)$request->query('page', 1));
+        $statusGroup = strtolower(trim((string)$request->query('status_group', '')));
+        $deptId      = (int)$request->query('department_id', 0);
+        $dateFrom    = $request->query('date_from');
+        $dateTo      = $request->query('date_to');
 
-        if (!in_array($role, ['super_admin', 'maintenance_admin', 'maintenance_staff'], true)) {
-            $query->where(function ($builder) use ($userId): void {
-                $builder->where('created_by', $userId)->orWhere('assigned_to', $userId);
+        $query = MaintenanceReport::query()
+            ->select([
+                'maintenance_reports.report_id',
+                'maintenance_reports.title',
+                'maintenance_reports.priority',
+                'maintenance_reports.status',
+                'maintenance_reports.location',
+                'maintenance_reports.created_at',
+                'maintenance_reports.updated_at',
+                'maintenance_reports.created_by',
+                'maintenance_reports.assigned_to',
+                'maintenance_reports.department_id',
+                'maintenance_reports.due_date',
+                'maintenance_reports.need_change_item_id',
+                'maintenance_reports.need_change_quantity',
+                'maintenance_reports.need_change_status',
+                'maintenance_reports.need_change_approved_by',
+                'maintenance_reports.need_change_approved_at',
+                'maintenance_reports.need_change_deducted_at',
+                DB::raw('assignee.full_name AS assigned_name'),
+                DB::raw('creator.full_name  AS creator_name'),
+                DB::raw('dept.name          AS department_name'),
+            ])
+            ->leftJoin('users AS assignee',       'maintenance_reports.assigned_to',  '=', 'assignee.user_id')
+            ->leftJoin('users AS creator',        'maintenance_reports.created_by',   '=', 'creator.user_id')
+            ->leftJoin('departments AS dept',     'maintenance_reports.department_id','=', 'dept.department_id');
+
+        // ── status_group: user-centric views override role scoping ────────
+        if ($statusGroup === 'assigned_to_me') {
+            $query->where('maintenance_reports.assigned_to', $userId);
+
+        } elseif ($statusGroup === 'overdue') {
+            $query->where('maintenance_reports.assigned_to', $userId)
+                  ->whereNotNull('maintenance_reports.due_date')
+                  ->whereDate('maintenance_reports.due_date', '<', today())
+                  ->whereNotIn('maintenance_reports.status', ['completed', 'closed']);
+
+        } elseif ($statusGroup === 'due_soon') {
+            $query->where('maintenance_reports.assigned_to', $userId)
+                  ->whereNotNull('maintenance_reports.due_date')
+                  ->whereBetween('maintenance_reports.due_date', [today(), today()->addDays(7)])
+                  ->whereNotIn('maintenance_reports.status', ['completed', 'closed']);
+
+        } elseif ($statusGroup === 'recent_assignments') {
+            $query->where('maintenance_reports.assigned_to', $userId)
+                  ->where('maintenance_reports.status', 'assigned')
+                  ->whereDate('maintenance_reports.updated_at', '>=', today()->subDays(7));
+
+        } elseif (!in_array($role, ['super_admin', 'maintenance_admin', 'maintenance_staff'], true)) {
+            // Non-maintenance roles: own reports only (no status_group set)
+            $query->where(function ($b) use ($userId): void {
+                $b->where('maintenance_reports.created_by', $userId)
+                  ->orWhere('maintenance_reports.assigned_to', $userId);
             });
+        }
+        // super_admin / maintenance_admin / maintenance_staff with no status_group → see all
+
+        // ── column filters ─────────────────────────────────────────────────
+        if ($deptId > 0) {
+            $query->where('maintenance_reports.department_id', $deptId);
         }
 
         if ($request->filled('status')) {
-            $query->where('status', $request->string('status')->toString());
+            $query->where('maintenance_reports.status', $request->string('status')->toString());
         }
 
         if ($request->filled('priority')) {
-            $query->where('priority', $request->string('priority')->toString());
+            $query->where('maintenance_reports.priority', $request->string('priority')->toString());
         }
 
-        $reports = $query->orderByDesc('created_at')->paginate((int)$request->integer('per_page', 20));
+        if ($request->filled('search')) {
+            $kw = '%' . $request->string('search')->toString() . '%';
+            $query->where(function ($b) use ($kw): void {
+                $b->where('maintenance_reports.title',        'like', $kw)
+                  ->orWhere('maintenance_reports.description', 'like', $kw)
+                  ->orWhere('maintenance_reports.location',   'like', $kw);
+            });
+        }
 
-        return $this->ok('Reports retrieved', $reports);
+        if ($dateFrom) {
+            $query->whereDate('maintenance_reports.created_at', '>=', $dateFrom);
+        }
+
+        if ($dateTo) {
+            $query->whereDate('maintenance_reports.created_at', '<=', $dateTo);
+        }
+
+        // ── flat response — frontend reads data.reports[] ─────────────────
+        $total   = (clone $query)->count();
+        $reports = $query
+            ->orderByDesc('maintenance_reports.created_at')
+            ->skip(($page - 1) * $perPage)
+            ->take($perPage)
+            ->get();
+
+        return $this->ok('Reports retrieved', [
+            'reports'  => $reports,
+            'page'     => $page,
+            'per_page' => $perPage,
+            'total'    => $total,
+        ]);
     }
 
     public function store(Request $request)
@@ -104,59 +202,296 @@ class ReportController extends Controller
         return $this->ok('Report created successfully', ['report_id' => $report->report_id], 201);
     }
 
-    public function show(Request $request, MaintenanceReport $report)
+    public function recent(Request $request): JsonResponse
     {
         $authUser = $request->session()->get('auth_user', []);
-        $userId = (int)($authUser['user_id'] ?? 0);
-        $role = $this->normalizeRole((string)($authUser['role'] ?? ''));
+        $userId   = (int)($authUser['user_id'] ?? 0);
+        $role     = $this->normalizeRole((string)($authUser['role'] ?? ''));
+        $limit    = max(1, min(100, (int)$request->query('limit', 10)));
 
+        $query = MaintenanceReport::query()
+            ->select([
+                'maintenance_reports.report_id',
+                'maintenance_reports.title',
+                'maintenance_reports.description',
+                'maintenance_reports.priority',
+                'maintenance_reports.status',
+                'maintenance_reports.location',
+                'maintenance_reports.created_at',
+                'maintenance_reports.created_by',
+                'maintenance_reports.assigned_to',
+                'maintenance_reports.department_id',
+                DB::raw('assignee.full_name AS assigned_name'),
+                DB::raw('creator.full_name  AS creator_name'),
+            ])
+            ->leftJoin('users AS assignee', 'maintenance_reports.assigned_to', '=', 'assignee.user_id')
+            ->leftJoin('users AS creator',  'maintenance_reports.created_by',  '=', 'creator.user_id')
+            ->whereDate('maintenance_reports.created_at', today());
+
+        // Role scoping — mirrors legacy getRecentReports()
+        if (in_array($role, ['super_admin', 'maintenance_staff'], true)) {
+            // no scope — sees all today's reports
+        } elseif ($role === 'maintenance_admin') {
+            $deptId = DB::table('users')->where('user_id', $userId)->value('department_id');
+            if ($deptId) {
+                $query->where('maintenance_reports.department_id', $deptId);
+            }
+        } else {
+            $query->where(function ($b) use ($userId): void {
+                $b->where('maintenance_reports.created_by', $userId)
+                  ->orWhere('maintenance_reports.assigned_to', $userId);
+            });
+        }
+
+        $reports = $query
+            ->orderByDesc('maintenance_reports.created_at')
+            ->limit($limit)
+            ->get();
+
+        return $this->ok('Recent reports retrieved', ['reports' => $reports]);
+    }
+
+    public function show(Request $request, MaintenanceReport $report): JsonResponse
+    {
+        $authUser = $request->session()->get('auth_user', []);
+        $userId   = (int)($authUser['user_id'] ?? 0);
+        $role     = $this->normalizeRole((string)($authUser['role'] ?? ''));
+
+        // Auth check on the bound model (no extra query)
         if (!in_array($role, ['super_admin', 'maintenance_admin', 'maintenance_staff'], true)
             && (int)$report->created_by !== $userId
             && (int)$report->assigned_to !== $userId) {
             return $this->fail('Forbidden', 403);
         }
 
-        $report->load(['creator:user_id,full_name,email', 'assignee:user_id,full_name,email', 'department:department_id,name']);
+        // Flat join query — returns all fields the frontend reads directly
+        $data = DB::table('maintenance_reports AS r')
+            ->select([
+                'r.report_id',
+                'r.title',
+                'r.description',
+                'r.priority',
+                'r.status',
+                'r.location',
+                'r.created_at',
+                'r.updated_at',
+                'r.created_by',
+                'r.assigned_to',
+                'r.department_id',
+                'r.due_date',
+                'r.completed_date',
+                'r.need_change_item_id',
+                'r.need_change_quantity',
+                'r.need_change_status',
+                'r.need_change_approved_by',
+                'r.need_change_approved_at',
+                'r.need_change_deducted_at',
+                DB::raw('creator.full_name  AS creator_name'),
+                DB::raw('creator.email      AS creator_email'),
+                DB::raw('assignee.full_name AS assigned_name'),
+                DB::raw('assignee.email     AS assigned_email'),
+                DB::raw('dept.name          AS department_name'),
+                DB::raw('nc_item.name       AS need_change_item_name'),
+                DB::raw('nc_item.quantity   AS need_change_item_quantity'),
+            ])
+            ->leftJoin('users AS creator',    'r.created_by',          '=', 'creator.user_id')
+            ->leftJoin('users AS assignee',   'r.assigned_to',         '=', 'assignee.user_id')
+            ->leftJoin('departments AS dept', 'r.department_id',       '=', 'dept.department_id')
+            ->leftJoin('items AS nc_item',    'r.need_change_item_id', '=', 'nc_item.id')
+            ->where('r.report_id', (int)$report->report_id)
+            ->first();
 
-        return $this->ok('Report retrieved', ['report' => $report]);
-    }
-
-    public function update(Request $request, MaintenanceReport $report)
-    {
-        $validated = $request->validate([
-            'title' => ['sometimes', 'string', 'max:255'],
-            'description' => ['sometimes', 'string'],
-            'location' => ['sometimes', 'nullable', 'string', 'max:255'],
-            'priority' => ['sometimes', 'string', 'in:low,medium,high,critical'],
-            'status' => ['sometimes', 'string', 'in:submitted,in_progress,completed,closed,cancelled'],
-            'assigned_to' => ['sometimes', 'nullable', 'integer', 'exists:users,user_id'],
-            'department_id' => ['sometimes', 'nullable', 'integer', 'exists:departments,department_id'],
-            'due_date' => ['sometimes', 'nullable', 'date'],
-            'completed_date' => ['sometimes', 'nullable', 'date'],
-        ]);
-
-        if (isset($validated['status']) && in_array($validated['status'], ['completed', 'closed'], true) && !isset($validated['completed_date'])) {
-            $validated['completed_date'] = now()->toDateString();
+        if (!$data) {
+            return $this->fail('Report not found', 404);
         }
 
-        $report->update($validated);
+        return $this->ok('Report retrieved', ['report' => $data]);
+    }
+
+    public function update(Request $request, MaintenanceReport $report): JsonResponse
+    {
+        $authUser = $request->session()->get('auth_user', []);
+        $userId   = (int)($authUser['user_id'] ?? 0);
+        $role     = $this->normalizeRole((string)($authUser['role'] ?? ''));
+
+        $previousStatus = (string) $report->status;
+        $changes = [];
+
+        // CASE D/E — need-change approval/rejection (super_admin only)
+            if ($request->boolean('approve_need_change')) {
+            if ($role !== 'super_admin') {
+                return $this->fail('Only an Administrator can approve Need Change requests', 403);
+            }
+
+            try {
+                $this->needChangeService->approve($report, $userId);
+            } catch (ValidationException $e) {
+                return $this->fail(collect($e->errors())->flatten()->first() ?: 'Unable to approve Need Change request', 422);
+            }
+
+            return $this->ok('Need Change approved and inventory deducted successfully');
+        } elseif ($request->boolean('reject_need_change')) {
+            if ($role !== 'super_admin') {
+                return $this->fail('Only an Administrator can reject Need Change requests', 403);
+            }
+            $changes['need_change_status'] = 'rejected';
+        }
+
+        // CASE B — status change
+        if ($request->has('status')) {
+            $newStatus     = strtolower(trim((string)$request->input('status', '')));
+            $validStatuses = ['submitted', 'assigned', 'in_progress', 'completed', 'closed', 'cancelled'];
+            if (!in_array($newStatus, $validStatuses, true)) {
+                return $this->fail('Invalid status value', 422);
+            }
+            $staffAllowed = ['in_progress', 'completed'];
+            $adminAllowed = ['submitted', 'assigned', 'in_progress', 'completed', 'closed', 'cancelled'];
+            if ($role === 'super_admin') {
+                // no restriction
+            } elseif (in_array($role, ['maintenance_admin', 'department_admin'], true)) {
+                if (!in_array($newStatus, $adminAllowed, true)) {
+                    return $this->fail('You cannot set that status', 403);
+                }
+            } elseif ($role === 'maintenance_staff') {
+                if (!in_array($newStatus, $staffAllowed, true)) {
+                    return $this->fail('Maintenance Staff can only set status to In Progress or Completed', 403);
+                }
+            } else {
+                return $this->fail('You are not allowed to change report status', 403);
+            }
+            $changes['status'] = $newStatus;
+            if ($newStatus === 'assigned' && $request->has('assigned_to')) {
+                $at = $request->input('assigned_to');
+                $changes['assigned_to'] = $at ? (int) $at : null;
+            }
+            if (in_array($newStatus, ['completed', 'closed'], true)) {
+                $changes['completed_date'] = $request->input('completed_date') ?? now()->toDateString();
+            }
+            if ($request->has('due_date')) {
+                $changes['due_date'] = $request->input('due_date') ?: null;
+            }
+        }
+
+        // CASE C — completion proof file upload
+        if ($request->hasFile('completion_proof_image')) {
+            $file         = $request->file('completion_proof_image');
+            $allowedMimes = [
+                'image/jpeg' => 'jpg', 'image/jpg' => 'jpg',
+                'image/png'  => 'png', 'image/webp' => 'webp', 'image/gif' => 'gif',
+            ];
+            $mime = $file->getMimeType();
+            if (!isset($allowedMimes[$mime])) {
+                return $this->fail('Only JPG, PNG, WEBP, or GIF images are allowed', 422);
+            }
+            if ($file->getSize() > 5 * 1024 * 1024) {
+                return $this->fail('Completion proof image must be 5MB or smaller', 422);
+            }
+            $uploadDir = public_path('frontend/uploads/completion-proofs');
+            if (!is_dir($uploadDir)) {
+                @mkdir($uploadDir, 0775, true);
+            }
+            $ext      = $allowedMimes[$mime];
+            $fileName = 'report-' . (int) $report->report_id
+                      . '-' . date('YmdHis')
+                      . '-' . bin2hex(random_bytes(4))
+                      . '.' . $ext;
+            $file->move($uploadDir, $fileName);
+            $changes['completion_proof_image'] = '/School_Facility_Maintenance_System/frontend/uploads/completion-proofs/' . $fileName;
+        }
+
+        // CASE A — basic field edit
+        $caseAFields = ['title', 'description', 'location', 'priority',
+                        'department_id', 'need_change_item_id', 'need_change_quantity'];
+        $hasCaseA    = collect($caseAFields)->contains(fn ($f) => $request->has($f));
+        if ($hasCaseA) {
+            $isOwner    = (int) $report->created_by === $userId;
+            $canEditAny = in_array($role, ['super_admin', 'maintenance_admin'], true);
+            if (!$isOwner && !$canEditAny) {
+                return $this->fail('You can only edit your own reports', 403);
+            }
+            foreach ($caseAFields as $field) {
+                if ($request->has($field)) {
+                    $value = $request->input($field);
+                    $changes[$field] = is_string($value) ? trim($value) : $value;
+                }
+            }
+        }
+
+        if (empty($changes)) {
+            return $this->fail('No valid fields to update', 422);
+        }
+
+        $report->update($changes);
+
+        $newStatus = $changes['status'] ?? null;
+        if (in_array($newStatus, ['completed', 'closed'], true) && $newStatus !== $previousStatus) {
+            $this->notifyReportOwnerOfCompletion($report, $newStatus);
+        }
 
         return $this->ok('Report updated successfully');
     }
 
+    public function destroy(Request $request, MaintenanceReport $report): JsonResponse
+    {
+        $authUser = $request->session()->get('auth_user', []);
+        $userId   = (int)($authUser['user_id'] ?? 0);
+        $role     = $this->normalizeRole((string)($authUser['role'] ?? ''));
+
+        if ($role !== 'super_admin' && (int)$report->created_by !== $userId) {
+            return $this->fail('You can only delete your own reports', 403);
+        }
+
+        $report->delete();
+        return $this->ok('Report deleted successfully');
+    }
+
     private function normalizeRole(string $role): string
     {
-        $normalized = strtolower(trim($role));
+        return RoleNormalizerService::normalizeWithStaffDefault($role);
+    }
 
-        if ($normalized === 'admin_maintenance') {
-            return 'maintenance_admin';
+    /**
+     * Closes the "communication loop" gap identified in SYSTEM_FLOW_REVIEW.md §7:
+     * the report owner previously received no notification when their report
+     * reached a terminal state. Reuses the same raw notifications-table insert
+     * pattern already established in store() above (schema-flexible via
+     * Schema::hasColumn, since the notifications migration doesn't declare a
+     * report_id column but some environments have one added).
+     */
+    private function notifyReportOwnerOfCompletion(MaintenanceReport $report, string $finalStatus): void
+    {
+        $ownerId = (int) $report->created_by;
+        if ($ownerId <= 0) {
+            return;
         }
 
-        if ($normalized === 'eelab_staff' || $normalized === 'maintenance_personnel' || $normalized === '') {
-            return 'maintenance_staff';
+        $statusLabel     = $finalStatus === 'closed' ? 'Closed' : 'Completed';
+        $assignedName    = optional($report->assignee)->full_name ?: 'Unassigned';
+        $completionDate  = $report->completed_date
+            ? $report->completed_date->toDateString()
+            : now()->toDateString();
+
+        $row = [
+            'user_id' => $ownerId,
+            'title' => 'Report #' . $report->report_id . ' Marked as ' . $statusLabel,
+            'message' => sprintf(
+                'Your maintenance report #%d (%s) at %s has been marked as %s. Assigned Staff: %s. Completion Date: %s.',
+                $report->report_id,
+                $report->title,
+                $report->location ?: 'N/A',
+                $statusLabel,
+                $assignedName,
+                $completionDate
+            ),
+            'is_read' => 0,
+            'created_at' => now(),
+        ];
+
+        if (Schema::hasColumn('notifications', 'report_id')) {
+            $row['report_id'] = $report->report_id;
         }
 
-        return $normalized;
+        DB::table('notifications')->insert($row);
     }
 
     private function sendSuperAdminEmailForNewReport(MaintenanceReport $report, array $validated, string $submitterName): void
@@ -189,7 +524,7 @@ class ReportController extends Controller
                     return [
                         'user_id' => (int)($row->user_id ?? 0),
                         'email' => strtolower(trim((string)($row->email ?? ''))),
-                        'full_name' => (string)($row->full_name ?? 'Super Admin'),
+                        'full_name' => (string)($row->full_name ?? 'Administrator'),
                     ];
                 })
                 ->filter(static function (array $row): bool {
@@ -212,7 +547,7 @@ class ReportController extends Controller
                 EmailService::sendNewReportNotification($payload, $superAdminRecipients);
             }
         } catch (\Throwable $e) {
-            Log::warning('Non-fatal super admin email notification error', [
+            Log::warning('Non-fatal Administrator email notification error', [
                 'report_id' => (int)$report->report_id,
                 'error' => $e->getMessage(),
             ]);

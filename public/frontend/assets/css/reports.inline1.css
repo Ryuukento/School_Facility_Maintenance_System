@@ -52,8 +52,26 @@
     padding: 10px 14px;
 }
 
-#last-month-report-link {
-    white-space: nowrap;
+.reports-month-dropdown-wrap {
+    position: relative;
+}
+
+#month-picker-dropdown .month-picker-item:hover {
+    background: rgba(148, 163, 184, 0.12);
+}
+
+:root[data-theme-resolved='light'] #month-picker-dropdown {
+    background: #ffffff !important;
+    border-color: #e5e7eb !important;
+    box-shadow: 0 16px 40px rgba(15, 23, 42, 0.12) !important;
+}
+
+:root[data-theme-resolved='light'] #month-picker-dropdown .month-picker-item {
+    color: #111827 !important;
+}
+
+:root[data-theme-resolved='light'] #month-picker-dropdown .month-picker-item:hover {
+    background: #f3f4f6 !important;
 }
 
 .reports-header-icon-btn {

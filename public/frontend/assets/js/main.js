@@ -4,12 +4,21 @@
 
 const ThemeManager = {
     storageKey: 'sfmsThemeMode',
+    legacyStorageKeys: ['sfms_settings_theme', 'sfms_theme_mode'],
     mediaQuery: null,
     mediaListener: null,
 
     getSavedMode() {
-        const stored = localStorage.getItem(this.storageKey);
-        return ['light', 'dark', 'auto'].includes(stored) ? stored : 'dark';
+        const candidates = [this.storageKey, ...this.legacyStorageKeys];
+
+        for (const key of candidates) {
+            const stored = localStorage.getItem(key);
+            if (['light', 'dark', 'auto'].includes(stored)) {
+                return stored;
+            }
+        }
+
+        return 'dark';
     },
 
     resolveMode(mode) {
@@ -28,10 +37,14 @@ const ThemeManager = {
 
         if (persist) {
             localStorage.setItem(this.storageKey, safeMode);
+            this.legacyStorageKeys.forEach((key) => {
+                localStorage.setItem(key, safeMode);
+            });
         }
 
         root.setAttribute('data-theme-mode', safeMode);
         root.setAttribute('data-theme-resolved', resolved);
+        root.setAttribute('data-theme', resolved);
         root.style.colorScheme = resolved === 'dark' ? 'dark' : 'light';
 
         this.updateToggleButtons(resolved);
@@ -76,7 +89,7 @@ const ThemeManager = {
     },
 
     init() {
-        this.applyMode(this.getSavedMode(), { persist: false });
+        this.applyMode(this.getSavedMode(), { persist: true });
         this.bindToggleButtons();
 
         if (!window.matchMedia) return;
@@ -142,11 +155,15 @@ const AccessibilityManager = {
 window.AccessibilityManager = window.AccessibilityManager || AccessibilityManager;
 
 function updateGlobalHeaderKicker() {
-    const kickerEl = document.getElementById('headerDashboardKicker');
-    if (!kickerEl) return;
+    const greetingEl = document.getElementById('headerProfileGreeting');
+    const subtextEl = document.getElementById('headerProfileSubtext');
+    const legacyKickerEl = document.getElementById('headerDashboardKicker');
+    if (!greetingEl && !subtextEl && !legacyKickerEl) return;
 
     const now = new Date();
     const hour = now.getHours();
+    const user = Session.get('user');
+    const userName = (user && (user.full_name || user.username)) ? String(user.full_name || user.username) : 'User';
 
     let greeting = 'Good evening';
     if (hour < 12) {
@@ -166,8 +183,18 @@ function updateGlobalHeaderKicker() {
         minute: '2-digit'
     }).format(now);
 
-    kickerEl.textContent = `${dateText} · ${timeText} ${greeting}`;
-    kickerEl.classList.add('is-visible');
+    if (greetingEl) {
+        greetingEl.textContent = `${greeting}, ${userName}`;
+    }
+
+    if (subtextEl) {
+        subtextEl.textContent = `${dateText} · ${timeText}`;
+    }
+
+    if (legacyKickerEl) {
+        legacyKickerEl.textContent = `${dateText} · ${timeText} ${greeting}`;
+        legacyKickerEl.classList.add('is-visible');
+    }
 }
 
 window.updateGlobalHeaderKicker = window.updateGlobalHeaderKicker || updateGlobalHeaderKicker;

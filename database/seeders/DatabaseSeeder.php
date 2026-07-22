@@ -19,7 +19,7 @@ class DatabaseSeeder extends Seeder
         User::query()->updateOrCreate([
             'email' => 'Ryaondido27@gmail.com',
         ], [
-            'full_name' => 'Super Admin',
+            'full_name' => 'Administrator',
             'password' => Hash::make('ryan@123'),
             'role' => 'super_admin',
             'status' => 'active',

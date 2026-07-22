@@ -114,3 +114,24 @@
         flex-wrap: wrap;
     }
 }
+
+/* ── Light mode ─────────────────────────────────────────────────────────── */
+:root[data-theme-resolved='light'] .audit-log-table {
+    background: #ffffff;
+}
+:root[data-theme-resolved='light'] .audit-log-table thead th {
+    background: #f3f4f6;
+    color: #374151;
+    border-color: #e5e7eb;
+}
+:root[data-theme-resolved='light'] .audit-log-table tbody td {
+    background: #ffffff;
+    color: #1f2937;
+    border-color: #e5e7eb;
+}
+:root[data-theme-resolved='light'] .audit-log-table tbody tr:nth-child(even) td {
+    background: #f9fafb;
+}
+:root[data-theme-resolved='light'] .audit-log-table tbody tr:hover td {
+    background: rgba(99, 102, 241, 0.08);
+}

@@ -6,8 +6,10 @@
 
 class ReportController {
     private $reportService;
+    private $pdo;
     
     public function __construct($pdo) {
+        $this->pdo = $pdo;
         $this->reportService = new ReportService($pdo);
     }
     
@@ -16,8 +18,8 @@ class ReportController {
         AuthMiddleware::protect();
 
         $role = $this->resolveSessionRole();
-        if ($role !== ROLE_MAINTENANCE_STAFF) {
-            Response::error('Only maintenance staff can create reports', [], Response::HTTP_FORBIDDEN);
+        if (!in_array($role, [ROLE_MAINTENANCE_STAFF, ROLE_MAINTENANCE_ADMIN], true)) {
+            Response::error('Only maintenance staff and head maintenance can create reports', [], Response::HTTP_FORBIDDEN);
         }
         
         $currentUserId = (int)($_SESSION['user']['user_id'] ?? $_SESSION['user_id'] ?? 0);
@@ -43,6 +45,15 @@ class ReportController {
         }
 
         $reportOwnerId = (int)($reportLookup['data']['created_by'] ?? 0);
+        $reportDepartmentId = (int)($reportLookup['data']['department_id'] ?? 0);
+
+        // Department-based access control for maintenance staff and admins
+        if ($role !== ROLE_SUPER_ADMIN && in_array($role, ['maintenance_admin', ROLE_MAINTENANCE_STAFF], true)) {
+            $userDepartmentId = $this->getUserDepartmentId($currentUserId);
+            if ($reportDepartmentId > 0 && $userDepartmentId > 0 && $userDepartmentId !== $reportDepartmentId) {
+                Response::error('You can only update reports from your department', [], Response::HTTP_FORBIDDEN);
+            }
+        }
 
         $payloadKeys = array_keys((array)$data);
         $statusFlowKeys = ['status', 'comment', 'assigned_to', 'report_id', 'completion_proof_image'];
@@ -63,15 +74,15 @@ class ReportController {
             $nextStatus = strtolower(trim((string)($data['status'] ?? '')));
 
             if ($role === ROLE_SUPER_ADMIN) {
-                if ($nextStatus !== 'assigned') {
-                    Response::error('Super Admin can only set status to Assigned', [], Response::HTTP_FORBIDDEN);
+                if (!in_array($nextStatus, ['assigned', 'in_progress'], true)) {
+                    Response::error('Super Admin can only set status to Assigned or reopen to In Progress', [], Response::HTTP_FORBIDDEN);
                 }
 
-                if (empty($data['assigned_to'])) {
+                if ($nextStatus === 'assigned' && empty($data['assigned_to'])) {
                     Response::error('Assigned user is required when setting status to Assigned', [], Response::HTTP_BAD_REQUEST);
                 }
             } elseif ($role === 'maintenance_admin') {
-                if (!in_array($nextStatus, ['assigned', 'in_progress', 'completed', 'closed'], true)) {
+                if (!in_array($nextStatus, ['assigned', 'in_progress', 'completed', 'closed', 'in_progress'], true)) {
                     Response::error('Maintenance Admin can only set status to Assigned, In Progress, Completed, or Closed', [], Response::HTTP_FORBIDDEN);
                 }
 
@@ -86,8 +97,8 @@ class ReportController {
                 Response::error('You are not allowed to update report status', [], Response::HTTP_FORBIDDEN);
             }
         } else {
-            if ($role !== ROLE_MAINTENANCE_STAFF) {
-                Response::error('Only maintenance staff can edit report details', [], Response::HTTP_FORBIDDEN);
+            if (!in_array($role, [ROLE_MAINTENANCE_STAFF, ROLE_MAINTENANCE_ADMIN], true)) {
+                Response::error('Only maintenance staff and head maintenance can edit report details', [], Response::HTTP_FORBIDDEN);
             }
 
             $requestedStatus = strtolower(trim((string)($data['status'] ?? '')));
@@ -126,8 +137,13 @@ class ReportController {
         SessionMiddleware::initialize();
         AuthMiddleware::protect();
         RoleMiddleware::requireRole([ROLE_SUPER_ADMIN, ROLE_DEPARTMENT_ADMIN]);
+
+        $userId = $this->resolveSessionUserId();
+        if ($userId <= 0) {
+            Response::error('User ID not found in session', [], Response::HTTP_UNAUTHORIZED);
+        }
         
-        $result = $this->reportService->assignReport($reportId, $data['assigned_to'], $_SESSION['user_id']);
+        $result = $this->reportService->assignReport($reportId, $data['assigned_to'], $userId);
         
         if ($result['success']) {
             Response::success($result['message']);
@@ -153,7 +169,7 @@ class ReportController {
         SessionMiddleware::initialize();
         AuthMiddleware::protect();
 
-        $userId = $_SESSION['user_id'] ?? null;
+        $userId = $this->resolveSessionUserId();
         $role = $this->resolveSessionRole();
 
         if (!$userId) {
@@ -173,7 +189,10 @@ class ReportController {
         SessionMiddleware::initialize();
         AuthMiddleware::protect();
 
-        $userId = $_SESSION['user_id'];
+        $userId = $this->resolveSessionUserId();
+        if ($userId <= 0) {
+            Response::error('User ID not found in session', [], Response::HTTP_UNAUTHORIZED);
+        }
         $role = $this->resolveSessionRole();
 
         $result = $this->reportService->getReportsWithFilters($userId, $role, $filters);
@@ -189,9 +208,13 @@ class ReportController {
         SessionMiddleware::initialize();
         AuthMiddleware::protect();
 
+        $userId = $this->resolveSessionUserId();
+        if ($userId <= 0) {
+            Response::error('User ID not found in session', [], Response::HTTP_UNAUTHORIZED);
+        }
         $role = $this->resolveSessionRole();
 
-        $result = $this->reportService->getRecentReports($_SESSION['user_id'], $role, $limit);
+        $result = $this->reportService->getRecentReports($userId, $role, $limit);
 
         if ($result['success']) {
             Response::success('Recent reports retrieved', $result['data']);
@@ -204,7 +227,10 @@ class ReportController {
         SessionMiddleware::initialize();
         AuthMiddleware::protect();
 
-        $userId = $_SESSION['user_id'];
+        $userId = $this->resolveSessionUserId();
+        if ($userId <= 0) {
+            Response::error('User ID not found in session', [], Response::HTTP_UNAUTHORIZED);
+        }
         $role = $this->resolveSessionRole();
 
         $result = $this->reportService->deleteReport($reportId, $userId, $role, $allowOwnerDelete);
@@ -231,7 +257,8 @@ class ReportController {
     }
 
     private function resolveSessionRole() {
-        $rawRole = $_SESSION['user']['role']
+        $sessionUser = $_SESSION['user'] ?? [];
+        $rawRole = $sessionUser['role']
             ?? $_SESSION['role']
             ?? ROLE_SUPER_ADMIN;
 
@@ -255,4 +282,23 @@ class ReportController {
 
         return $role;
     }
+
+    private function resolveSessionUserId() {
+        $sessionUser = $_SESSION['user'] ?? [];
+        return (int)($sessionUser['user_id'] ?? $_SESSION['user_id'] ?? 0);
+    }
+
+    private function getUserDepartmentId($userId) {
+        try {
+            $query = $this->pdo->prepare("SELECT department_id FROM users WHERE user_id = ? LIMIT 1");
+            $query->execute([$userId]);
+            $result = $query->fetchColumn();
+            
+            return $result ? (int)$result : 0;
+        } catch (Exception $e) {
+            Logger::error('Failed to get user department', ['user_id' => $userId, 'error' => $e->getMessage()]);
+            return 0;
+        }
+    }
 }
+

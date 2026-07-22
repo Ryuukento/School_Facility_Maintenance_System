@@ -3,6 +3,10 @@
 namespace App\Providers;
 
 use Illuminate\Support\ServiceProvider;
+use App\Models\InventoryStockEntry;
+use App\Models\InventoryTransaction;
+use App\Observers\InventoryStockEntryObserver;
+use App\Observers\InventoryTransactionObserver;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -19,6 +23,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        InventoryStockEntry::observe(InventoryStockEntryObserver::class);
+        InventoryTransaction::observe(InventoryTransactionObserver::class);
     }
 }

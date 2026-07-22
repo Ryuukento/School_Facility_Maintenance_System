@@ -11,13 +11,17 @@ if (!isset($_SESSION['user'])) {
 }
 
 $user = $_SESSION['user'];
-if (($user['role'] ?? '') !== 'maintenance_staff') {
+$allowedRoles = ['maintenance_staff', 'maintenance_admin'];
+if (!in_array($user['role'] ?? '', $allowedRoles, true)) {
     header('Location: /School_Facility_Maintenance_System/frontend/pages/maintenance-reports-list.php');
     exit;
 }
 
 require_once __DIR__ . '/../../backend/config/database.php';
 $pdo = getDBConnection();
+
+$deptStmt = $pdo->query("SELECT department_id, name FROM departments WHERE status = 'active' ORDER BY name");
+$departments = $deptStmt->fetchAll(PDO::FETCH_ASSOC);
 
 $reportId = $_GET['id'] ?? null;
 $report = null;
@@ -84,6 +88,19 @@ if ($reportId) {
                 </div>
 
                 <div class="form-group">
+                    <label for="department">Department *</label>
+                    <select id="department" name="department_id" required>
+                        <option value="">Select department...</option>
+                        <?php foreach ($departments as $dept): ?>
+                            <option value="<?php echo $dept['department_id']; ?>"
+                                <?php echo ($report && $report['department_id'] == $dept['department_id']) ? 'selected' : ''; ?>>
+                                <?php echo htmlspecialchars($dept['name']); ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
+                <div class="form-group">
                     <label for="priority">Priority *</label>
                     <select id="priority" name="priority" required>
                         <option value="low" <?php echo ($report && $report['priority'] == 'low') ? 'selected' : ''; ?>>Low</option>
@@ -120,7 +137,7 @@ if ($reportId) {
                             <div id="need-change-results" class="need-change-results">
                                 <div class="need-change-empty">Loading inventory items...</div>
                             </div>
-                            <small class="text-muted d-block need-change-note">Stock will only be deducted after Super Admin approval.</small>
+                            <small class="text-muted d-block need-change-note">Stock will only be deducted after Administrator approval.</small>
                         </div>
                     </div>
                 </div>
@@ -162,6 +179,7 @@ document.getElementById('report-form').addEventListener('submit', async (e) => {
         location: document.getElementById('location').value.trim(),
         priority: document.getElementById('priority').value,
         description: document.getElementById('description').value.trim(),
+        department_id: document.getElementById('department').value || null,
         need_change_item_id: null
     };
 
@@ -190,23 +208,23 @@ document.getElementById('report-form').addEventListener('submit', async (e) => {
     alertContainer.innerHTML = '';
     
     try {
-        const action = reportId ? 'update' : 'create';
-        const url = reportId 
-            ? `/School_Facility_Maintenance_System/backend/api/maintenance-reports-api.php?action=update&id=${reportId}`
-            : `/School_Facility_Maintenance_System/backend/api/maintenance-reports-api.php?action=create`;
-        
+        const url = reportId
+            ? window.SFMS_PUBLIC_URL(`/api/reports/${reportId}`)
+            : window.SFMS_PUBLIC_URL('/api/reports');
+
         const response = await fetch(url, {
-            method: 'POST',
+            method: reportId ? 'PATCH' : 'POST',
             headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
             body: JSON.stringify(formData)
         });
         
         const result = await response.json();
         
         if (result.success) {
-            const successMessage = reportId
+                const successMessage = reportId
                 ? 'Report updated successfully!'
-                : 'Report created successfully! Na-notify na via email ang Super Admin.';
+                : 'Report created successfully! Na-notify na via email ang Administrator.';
             alertContainer.innerHTML = '<div class="alert alert-success">' + successMessage + '</div>';
             
             setTimeout(() => {
@@ -230,16 +248,18 @@ async function loadNeedChangeItems() {
     if (!hiddenInput || !results) return;
 
     try {
-        const response = await fetch('/School_Facility_Maintenance_System/backend/api/items.php?action=list', {
+        const response = await fetch(window.SFMS_PUBLIC_URL('/api/items?per_page=200'), {
             credentials: 'include'
         });
         const result = await response.json();
 
-        if (!result.success || !Array.isArray(result.items)) {
+        // Laravel returns paginator: result.data.data; legacy returns result.items
+        const items = (result.data && result.data.data) || result.items || [];
+        if (!result.success || !Array.isArray(items)) {
             throw new Error(result.message || 'Failed to load inventory items');
         }
 
-        needChangeItemsCache = result.items.filter((item) => Number(item.quantity || 0) > 0);
+        needChangeItemsCache = items.filter((item) => Number(item.quantity || 0) > 0);
         const existingItem = needChangeItemsCache.find((item) => String(item.id) === String(existingNeedChangeItemId || ''));
         if (existingItem) {
             updateNeedChangeSelection(existingItem);

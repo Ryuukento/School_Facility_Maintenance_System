@@ -16,9 +16,6 @@ require_once __DIR__ . '/../../backend/config/database.php';
 $pdo = getDBConnection();
 
 $currentRole = strtolower(trim((string)($user['role'] ?? ($_SESSION['role'] ?? ''))));
-if ($currentRole === 'admin_maintenance') {
-    $currentRole = 'maintenance_admin';
-}
 if ($currentRole === 'super admin' || $currentRole === 'superadmin') {
     $currentRole = 'super_admin';
 }
@@ -41,6 +38,7 @@ if ($currentRole === 'super_admin') {
         'closed' => 'Closed'
     ];
 }
+$canReopenReport = in_array($currentRole, ['super_admin', 'maintenance_admin'], true);
 
 $canAssignUser = in_array($currentRole, ['super_admin', 'maintenance_admin'], true);
 $assignmentTargetsByRole = [
@@ -63,13 +61,13 @@ if ($canAssignUser) {
     if ($currentRole === 'maintenance_admin') {
         $assignmentLabel = 'Assign To (Maintenance Staff)';
         $assignmentPlaceholder = 'Select maintenance staff...';
-        $stmt = $pdo->query("SELECT user_id, full_name FROM users WHERE role IN ('maintenance_staff', 'eelab_staff', 'maintenance_personnel') AND status = 'active' ORDER BY full_name");
+        $stmt = $pdo->query("SELECT user_id, username, full_name, email, designation, COALESCE(NULLIF(full_name, ''), username, designation) as display_name FROM users WHERE role IN ('maintenance_staff') AND status = 'active' ORDER BY full_name, username");
         $assignmentTargetsByRole['maintenance_staff'] = $stmt->fetchAll();
     } else {
         $assignmentLabel = 'Assign To (Maintenance Team)';
-        $stmt = $pdo->query("SELECT user_id, full_name FROM users WHERE role IN ('maintenance_admin', 'admin_maintenance') AND status = 'active' ORDER BY full_name");
+        $stmt = $pdo->query("SELECT user_id, username, full_name, email, designation, COALESCE(NULLIF(full_name, ''), username, designation) as display_name FROM users WHERE role IN ('maintenance_admin') AND status = 'active' ORDER BY full_name, username");
         $assignmentTargetsByRole['maintenance_admin'] = $stmt->fetchAll();
-        $stmt = $pdo->query("SELECT user_id, full_name FROM users WHERE role IN ('maintenance_staff', 'eelab_staff', 'maintenance_personnel') AND status = 'active' ORDER BY full_name");
+        $stmt = $pdo->query("SELECT user_id, username, full_name, email, designation, COALESCE(NULLIF(full_name, ''), username, designation) as display_name FROM users WHERE role IN ('maintenance_staff') AND status = 'active' ORDER BY full_name, username");
         $assignmentTargetsByRole['maintenance_staff'] = $stmt->fetchAll();
     }
 }
@@ -142,7 +140,7 @@ if ($canAssignUser) {
                     <select id="new-status" required>
                         <option value="">Select new status...</option>
                         <?php foreach ($allowedStatusOptions as $statusValue => $statusLabel): ?>
-                            <option value="<?php echo htmlspecialchars($statusValue); ?>"><?php echo htmlspecialchars($statusLabel); ?></option>
+                            <option value="<?php echo htmlspecialchars($statusValue); ?>" <?php echo $statusValue === 'assigned' ? 'selected' : ''; ?>><?php echo htmlspecialchars($statusLabel); ?></option>
                         <?php endforeach; ?>
                     </select>
                 </div>
@@ -150,15 +148,13 @@ if ($canAssignUser) {
                 <?php if ($canAssignUser): ?>
                 <div class="form-group" id="assigned-to-group" style="display:none;">
                     <label for="assigned-to"><?php echo htmlspecialchars($assignmentLabel); ?></label>
-                    <div class="assignment-role-switcher" id="assignment-role-switcher">
-                        <?php if ($currentRole === 'super_admin'): ?>
-                            <button type="button" class="assignment-role-btn" data-assignment-role="maintenance_admin">Maintenance Admin</button>
-                        <?php endif; ?>
-                        <button type="button" class="assignment-role-btn" data-assignment-role="maintenance_staff">Maintenance Staff</button>
+
+                    <div style="position:relative;">
+                        <input type="text" id="assigned-to-search" class="form-control" placeholder="Type name to search..." autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+                        <input type="hidden" id="assigned-to" value="">
+                        <div id="assigned-to-selected" style="display:none;margin-top:6px;padding:8px 12px;border-radius:8px;background:rgba(59,130,246,0.12);border:1px solid rgba(96,165,250,0.3);font-size:13px;color:#93c5fd;"></div>
+                        <div id="assigned-to-results" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:200;background:#0f1b31;border:1px solid rgba(148,163,184,0.24);border-radius:10px;box-shadow:0 12px 28px rgba(2,6,23,0.4);max-height:220px;overflow-y:auto;margin-top:4px;"></div>
                     </div>
-                    <select id="assigned-to">
-                        <option value=""><?php echo htmlspecialchars($assignmentPlaceholder); ?></option>
-                    </select>
                 </div>
                 <?php endif; ?>
 
@@ -178,6 +174,19 @@ if ($canAssignUser) {
             </form>
         </div>
     </div>
+
+    <?php if ($canReopenReport): ?>
+    <div class="card mt-lg" id="reopen-report-card" style="display:none;">
+        <div class="card-header">
+            <h2>Reopen Report</h2>
+            <p class="text-muted mb-0">Revert this report back to In Progress for further action.</p>
+        </div>
+        <div class="card-body">
+            <div id="reopen-alert"></div>
+            <button type="button" class="btn btn-warning" id="reopen-report-btn">↩ Reopen Report</button>
+        </div>
+    </div>
+    <?php endif; ?>
 
     <div class="card mt-lg" id="need-change-approval-card" style="display:none;">
         <div class="card-header">
@@ -259,20 +268,41 @@ if ($canAssignUser) {
     flex-wrap: wrap;
 }
 
+.assignment-role-switcher {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
 .assignment-role-btn {
-    border: 1px solid rgba(148, 163, 184, 0.25);
+    flex: 1;
+    border: 2px solid rgba(148, 163, 184, 0.25);
     background: rgba(15, 23, 42, 0.72);
-    color: var(--text-light, #f3f4f6);
+    color: #94a3b8;
     border-radius: 10px;
     padding: 10px 14px;
     cursor: pointer;
     font-weight: 600;
+    font-size: 13px;
+    transition: all 0.2s ease;
+    position: relative;
+}
+
+.assignment-role-btn:hover:not(.is-active) {
+    border-color: rgba(148, 163, 184, 0.5);
+    color: #e2e8f0;
+    background: rgba(30, 41, 59, 0.9);
 }
 
 .assignment-role-btn.is-active {
     background: linear-gradient(135deg, #7c3aed, #a855f7);
-    border-color: transparent;
-    box-shadow: 0 10px 22px rgba(124, 58, 237, 0.3);
+    border-color: #a855f7;
+    color: #ffffff;
+    box-shadow: 0 6px 18px rgba(124, 58, 237, 0.4);
+}
+
+.assignment-role-btn.is-active::after {
+    content: ' ✓';
 }
 </style>
 
@@ -367,18 +397,22 @@ function renderStatusBadge(status) {
 
 function syncAssignedToVisibility() {
     const group = document.getElementById('assigned-to-group');
-    const select = document.getElementById('assigned-to');
+    const hiddenInput = document.getElementById('assigned-to');
     const statusSelect = document.getElementById('new-status');
-    if (!group || !select || !statusSelect) return;
+    if (!group || !hiddenInput || !statusSelect) return;
 
     if (statusSelect.value === 'assigned') {
         group.style.display = 'block';
-        select.required = true;
-        renderAssignmentOptions(select.value || (currentReport && currentReport.assigned_to ? String(currentReport.assigned_to) : ''));
+        renderAssignmentOptions(hiddenInput.value || (currentReport && currentReport.assigned_to ? String(currentReport.assigned_to) : ''));
     } else {
         group.style.display = 'none';
-        select.required = false;
-        select.value = '';
+        hiddenInput.value = '';
+        const si = document.getElementById('assigned-to-search');
+        const se = document.getElementById('assigned-to-selected');
+        const re = document.getElementById('assigned-to-results');
+        if (si) si.value = '';
+        if (se) { se.style.display = 'none'; se.textContent = ''; }
+        if (re) { re.style.display = 'none'; re.innerHTML = ''; }
     }
 }
 
@@ -387,44 +421,92 @@ function getAssignmentRoleLabel(roleKey) {
     return 'Maintenance Staff';
 }
 
+function getAssignmentPrimaryLabel(person) {
+    return String(person?.full_name || person?.username || person?.display_name || 'Unknown').trim();
+}
+
+function getAssignmentSecondaryLabel(person) {
+    const details = [];
+    const username = String(person?.username || '').trim();
+    const designation = String(person?.designation || '').trim();
+    const email = String(person?.email || '').trim();
+
+    if (username) details.push('@' + username);
+    if (designation) details.push(designation);
+    if (email) details.push(email);
+
+    return details.join(' • ');
+}
+
+function getAssignmentSearchBlob(person) {
+    return [
+        person?.full_name,
+        person?.username,
+        person?.display_name,
+        person?.designation,
+        person?.email,
+    ].join(' ').toLowerCase();
+}
+
 function renderAssignmentOptions(selectedValue = '') {
-    const select = document.getElementById('assigned-to');
+    const searchInput = document.getElementById('assigned-to-search');
+    const hiddenInput = document.getElementById('assigned-to');
+    const resultsEl = document.getElementById('assigned-to-results');
+    const selectedEl = document.getElementById('assigned-to-selected');
     const roleButtons = document.querySelectorAll('.assignment-role-btn');
-    if (!select) return;
+    if (!hiddenInput || !resultsEl) return;
 
-    const normalizedSelectedValue = String(selectedValue || '');
-    let roleKey = activeAssignmentRole;
-    const currentRoleTargets = Array.isArray(assignmentTargetsByRole[roleKey]) ? assignmentTargetsByRole[roleKey] : [];
+    // Update active role button UI
+    roleButtons.forEach((btn) => {
+        btn.classList.toggle('is-active', btn.getAttribute('data-assignment-role') === activeAssignmentRole);
+    });
 
-    if (normalizedSelectedValue) {
-        const matchingRole = Object.keys(assignmentTargetsByRole).find((key) => {
-            const items = Array.isArray(assignmentTargetsByRole[key]) ? assignmentTargetsByRole[key] : [];
-            return items.some((person) => String(person.user_id) === normalizedSelectedValue);
-        });
-
-        if (matchingRole) {
-            roleKey = matchingRole;
-            activeAssignmentRole = matchingRole;
+    // If a selectedValue is passed (e.g. pre-existing assignment), show it
+    if (selectedValue) {
+        const allTargets = Object.values(assignmentTargetsByRole).flat();
+        const match = allTargets.find((p) => String(p.user_id) === String(selectedValue));
+        if (match) {
+            hiddenInput.value = String(match.user_id);
+            if (searchInput) searchInput.value = getAssignmentPrimaryLabel(match);
+            if (selectedEl) {
+                selectedEl.style.display = 'block';
+                selectedEl.textContent = 'Assigned: ' + getAssignmentPrimaryLabel(match);
+            }
         }
     }
+}
 
-    const targets = Array.isArray(assignmentTargetsByRole[roleKey]) ? assignmentTargetsByRole[roleKey] : [];
-    const placeholderText = `Select ${getAssignmentRoleLabel(roleKey).toLowerCase()}...`;
+function filterAssignmentResults() {
+    const searchInput = document.getElementById('assigned-to-search');
+    const resultsEl = document.getElementById('assigned-to-results');
+    const hiddenInput = document.getElementById('assigned-to');
+    if (!searchInput || !resultsEl) return;
 
-    select.innerHTML = `<option value="">${placeholderText}</option>`;
-    targets.forEach((person) => {
-        const option = document.createElement('option');
-        option.value = String(person.user_id);
-        option.textContent = String(person.full_name || '');
-        if (String(person.user_id) === normalizedSelectedValue) {
-            option.selected = true;
-        }
-        select.appendChild(option);
-    });
+    const keyword = searchInput.value.trim().toLowerCase();
+    if (!keyword) {
+        resultsEl.style.display = 'none';
+        resultsEl.innerHTML = '';
+        return;
+    }
 
-    roleButtons.forEach((button) => {
-        button.classList.toggle('is-active', button.dataset.assignmentRole === roleKey);
-    });
+    // Search across all roles
+    const allTargets = Object.values(assignmentTargetsByRole).flat();
+    const filtered = allTargets.filter((p) => getAssignmentSearchBlob(p).includes(keyword));
+
+    if (!filtered.length) {
+        resultsEl.innerHTML = '<div style="padding:10px 14px;color:#94a3b8;font-size:13px;">No matching personnel</div>';
+        resultsEl.style.display = 'block';
+        return;
+    }
+
+    const currentVal = hiddenInput ? hiddenInput.value : '';
+    resultsEl.innerHTML = filtered.map((p) => {
+        const isActive = String(p.user_id) === String(currentVal);
+        const primary = getAssignmentPrimaryLabel(p);
+        const secondary = getAssignmentSecondaryLabel(p);
+        return `<button type="button" data-person-id="${p.user_id}" style="display:block;width:100%;text-align:left;padding:10px 14px;background:${isActive ? 'rgba(59,130,246,0.18)' : 'none'};border:none;color:${isActive ? '#93c5fd' : '#dbe7fb'};font-size:14px;cursor:pointer;transition:background 0.15s;" onmouseover="this.style.background='rgba(148,163,184,0.12)'" onmouseout="this.style.background='${isActive ? 'rgba(59,130,246,0.18)' : 'none'}'"><div style="font-weight:600;">${primary}</div>${secondary ? `<div style="margin-top:2px;color:#94a3b8;font-size:12px;">${secondary}</div>` : ''}</button>`;
+    }).join('');
+    resultsEl.style.display = 'block';
 }
 
 function syncCompletionProofVisibility() {
@@ -578,7 +660,8 @@ async function loadReport() {
     
     try {
         const response = await fetch(
-            `/School_Facility_Maintenance_System/backend/api/maintenance-reports-api.php?action=get&id=${reportId}`
+            window.SFMS_PUBLIC_URL(`/api/reports/${reportId}`),
+            { credentials: 'include' }
         );
         const data = await response.json();
         
@@ -683,6 +766,7 @@ async function loadReport() {
         syncAssignedToVisibility();
         syncCompletionProofVisibility();
         updateNeedChangeApprovalUI(report);
+        updateReopenCardUI(report);
         
     } catch (error) {
         console.error('Error:', error);
@@ -734,15 +818,16 @@ document.getElementById('status-update-form').addEventListener('submit', async (
         }
 
         const response = await fetch(
-            `/School_Facility_Maintenance_System/backend/api/maintenance-reports-api.php?action=update&id=${reportId}`,
+            window.SFMS_PUBLIC_URL(`/api/reports/${reportId}`),
             {
-                method: 'POST',
+                method: 'PATCH',
+                credentials: 'include',
                 body: formData
             }
         );
-        
+
         const data = await response.json();
-        
+
         if (data.success) {
             alertDiv.innerHTML = '<div class="alert alert-success">Status updated successfully!</div>';
             setTimeout(() => {
@@ -800,13 +885,14 @@ document.getElementById('approve-need-change-btn')?.addEventListener('click', as
 
     try {
         const response = await fetch(
-            `/School_Facility_Maintenance_System/backend/api/maintenance-reports-api.php?action=update&id=${reportId}`,
+            window.SFMS_PUBLIC_URL(`/api/reports/${reportId}`),
             {
-                method: 'POST',
+                method: 'PATCH',
+                credentials: 'include',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     approve_need_change: true,
-                    comment: 'Need Change approved by Super Admin'
+                    comment: 'Need Change approved by Admin'
                 })
             }
         );
@@ -862,13 +948,14 @@ document.getElementById('reject-need-change-btn')?.addEventListener('click', asy
 
     try {
         const response = await fetch(
-            `/School_Facility_Maintenance_System/backend/api/maintenance-reports-api.php?action=update&id=${reportId}`,
+            window.SFMS_PUBLIC_URL(`/api/reports/${reportId}`),
             {
-                method: 'POST',
+                method: 'PATCH',
+                credentials: 'include',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     reject_need_change: true,
-                    comment: 'Need Change rejected by Super Admin'
+                    comment: 'Need Change rejected by Admin'
                 })
             }
         );
@@ -888,16 +975,94 @@ document.getElementById('reject-need-change-btn')?.addEventListener('click', asy
     }
 });
 
+function updateReopenCardUI(report) {
+    const card = document.getElementById('reopen-report-card');
+    if (!card) return;
+    const status = String(report.status || '').toLowerCase();
+    card.style.display = (status === 'completed' || status === 'closed') ? 'block' : 'none';
+}
+
+document.getElementById('reopen-report-btn')?.addEventListener('click', async () => {
+    const btn = document.getElementById('reopen-report-btn');
+    const alertDiv = document.getElementById('reopen-alert');
+    const original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Reopening...';
+    alertDiv.innerHTML = '';
+    try {
+        const formData = new FormData();
+        formData.append('status', 'in_progress');
+        formData.append('comment', 'Report reopened');
+        const response = await fetch(window.SFMS_PUBLIC_URL(`/api/reports/${reportId}`), { method: 'PATCH', credentials: 'include', body: formData });
+        const data = await response.json();
+        if (!data.success) throw new Error(data.message || 'Failed to reopen report');
+        alertDiv.innerHTML = '<div class="alert alert-success">Report reopened successfully!</div>';
+        setTimeout(() => loadReport(), 1500);
+    } catch (error) {
+        alertDiv.innerHTML = `<div class="alert alert-danger">${error.message}</div>`;
+        btn.disabled = false;
+        btn.textContent = original;
+    }
+});
+
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.assignment-role-btn').forEach((button) => {
         button.addEventListener('click', () => {
             activeAssignmentRole = button.dataset.assignmentRole || defaultAssignmentRoleFilter;
+            // Clear search and selection when switching role
+            const si = document.getElementById('assigned-to-search');
+            const hi = document.getElementById('assigned-to');
+            const se = document.getElementById('assigned-to-selected');
+            const re = document.getElementById('assigned-to-results');
+            if (si) si.value = '';
+            if (hi) hi.value = '';
+            if (se) { se.style.display = 'none'; se.textContent = ''; }
+            if (re) { re.style.display = 'none'; re.innerHTML = ''; }
             renderAssignmentOptions('');
         });
     });
 
     renderAssignmentOptions('');
+
+    // Search input for assign personnel
+    const assignSearchInput = document.getElementById('assigned-to-search');
+    const assignResultsEl = document.getElementById('assigned-to-results');
+
+    if (assignSearchInput) {
+        assignSearchInput.placeholder = assignmentPlaceholder || 'Type name or username to search...';
+        assignSearchInput.addEventListener('input', filterAssignmentResults);
+        assignSearchInput.addEventListener('focus', filterAssignmentResults);
+    }
+
+    if (assignResultsEl) {
+        assignResultsEl.addEventListener('click', (e) => {
+            const btn = e.target.closest('[data-person-id]');
+            if (!btn) return;
+            const personId = btn.getAttribute('data-person-id');
+            const targets = Object.values(assignmentTargetsByRole).flat();
+            const match = targets.find((p) => String(p.user_id) === String(personId));
+            if (!match) return;
+
+            const hiddenInput = document.getElementById('assigned-to');
+            const selectedEl = document.getElementById('assigned-to-selected');
+            if (hiddenInput) hiddenInput.value = String(match.user_id);
+            if (assignSearchInput) assignSearchInput.value = getAssignmentPrimaryLabel(match);
+            if (selectedEl) {
+                selectedEl.style.display = 'block';
+                selectedEl.textContent = 'Assigned: ' + getAssignmentPrimaryLabel(match);
+            }
+            assignResultsEl.style.display = 'none';
+            assignResultsEl.innerHTML = '';
+        });
+    }
+
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('#assigned-to-group')) {
+            if (assignResultsEl) assignResultsEl.style.display = 'none';
+        }
+    });
+
     loadReport();
 });
 

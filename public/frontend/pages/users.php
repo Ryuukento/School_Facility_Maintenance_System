@@ -34,13 +34,14 @@ include __DIR__ . '/../includes/header.php';
             </div>
         </div>
 
-        <div class="users-toolbar">
+        <div class="users-toolbar" style="border-left:3px solid var(--primary-color);padding-left:12px;">
             <div class="users-search-wrap">
                 <input type="search" id="search-input" name="user-search" class="users-search-input" placeholder="Search by name, email, or role..." autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="search">
                 <div class="users-role-filters" id="users-role-filters" aria-label="Filter users by role">
                     <button type="button" class="users-role-filter is-active" data-role-filter="all">All</button>
+                    <button type="button" class="users-role-filter" data-role-filter="super_admin">Administrator</button>
+                    <button type="button" class="users-role-filter" data-role-filter="maintenance_admin">Head</button>
                     <button type="button" class="users-role-filter" data-role-filter="maintenance_staff">Maintenance Staff</button>
-                    <button type="button" class="users-role-filter" data-role-filter="maintenance_admin">Admin Maintenance</button>
                 </div>
             </div>
             <div class="users-toolbar-actions">
@@ -70,7 +71,7 @@ include __DIR__ . '/../includes/header.php';
 <link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/users.inline.css?v=20260414-1">
 
 <script>
-window.API = window.API || { baseURL: (window.SFMS_BACKEND_API_BASE || '/backend/api') };
+window.API = window.API || {};
 const currentUserRole = <?php echo json_encode($userRole); ?>;
 
 const usersState = {
@@ -82,10 +83,29 @@ const usersState = {
     roleFilter: 'all'
 };
 
+async function loadDepartmentsForModal() {
+    const select = document.getElementById('register-department');
+    if (!select) return;
+    try {
+        const res = await fetch(window.SFMS_PUBLIC_URL('/api/departments'), { credentials: 'include' });
+        const data = await res.json();
+        const depts = data.departments || (data.data && data.data.departments) || [];
+        select.innerHTML = '<option value="">No specific department</option>';
+        depts.forEach((d) => {
+            const opt = document.createElement('option');
+            opt.value = d.department_id;
+            opt.textContent = d.name;
+            select.appendChild(opt);
+        });
+    } catch (e) {
+        select.innerHTML = '<option value="">Could not load departments</option>';
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     loadUsers();
     document.getElementById('search-input')?.addEventListener('input', searchUsers);
-    document.getElementById('add-new-user-btn')?.addEventListener('click', openRegisterUserModal);
+    document.getElementById('add-new-user-btn')?.addEventListener('click', () => { openRegisterUserModal(); setTimeout(loadDepartmentsForModal, 50); });
 
     document.querySelectorAll('[data-role-filter]').forEach((button) => {
         button.addEventListener('click', () => {
@@ -99,7 +119,7 @@ async function loadUsers() {
     container.innerHTML = '<div class="users-grid users-loading-grid ui-fade-in"><div class="users-card users-skeleton-card"></div><div class="users-card users-skeleton-card"></div><div class="users-card users-skeleton-card"></div><div class="users-card users-skeleton-card"></div></div>';
 
     try {
-        const response = await fetch(`${window.API.baseURL}/users-api.php?action=list`, {
+        const response = await fetch(window.SFMS_PUBLIC_URL('/api/users'), {
             method: 'GET',
             credentials: 'include'
         });
@@ -238,16 +258,25 @@ function renderUsersPagination() {
 }
 
 function renderUserCard(targetUser) {
-    const safeId = Number(targetUser.user_id || 0);
-    const safeEmployeeId = escapeHtml(targetUser.employee_id || 'Not assigned');
-    const safeName = escapeHtml(targetUser.full_name || 'N/A');
-    const safeEmail = escapeHtml(targetUser.email || 'N/A');
+    const safeId        = Number(targetUser.user_id || 0);
+    const safeName      = escapeHtml(targetUser.full_name || 'N/A');
+    const safeEmail     = escapeHtml(targetUser.email || 'N/A');
+    const safeDept      = escapeHtml(targetUser.department_name || 'No department');
+    // Show @username when available, fall back to email, then a neutral placeholder
+    const safeHandle    = targetUser.username
+                            ? escapeHtml('@' + targetUser.username)
+                            : targetUser.email
+                                ? escapeHtml(targetUser.email)
+                                : '—';
+    const joinedDate    = targetUser.created_at
+                            ? new Date(targetUser.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                            : '—';
     const normalizedRole = String(targetUser.role || 'user').toLowerCase();
     const normalizedStatus = String(targetUser.status || '').toLowerCase();
     const hasPendingPasswordResetRequest = Boolean(Number(targetUser.has_pending_password_reset_request || 0)) || targetUser.has_pending_password_reset_request === true;
     const avatarMarkup = buildAvatarMarkup(targetUser);
     const mediaMarkup = buildCardMediaMarkup(targetUser);
-    const roleLabel = getRoleLabel(normalizedRole);
+    const roleLabel = getRoleLabel(normalizedRole, targetUser.department_name);
     const statusLabel = getStatusLabel(normalizedStatus);
     const statusClass = getStatusClass(normalizedStatus);
 
@@ -261,12 +290,15 @@ function renderUserCard(targetUser) {
     } else if (normalizedStatus === 'inactive') {
         actionButtons = `<button type="button" onclick="openActivateUserModal(${safeId}, '${escapeJsString(targetUser.full_name || '')}')" class="users-action-btn users-action-inactive" title="Set this user to active">Set Active</button>`;
     } else {
-        actionButtons = `
-            ${hasPendingPasswordResetRequest
-                ? `<button type="button" onclick="openResetPasswordModal(${safeId}, '${escapeJsString(targetUser.full_name || '')}', '${escapeJsString(targetUser.email || '')}')" class="users-action-btn users-action-approve" title="Reset this user's password">Reset Password</button>`
-                : ''}
-            <button type="button" onclick="openInactiveUserModal(${safeId}, '${escapeJsString(targetUser.full_name || '')}')" class="users-action-btn users-action-activate" title="Set this user to inactive">Set Inactive</button>
-        `;
+        // Active status - show Reset Password only if pending, otherwise just Set Inactive
+        if (hasPendingPasswordResetRequest) {
+            actionButtons = `
+                <button type="button" onclick="openResetPasswordModal(${safeId}, '${escapeJsString(targetUser.full_name || '')}', '${escapeJsString(targetUser.email || '')}')" class="users-action-btn users-action-approve users-action-reset-pending" title="Reset this user's password">🔔 Reset Password</button>
+                <button type="button" onclick="openInactiveUserModal(${safeId}, '${escapeJsString(targetUser.full_name || '')}')" class="users-action-btn users-action-activate" title="Set this user to inactive">Set Inactive</button>
+            `;
+        } else {
+            actionButtons = `<button type="button" onclick="openInactiveUserModal(${safeId}, '${escapeJsString(targetUser.full_name || '')}')" class="users-action-btn users-action-activate" title="Set this user to inactive">Set Inactive</button>`;
+        }
     }
 
     return `
@@ -287,16 +319,33 @@ function renderUserCard(targetUser) {
                 </div>
                 <div class="users-card-meta">
                     <div class="users-card-row">
-                        <span class="users-card-icon">#</span>
-                        <span>${safeEmployeeId}</span>
+                        <span class="users-card-icon">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                                <polyline points="9 22 9 12 15 12 15 22"/>
+                            </svg>
+                        </span>
+                        <span class="users-card-row-text">${safeDept}</span>
                     </div>
                     <div class="users-card-row">
-                        <span class="users-card-icon">✉</span>
-                        <span>${safeEmail}</span>
+                        <span class="users-card-icon">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0 1.1.9 2 2 2z"/>
+                                <polyline points="22,6 12,13 2,6"/>
+                            </svg>
+                        </span>
+                        <span class="users-card-row-text">${safeHandle}</span>
                     </div>
                     <div class="users-card-row">
-                        <span class="users-card-icon">◌</span>
-                        <span>${escapeHtml(roleLabel)}</span>
+                        <span class="users-card-icon">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                                <line x1="16" y1="2" x2="16" y2="6"/>
+                                <line x1="8" y1="2" x2="8" y2="6"/>
+                                <line x1="3" y1="10" x2="21" y2="10"/>
+                            </svg>
+                        </span>
+                        <span class="users-card-row-text">Joined ${joinedDate}</span>
                     </div>
                 </div>
                 <div class="users-card-actions">${actionButtons}</div>
@@ -360,19 +409,27 @@ function getInitials(name) {
         .join('') || 'U';
 }
 
-function getRoleLabel(role) {
-    const labels = {
-        super_admin: 'Admin',
-        maintenance_admin: 'Admin Maintenance',
-        maintenance_staff: 'Maintenance Staff',
-        user: 'Data Entry',
-        client: 'Client'
-    };
-
-    if (labels[role]) {
-        return labels[role];
+function getRoleLabel(role, departmentName) {
+    if (role === 'maintenance_admin') {
+        const dept = String(departmentName || '').toLowerCase().trim();
+        if (dept.includes('computer'))                               return 'Head Computer';
+        if (dept.includes('electrical'))                             return 'Head Electrical';
+        if (dept.includes('chemical') || dept.includes('chemistry')) return 'Head Chemistry';
+        if (dept.includes('laboratory') || dept.includes('lab'))     return 'Head Laboratory';
+        if (dept.length > 0) {
+            // Capitalize each word of department name for display
+            const cap = String(departmentName || '').trim().split(/\s+/).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+            return 'Head ' + cap;
+        }
+        return 'Head';
     }
-
+    const labels = {
+        super_admin:       'Administrator',
+        maintenance_staff: 'Maintenance Staff',
+        user:              'Data Entry',
+        client:            'Client',
+    };
+    if (labels[role]) return labels[role];
     return role.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
@@ -425,6 +482,7 @@ function openRegisterUserModal() {
         <div class="users-modal-card users-register-modal-card">
             <h3 class="users-modal-title">Register User</h3>
             <p class="users-modal-desc">Create a new active account. Employee ID is auto-generated based on today\'s date (example: 20260409). The user will be prompted to update their profile on first open.</p>
+            <div id="register-form-error" class="users-modal-field-error" style="margin-bottom:0.85rem;"></div>
             <div class="users-modal-field">
                 <label for="register-last-name" class="users-modal-label">Last Name</label>
                 <input id="register-last-name" class="users-modal-input" type="text" placeholder="Enter last name" autocomplete="off" autocapitalize="words" autocorrect="off" spellcheck="false">
@@ -435,21 +493,24 @@ function openRegisterUserModal() {
                 <input id="register-first-name" class="users-modal-input" type="text" placeholder="Enter first name" autocomplete="off" autocapitalize="words" autocorrect="off" spellcheck="false">
                 <div id="register-first-name-error" class="users-modal-field-error"></div>
             </div>
-            <div class="users-modal-field">
-                <label for="register-middle-initial" class="users-modal-label">Middle Initial</label>
-                <input id="register-middle-initial" class="users-modal-input" type="text" placeholder="Optional (e.g., D)" maxlength="1" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false">
-                <div id="register-middle-initial-error" class="users-modal-field-error"></div>
+            <div class="users-modal-inline-fields">
+                <div class="users-modal-field users-modal-field-inline">
+                    <label for="register-middle-initial" class="users-modal-label">Middle Initial</label>
+                    <input id="register-middle-initial" class="users-modal-input" type="text" placeholder="Optional (e.g., D)" maxlength="1" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false">
+                    <div id="register-middle-initial-error" class="users-modal-field-error"></div>
+                </div>
+                <div class="users-modal-field users-modal-field-inline">
+                    <label for="register-suffix" class="users-modal-label">Suffix</label>
+                    <input id="register-suffix" class="users-modal-input" type="text" placeholder="Optional (e.g., Jr., Sr., III)" autocomplete="off" autocapitalize="words" autocorrect="off" spellcheck="false">
+                    <div id="register-suffix-error" class="users-modal-field-error"></div>
+                </div>
             </div>
             <div class="users-modal-field">
-                <label for="register-suffix" class="users-modal-label">Suffix</label>
-                <input id="register-suffix" class="users-modal-input" type="text" placeholder="Optional (e.g., Jr., Sr., III)" autocomplete="off" autocapitalize="words" autocorrect="off" spellcheck="false">
-                <div id="register-suffix-error" class="users-modal-field-error"></div>
+                <label for="register-username" class="users-modal-label">Username *</label>
+                <input id="register-username" class="users-modal-input" type="text" placeholder="e.g. juan_dela_cruz" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+                <div id="register-username-error" class="users-modal-field-error"></div>
             </div>
-            <div class="users-modal-field">
-                <label for="register-email" class="users-modal-label">Email</label>
-                <input id="register-email" class="users-modal-input" type="email" placeholder="Enter email" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
-                <div id="register-email-error" class="users-modal-field-error"></div>
-            </div>
+            <!-- Email removed: system uses Username only for account creation -->
             <div class="users-modal-field" style="position:relative;">
                 <label for="register-password" class="users-modal-label">Password</label>
                 <input id="register-password" class="users-modal-input" type="password" placeholder="Minimum 8 characters" autocomplete="new-password" autocapitalize="off" autocorrect="off" spellcheck="false" style="padding-right:44px;height:44px;line-height:44px;">
@@ -471,9 +532,21 @@ function openRegisterUserModal() {
             <div class="users-modal-field">
                 <label for="register-role" class="users-modal-label">Role</label>
                 <select id="register-role" class="users-modal-select">
-                    <option value="maintenance_admin">Admin Maintenance</option>
+                    <option value="super_admin">Administrator</option>
+                    <option value="maintenance_admin">Head</option>
                     <option value="maintenance_staff" selected>Maintenance Staff</option>
                 </select>
+            </div>
+            <div class="users-modal-field">
+                <label for="register-department" class="users-modal-label">Department</label>
+                <select id="register-department" class="users-modal-select">
+                    <option value="">No specific department</option>
+                </select>
+            </div>
+            <div class="users-modal-field" id="register-designation-group" style="display:none;">
+                <label for="register-designation" class="users-modal-label">Designation / Department</label>
+                <input id="register-designation" class="users-modal-input" type="text" placeholder="e.g. Head Electrical, Computer Technician" autocomplete="off">
+                <small style="color:rgba(148,163,184,0.7);font-size:12px;">Specify the department or specialization (e.g. Head Electrical, Head Computer, Electrical Technician)</small>
             </div>
             <div class="users-modal-actions">
                 <button type="button" id="cancel-register-btn" class="users-modal-btn users-modal-btn-secondary">Cancel</button>
@@ -489,21 +562,38 @@ function openRegisterUserModal() {
     };
 
     document.getElementById('cancel-register-btn')?.addEventListener('click', closeModal);
-    
+
+    const registerFormError = document.getElementById('register-form-error');
+    const setRegisterModalError = (message) => {
+        if (!registerFormError) return;
+        const safeMessage = String(message || '').trim();
+        registerFormError.textContent = safeMessage;
+        registerFormError.classList.toggle('is-visible', safeMessage.length > 0);
+    };
+
     // Add real-time validation
     const lastNameInput = document.getElementById('register-last-name');
     const firstNameInput = document.getElementById('register-first-name');
     const middleInitialInput = document.getElementById('register-middle-initial');
     const suffixInput = document.getElementById('register-suffix');
-    const emailInput = document.getElementById('register-email');
+    const usernameInput = document.getElementById('register-username');
     const passwordInput = document.getElementById('register-password');
     
     lastNameInput?.addEventListener('blur', () => validateRequiredNameField(lastNameInput, 'Last name'));
     firstNameInput?.addEventListener('blur', () => validateRequiredNameField(firstNameInput, 'First name'));
     middleInitialInput?.addEventListener('blur', () => validateMiddleInitialField(middleInitialInput));
     suffixInput?.addEventListener('blur', () => validateSuffixField(suffixInput));
-    emailInput?.addEventListener('blur', () => validateEmailField(emailInput));
+    usernameInput?.addEventListener('blur', () => validateUsernameField(usernameInput));
     passwordInput?.addEventListener('blur', () => validatePasswordField(passwordInput));
+
+    const roleSelect = document.getElementById('register-role');
+    const designationGroup = document.getElementById('register-designation-group');
+    function syncDesignationVisibility() {
+        const role = roleSelect ? roleSelect.value : '';
+        if (designationGroup) designationGroup.style.display = (role === 'maintenance_admin' || role === 'maintenance_staff') ? 'block' : 'none';
+    }
+    roleSelect?.addEventListener('change', syncDesignationVisibility);
+    syncDesignationVisibility();
 
         // Password eye icon toggle
         const toggleRegisterPasswordBtn = document.getElementById('toggle-register-password');
@@ -523,12 +613,14 @@ function openRegisterUserModal() {
         }
     
     document.getElementById('confirm-register-btn')?.addEventListener('click', async () => {
+        setRegisterModalError('');
+
         const lastName = lastNameInput.value.trim();
         const firstName = firstNameInput.value.trim();
         const middleInitial = middleInitialInput.value.trim();
         const suffix = suffixInput.value.trim();
         const fullName = buildFullName(lastName, firstName, middleInitial);
-        const email = emailInput.value.trim();
+        const username = usernameInput.value.trim().toLowerCase();
         const password = passwordInput.value;
         const role = document.getElementById('register-role').value;
 
@@ -537,29 +629,27 @@ function openRegisterUserModal() {
         const firstNameError = getRequiredNameValidationError(firstName, 'First name');
         const middleInitialError = getMiddleInitialValidationError(middleInitial);
         const suffixError = getSuffixValidationError(suffix);
-        const emailError = getEmailValidationError(email);
+        const usernameError = getUsernameValidationError(username);
         const passwordError = getPasswordValidationError(password);
 
-        // Display inline errors in form
         setFieldValidationState(lastNameInput, lastNameError);
         setFieldValidationState(firstNameInput, firstNameError);
         setFieldValidationState(middleInitialInput, middleInitialError);
         setFieldValidationState(suffixInput, suffixError);
-        setFieldValidationState(emailInput, emailError);
+        setFieldValidationState(usernameInput, usernameError);
         setFieldValidationState(passwordInput, passwordError);
 
-        // Show errors if any exist
-        if (lastNameError || firstNameError || middleInitialError || suffixError || emailError || passwordError) {
+        if (lastNameError || firstNameError || middleInitialError || suffixError || usernameError || passwordError) {
             return;
         }
 
         if (!role) {
-            showPageAlert('Please select a role.', 'error');
+            setRegisterModalError('Please select a role.');
             return;
         }
 
         try {
-            const response = await fetch(`${window.API.baseURL}/users-api.php?action=create`, {
+            const response = await fetch(window.SFMS_PUBLIC_URL('/api/users'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
@@ -569,9 +659,11 @@ function openRegisterUserModal() {
                     middle_initial: middleInitial,
                     suffix: suffix,
                     full_name: fullName,
-                    email,
+                    username: username,
                     password,
-                    role
+                    role,
+                    designation: document.getElementById('register-designation')?.value.trim() || '',
+                    department_id: document.getElementById('register-department')?.value || null
                 })
             });
 
@@ -587,11 +679,22 @@ function openRegisterUserModal() {
                 closeModal();
                 loadUsers();
             } else {
-                showPageAlert('Error: ' + (data.message || 'Failed to create user'), 'error');
+                const apiMessage = String(data.message || '').trim();
+                const normalized = apiMessage.toLowerCase();
+                const isUsernameTaken = normalized.includes('username')
+                    && (normalized.includes('taken') || normalized.includes('exist') || normalized.includes('duplicate') || normalized.includes('already'));
+
+                if (isUsernameTaken) {
+                    setFieldValidationState(usernameInput, 'User name is already taken');
+                    setRegisterModalError('');
+                    usernameInput?.focus();
+                } else {
+                    setRegisterModalError(apiMessage || 'Failed to create user');
+                }
             }
         } catch (error) {
             console.error('Register error:', error);
-            showPageAlert('Failed to create user: ' + error.message, 'error');
+            setRegisterModalError(error?.message ? `Failed to create user: ${error.message}` : 'Failed to create user');
         }
     });
 
@@ -613,7 +716,7 @@ function openApproveUserModal(userId, userName) {
                 <label for="approve-user-role" class="users-modal-label">Assign role</label>
                 <select id="approve-user-role" class="users-modal-select">
                     <option value="maintenance_staff" selected>Maintenance Staff</option>
-                    <option value="maintenance_admin">Admin Maintenance</option>
+                    <option value="maintenance_admin">Head Maintenance</option>
                 </select>
             </div>
             <div class="users-modal-actions">
@@ -643,11 +746,11 @@ function openApproveUserModal(userId, userName) {
 
 async function approveUser(userId, role) {
     try {
-        const response = await fetch(`${window.API.baseURL}/users-api.php?action=approve`, {
-            method: 'POST',
+        const response = await fetch(window.SFMS_PUBLIC_URL(`/api/users/${userId}/approve`), {
+            method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
-            body: JSON.stringify({ user_id: userId, role })
+            body: JSON.stringify({ role })
         });
 
         const data = await response.json();
@@ -785,11 +888,11 @@ function openResetPasswordModal(userId, userName, userEmail) {
 
 async function resetUserPassword(userId, newPassword) {
     try {
-        const response = await fetch(`${window.API.baseURL}/users-api.php?action=reset_password`, {
+        const response = await fetch(window.SFMS_PUBLIC_URL(`/api/users/${userId}/reset-password`), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
-            body: JSON.stringify({ user_id: userId, new_password: newPassword })
+            body: JSON.stringify({ new_password: newPassword })
         });
 
         const data = await response.json();
@@ -808,11 +911,9 @@ async function resetUserPassword(userId, newPassword) {
 
 async function deactivateUser(userId) {
     try {
-        const response = await fetch(`${window.API.baseURL}/users-api.php?action=deactivate`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({ user_id: userId })
+        const response = await fetch(window.SFMS_PUBLIC_URL(`/api/users/${userId}/deactivate`), {
+            method: 'PATCH',
+            credentials: 'include'
         });
 
         const data = await response.json();
@@ -867,11 +968,9 @@ function openRejectUserModal(userId, userName) {
 
 async function rejectUser(userId) {
     try {
-        const response = await fetch(`${window.API.baseURL}/users-api.php?action=reject`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({ user_id: userId })
+        const response = await fetch(window.SFMS_PUBLIC_URL(`/api/users/${userId}/reject`), {
+            method: 'DELETE',
+            credentials: 'include'
         });
 
         const data = await response.json();
@@ -926,11 +1025,9 @@ function openActivateUserModal(userId, userName) {
 
 async function activateUser(userId) {
     try {
-        const response = await fetch(`${window.API.baseURL}/users-api.php?action=activate`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({ user_id: userId })
+        const response = await fetch(window.SFMS_PUBLIC_URL(`/api/users/${userId}/activate`), {
+            method: 'PATCH',
+            credentials: 'include'
         });
 
         const data = await response.json();
@@ -1006,6 +1103,17 @@ function buildFullName(lastName, firstName, middleInitial) {
     }
 
     return nameParts.join(' ').trim();
+}
+
+// Username validation
+function getUsernameValidationError(username) {
+    if (!username) return '❌ Username is required.';
+    if (!/^[a-z][a-z_]{2,49}$/.test(username)) return '❌ Username must contain letters and underscores only (e.g. juan_dela_cruz).';
+    return null;
+}
+
+function validateUsernameField(input) {
+    setFieldValidationState(input, getUsernameValidationError(input.value.trim().toLowerCase()));
 }
 
 // Email validation: must be a valid Gmail address
@@ -1116,6 +1224,15 @@ function setFieldValidationState(input, error) {
 
 
 <style>
+.users-action-reset-pending {
+    background: linear-gradient(135deg, #f59e0b, #d97706) !important;
+    border-color: transparent !important;
+    animation: pulse-pending 2s infinite;
+}
+@keyframes pulse-pending {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(245,158,11,0.4); }
+    50% { box-shadow: 0 0 0 6px rgba(245,158,11,0); }
+}
 .status-legend-list {
   margin-top: 16px;
 }

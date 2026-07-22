@@ -13,9 +13,19 @@ class Item extends Model
 
     protected $fillable = [
         'room_id',
+        'inventory_room_id',
+        'category_id',
+        'brand',
+        'model',
+        'item_type',
         'name',
+        'unit_type',
+        'item_condition',
         'status',
         'quantity',
+        'reserved_quantity',
+        'reorder_level',
+        'low_stock_threshold_override',
         'description',
     ];
 }

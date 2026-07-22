@@ -3,9 +3,10 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\ActivityLog;
 use App\Models\Department;
 use App\Models\User;
+use App\Services\ActivityLogService;
+use App\Services\RoleNormalizerService;
 use App\Support\ApiResponder;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -25,14 +26,20 @@ class AuthController extends Controller
     private const RESET_CODE_EXPIRY_MINUTES = 15;
     private const RESET_REQUEST_LOCKOUT_SECONDS = 60;
 
+    public function __construct(
+        private readonly ActivityLogService $activityLogService
+    ) {
+    }
+
     public function login(Request $request)
     {
         $validated = $request->validate([
-            'email' => ['required', 'email'],
+            'email'    => ['required', 'string', 'min:3', 'max:255'],
             'password' => ['required', 'string'],
         ]);
 
-        $throttleKey = $this->throttleKey($validated['email'], (string) $request->ip());
+        $identifier  = $validated['email'];
+        $throttleKey = $this->throttleKey($identifier, (string) $request->ip());
 
         if (RateLimiter::tooManyAttempts($throttleKey, self::MAX_LOGIN_ATTEMPTS)) {
             $retryAfterSeconds = RateLimiter::availableIn($throttleKey);
@@ -43,15 +50,18 @@ class AuthController extends Controller
             ]);
         }
 
-        $user = User::query()->where('email', $validated['email'])->first();
+        // Accept username OR email — try email first, then username
+        $user = User::query()->where('email', $identifier)->first()
+             ?? User::query()->where('username', $identifier)->first();
+
         if (!$user || !Hash::check($validated['password'], $user->password)) {
-            return $this->failedLoginResponse($throttleKey, 'Invalid email or password', 401);
+            return $this->failedLoginResponse($throttleKey, 'Invalid username/email or password', 401);
         }
 
         if (strtolower((string)$user->status) === 'pending') {
             return $this->failedLoginResponse(
                 $throttleKey,
-                'Your account is pending approval. Please wait for Super Admin approval.',
+                'Your account is pending approval. Please wait for Administrator approval.',
                 403
             );
         }
@@ -62,40 +72,45 @@ class AuthController extends Controller
 
         RateLimiter::clear($throttleKey);
 
-        $request->session()->put('auth_user', [
-            'user_id' => $user->user_id,
-            'full_name' => $user->full_name,
-            'email' => $user->email,
-            'role' => $this->normalizeRoleAlias($user->role),
-            'status' => $user->status,
+        $sessionUser = [
+            'user_id'       => $user->user_id,
+            'full_name'     => $user->full_name,
+            'email'         => $user->email,
+            'role'          => $this->normalizeRoleAlias($user->role),
+            'status'        => $user->status,
             'department_id' => $user->department_id,
-            'avatar' => $user->avatar,
-        ]);
+            'avatar'        => $user->avatar,
+        ];
+
+        $request->session()->put('auth_user', $sessionUser);
 
         // Also set 'user' for backward compatibility with old PHP code
-        $request->session()->put('user', [
-            'user_id' => $user->user_id,
-            'full_name' => $user->full_name,
-            'email' => $user->email,
-            'role' => $this->normalizeRoleAlias($user->role),
-            'status' => $user->status,
-            'department_id' => $user->department_id,
-            'avatar' => $user->avatar,
-        ]);
+        $request->session()->put('user', $sessionUser);
 
         // Legacy PHP APIs depend on top-level session keys.
         $request->session()->put('user_id', $user->user_id);
         $request->session()->put('role', $this->normalizeRoleAlias($user->role));
         $request->session()->put('last_activity', time());
 
-        ActivityLog::query()->create([
+        // Sync to native PHP $_SESSION so plain-PHP frontend pages can read the
+        // user without going through Laravel's session store.
+        // SyncLegacyPhpSession middleware has already called session_start() before
+        // this controller runs, so $_SESSION is writable here.
+        $_SESSION['auth_user']     = $sessionUser;
+        $_SESSION['user']          = $sessionUser;
+        $_SESSION['user_id']       = $user->user_id;
+        $_SESSION['role']          = $this->normalizeRoleAlias($user->role);
+        $_SESSION['last_activity'] = time();
+
+        $this->activityLogService->log([
             'user_id' => $user->user_id,
+            'user_role' => $this->normalizeRoleAlias($user->role),
             'action' => 'LOGIN',
+            'module' => 'auth',
             'entity_type' => 'user',
             'entity_id' => $user->user_id,
-            'details' => 'User logged in',
-            'ip_address' => (string)$request->ip(),
-        ]);
+            'details' => 'User logged in successfully.',
+        ], $request);
 
         return $this->ok('Login successful', ['user' => $request->session()->get('auth_user')]);
     }
@@ -132,16 +147,17 @@ class AuthController extends Controller
             'status' => 'pending',
         ]);
 
-        ActivityLog::query()->create([
+        $this->activityLogService->log([
             'user_id' => $user->user_id,
+            'user_role' => 'user',
             'action' => 'REGISTER',
+            'module' => 'auth',
             'entity_type' => 'user',
             'entity_id' => $user->user_id,
-            'details' => 'Self-registered account (pending approval)',
-            'ip_address' => (string)$request->ip(),
-        ]);
+            'details' => 'Self-registered account (pending approval).',
+        ], $request);
 
-        return $this->ok('Registration submitted. Your account is pending Super Admin approval.', [
+        return $this->ok('Registration submitted. Your account is pending Administrator approval.', [
             'user_id' => $user->user_id,
             'email' => $user->email,
             'status' => $user->status,
@@ -167,7 +183,7 @@ class AuthController extends Controller
 
         $user = User::query()->where('email', $email)->first();
         if (!$user) {
-            return $this->ok('If this email is registered, Super Admin has been notified.');
+            return $this->ok('If this email is registered, Administrator has been notified.');
         }
 
         try {
@@ -201,22 +217,23 @@ class AuthController extends Controller
                 DB::table('notifications')->insert($payload);
             }
 
-            ActivityLog::query()->create([
+            $this->activityLogService->log([
                 'user_id' => $user->user_id,
+                'user_role' => $this->normalizeRoleAlias((string) $user->role),
                 'action' => 'PASSWORD_RESET_REQUEST',
+                'module' => 'auth',
                 'entity_type' => 'user',
                 'entity_id' => $user->user_id,
-                'details' => 'Requested Super Admin password reset assistance',
-                'ip_address' => (string)$request->ip(),
-            ]);
+                'details' => 'Requested Administrator password reset assistance.',
+            ], $request);
 
-            return $this->ok('Super Admin has been notified to reset your password.');
+            return $this->ok('Administrator has been notified to reset your password.');
         } catch (\Throwable $e) {
             \Log::warning('Password reset request notification exception', [
                 'email' => $email,
                 'error' => $e->getMessage(),
             ]);
-            return $this->fail('Unable to notify Super Admin right now. Please try again later.', 500);
+            return $this->fail('Unable to notify Administrator right now. Please try again later.', 500);
         }
     }
 
@@ -262,14 +279,15 @@ class AuthController extends Controller
 
         DB::table('password_reset_tokens')->where('email', $email)->delete();
 
-        ActivityLog::query()->create([
+        $this->activityLogService->log([
             'user_id' => $user->user_id,
+            'user_role' => $this->normalizeRoleAlias((string) $user->role),
             'action' => 'PASSWORD_RESET',
+            'module' => 'auth',
             'entity_type' => 'user',
             'entity_id' => $user->user_id,
-            'details' => 'Password reset via forgot password flow',
-            'ip_address' => (string)$request->ip(),
-        ]);
+            'details' => 'Password reset completed through forgot password flow.',
+        ], $request);
 
         return $this->ok('Password reset successful. You can now sign in with your new password.');
     }
@@ -279,15 +297,19 @@ class AuthController extends Controller
         $authUser = $request->session()->get('auth_user') ?? $request->session()->get('user');
 
         if (is_array($authUser) && isset($authUser['user_id'])) {
-            ActivityLog::query()->create([
-                'user_id' => $authUser['user_id'],
+            $this->activityLogService->log([
+                'user_id' => (int) $authUser['user_id'],
+                'user_role' => (string) ($authUser['role'] ?? ''),
                 'action' => 'LOGOUT',
+                'module' => 'auth',
                 'entity_type' => 'user',
-                'entity_id' => $authUser['user_id'],
-                'details' => 'User logged out',
-                'ip_address' => (string)$request->ip(),
-            ]);
+                'entity_id' => (int) $authUser['user_id'],
+                'details' => 'User logged out.',
+            ], $request);
         }
+
+        // Clear native PHP $_SESSION so legacy frontend pages lose access too
+        $_SESSION = [];
 
         $request->session()->forget('auth_user');
         $request->session()->forget('user');
@@ -308,17 +330,7 @@ class AuthController extends Controller
 
     private function normalizeRoleAlias(?string $role): string
     {
-        $normalized = strtolower(trim((string)$role));
-
-        if ($normalized === 'admin_maintenance') {
-            return 'maintenance_admin';
-        }
-
-        if ($normalized === 'eelab_staff' || $normalized === 'maintenance_personnel' || $normalized === '') {
-            return 'maintenance_staff';
-        }
-
-        return $normalized;
+        return RoleNormalizerService::normalizeWithStaffDefault($role);
     }
 
     private function throttleKey(string $email, string $ipAddress): string

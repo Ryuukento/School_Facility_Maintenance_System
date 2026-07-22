@@ -50,13 +50,14 @@ $pdo = getDBConnection();
         <link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/styles.css?v=20260415-3">
         <link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/color-scheme.css?v=20260415-3">
         <link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/maintenance-dashboard.css?v=20260415-3">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    <!-- chart-lite.js loaded by header.php — do not load again here -->
 </head>
 <body>
 
 <?php include __DIR__ . '/../includes/header.php'; ?>
 
 <main class="container maintenance-admin-dashboard-page">
+
     <!-- Summary Cards Grid -->
     <div class="summary-cards-grid">
         <div class="summary-card summary-card-total summary-card-action" onclick="navigateToReportsCard('total')">
@@ -161,11 +162,10 @@ $pdo = getDBConnection();
 
     <!-- Charts Section -->
     <div class="charts-section">
-        <div class="card chart-card status-chart-card">
+        <div class="card chart-card status-chart-card chart-card-clickable" role="button" tabindex="0" data-href="/School_Facility_Maintenance_System/frontend/pages/reports.php" aria-label="Open reports by status">
             <div class="card-header">
                 <div class="status-chart-head-row">
                     <h2>Reports by Status</h2>
-                    <span class="status-live-badge">Live</span>
                 </div>
                 <p class="text-muted mb-0">Current distribution of report statuses.</p>
             </div>
@@ -174,7 +174,7 @@ $pdo = getDBConnection();
             </div>
         </div>
 
-        <div class="card chart-card priority-chart-card">
+        <div class="card chart-card priority-chart-card chart-card-clickable" role="button" tabindex="0" data-href="/School_Facility_Maintenance_System/frontend/pages/reports.php" aria-label="Open reports by priority">
             <div class="card-header">
                 <h2>Reports by Priority</h2>
                 <p class="text-muted mb-0">Priority levels across all reports.</p>
@@ -204,29 +204,25 @@ $pdo = getDBConnection();
 <link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/maintenance-dashboard.inline.css?v=20260424-2">
 
 <?php include __DIR__ . '/../includes/footer.php'; ?>
-
-<script src="/School_Facility_Maintenance_System/frontend/assets/js/utils.js"></script>
-<script src="/School_Facility_Maintenance_System/frontend/assets/js/api.js"></script>
+<!-- utils.js and api.js loaded by footer.php — do not load again here -->
 
 <script>
 // Ensure API is defined
 window.API = window.API || {
-    baseURL: '/School_Facility_Maintenance_System/backend/api',
-    
     async getDashboardStats() {
-        const response = await fetch(`${this.baseURL}/maintenance-dashboard-api.php?action=stats`);
+        const response = await fetch(window.SFMS_PUBLIC_URL('/api/dashboard/maintenance/stats'));
         if (!response.ok) throw new Error('Failed to fetch stats');
         return await response.json();
     },
 
     async getChartData() {
-        const response = await fetch(`${this.baseURL}/maintenance-dashboard-api.php?action=charts`);
+        const response = await fetch(window.SFMS_PUBLIC_URL('/api/dashboard/maintenance/charts'));
         if (!response.ok) throw new Error('Failed to fetch chart data');
         return await response.json();
     },
 
     async getRecentReports() {
-        const response = await fetch(`${this.baseURL}/maintenance-reports-api.php?action=recent`);
+        const response = await fetch(window.SFMS_PUBLIC_URL('/api/reports/recent'), { credentials: 'include' });
         if (!response.ok) throw new Error('Failed to fetch recent reports');
         return await response.json();
     }
@@ -265,11 +261,102 @@ window.UI = window.UI || {
     }
 };
 
-// Initialize dashboard
-document.addEventListener('DOMContentLoaded', async function() {
+document.addEventListener('DOMContentLoaded', function() {
+    loadDashboardMonthSelection();
+    window.addEventListener('sfms:monthSelected', onDashboardMonthSelected);
+    loadDashboardData();
+    initializeClickableCards();
+});
+
+const DASHBOARD_MONTH_STORAGE_KEY = 'sfms:dashboardMonthSelection';
+let selectedMonth = (new Date().getMonth() + 1);
+let selectedYear = (new Date().getFullYear());
+
+function normalizeMonthSelection(year, month) {
+    const normalizedYear = Number(year);
+    const normalizedMonth = Number(month);
+
+    if (!Number.isInteger(normalizedYear) || normalizedYear < 2000) {
+        return null;
+    }
+
+    if (!Number.isInteger(normalizedMonth) || normalizedMonth < 1 || normalizedMonth > 12) {
+        return null;
+    }
+
+    return { year: normalizedYear, month: normalizedMonth };
+}
+
+function loadDashboardMonthSelection() {
     try {
-        // Load statistics
-        const statsResponse = await fetch('/School_Facility_Maintenance_System/backend/api/maintenance-dashboard-api.php?action=stats');
+        const storedValue = localStorage.getItem(DASHBOARD_MONTH_STORAGE_KEY);
+        if (!storedValue) {
+            return;
+        }
+
+        const parsedValue = JSON.parse(storedValue);
+        const normalized = normalizeMonthSelection(parsedValue.year, parsedValue.month);
+        if (normalized) {
+            selectedYear = normalized.year;
+            selectedMonth = normalized.month;
+        }
+    } catch (error) {
+        console.warn('Unable to load maintenance dashboard month selection', error);
+    }
+}
+
+function saveDashboardMonthSelection(year, month) {
+    const normalized = normalizeMonthSelection(year, month);
+    if (!normalized) {
+        return;
+    }
+
+    selectedYear = normalized.year;
+    selectedMonth = normalized.month;
+
+    try {
+        localStorage.setItem(DASHBOARD_MONTH_STORAGE_KEY, JSON.stringify(normalized));
+    } catch (error) {
+        console.warn('Unable to persist maintenance dashboard month selection', error);
+    }
+}
+
+function onDashboardMonthSelected(event) {
+    const detail = event && event.detail ? event.detail : {};
+    const normalized = normalizeMonthSelection(detail.year, detail.month);
+
+    if (!normalized) {
+        return;
+    }
+
+    saveDashboardMonthSelection(normalized.year, normalized.month);
+    loadDashboardData();
+}
+
+function initializeClickableCards() {
+    document.querySelectorAll('.stat-card-clickable, .chart-card-clickable').forEach((card) => {
+        const navigate = () => {
+            const target = card.getAttribute('data-href');
+            if (target) {
+                window.location.href = target;
+            }
+        };
+
+        card.addEventListener('click', navigate);
+        card.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                navigate();
+            }
+        });
+    });
+}
+
+// ========== LOAD DASHBOARD DATA WITH MONTH/YEAR =============
+async function loadDashboardData() {
+    try {
+        // Laging may month/year sa API calls
+        const statsResponse = await fetch(window.SFMS_PUBLIC_URL(`/api/dashboard/maintenance/stats?year=${selectedYear}&month=${selectedMonth}`), { credentials: 'include' });
         const statsData = await statsResponse.json();
 
         if (statsData.success && statsData.data) {
@@ -278,15 +365,14 @@ document.addEventListener('DOMContentLoaded', async function() {
             setTextById('stat-pending', stats.pending || 0);
             setTextById('stat-in-progress', stats.in_progress || 0);
             setTextById('stat-completed', stats.completed_this_month || 0);
-            
             const avgDays = stats.avg_completion_days ? Math.round(stats.avg_completion_days) : 0;
             window.maintenanceAvgCompletionDays = avgDays;
         }
 
-        // compute today's reports count separately
+        // compute today's reports count separately (filtered by month/year)
         try {
             const today = new Date().toISOString().split('T')[0];
-            const respToday = await fetch('/School_Facility_Maintenance_System/backend/api/maintenance-reports-api.php?action=list&per_page=1000');
+            const respToday = await fetch(window.SFMS_PUBLIC_URL('/api/reports?per_page=200'), { credentials: 'include' });
             const dataToday = await respToday.json();
             if (dataToday.success && dataToday.data && Array.isArray(dataToday.data.reports)) {
                 const countToday = dataToday.data.reports.filter(r => r.created_at && r.created_at.startsWith(today)).length;
@@ -297,24 +383,25 @@ document.addEventListener('DOMContentLoaded', async function() {
             console.error('Error computing today count', err);
         }
 
-        // Load chart data
-        const chartResponse = await fetch('/School_Facility_Maintenance_System/backend/api/maintenance-dashboard-api.php?action=charts');
+        // Load chart data (filtered by month/year)
+        const chartResponse = await fetch(window.SFMS_PUBLIC_URL(`/api/dashboard/maintenance/charts?year=${selectedYear}&month=${selectedMonth}`), { credentials: 'include' });
         const chartData = await chartResponse.json();
         if (chartData.success && chartData.data) {
             initializeCharts(chartData.data);
         }
 
-        const reportsResponse = await fetch('/School_Facility_Maintenance_System/backend/api/maintenance-reports-api.php?action=recent');
+        // Recent reports (optional: pwede ring i-filter by month/year kung gusto mo)
+        const reportsResponse = await fetch(window.SFMS_PUBLIC_URL('/api/reports/recent'), { credentials: 'include' });
         const reportsData = await reportsResponse.json();
 
-        if (reportsData.success && reportsData.data.reports) {
+        if (reportsData.success && reportsData.data && reportsData.data.reports) {
             displayRecentReports(reportsData.data.reports);
         }
 
     } catch (error) {
         console.error('Error loading dashboard:', error);
     }
-});
+}
 
 function setTextById(id, value) {
     const element = document.getElementById(id);
@@ -384,7 +471,7 @@ function initializeCharts(data) {
 
     const statusCenterTextPlugin = {
         id: 'statusCenterTextPlugin',
-        beforeDraw(chart) {
+        afterDatasetsDraw(chart) {
             const meta = chart.getDatasetMeta(0);
             if (!meta || !meta.data || !meta.data.length) {
                 return;
@@ -394,18 +481,20 @@ function initializeCharts(data) {
             const x = point.x;
             const y = point.y;
             const ctx = chart.ctx;
+            const totalValue = String(statusTotal);
+            const numberFontSize = totalValue.length >= 3 ? 24 : 28;
 
             ctx.save();
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
 
-            ctx.font = '700 22px "Segoe UI", sans-serif';
+            ctx.font = `700 ${numberFontSize}px "Segoe UI", sans-serif`;
             ctx.fillStyle = chartPrimaryText;
-            ctx.fillText(String(statusTotal), x, y - 4);
+            ctx.fillText(totalValue, x, y - 7);
 
-            ctx.font = '500 11px "Segoe UI", sans-serif';
+            ctx.font = '500 13px "Segoe UI", sans-serif';
             ctx.fillStyle = chartMutedText;
-            ctx.fillText('total', x, y + 14);
+            ctx.fillText('total', x, y + 15);
             ctx.restore();
         }
     };
@@ -413,7 +502,7 @@ function initializeCharts(data) {
     const statusCanvas = document.getElementById('statusChart');
     if (statusCanvas) {
         const statusCtx = statusCanvas.getContext('2d');
-        new Chart(statusCtx, {
+        const statusChart = new Chart(statusCtx, {
             type: 'doughnut',
             plugins: [statusCenterTextPlugin],
             data: {
@@ -431,6 +520,7 @@ function initializeCharts(data) {
                 responsive: true,
                 maintainAspectRatio: false,
                 cutout: '68%',
+                radiusScale: 1.15,
                 plugins: {
                     legend: {
                         position: 'right',
@@ -439,15 +529,27 @@ function initializeCharts(data) {
                             color: chartMutedText,
                             usePointStyle: true,
                             pointStyle: 'circle',
-                            boxWidth: 8,
-                            boxHeight: 8,
-                            padding: 14
+                            boxWidth: 10,
+                            boxHeight: 10,
+                            padding: 16,
+                            font: {
+                                size: 14,
+                                weight: '600'
+                            }
                         }
                     },
                     tooltip: {
                         callbacks: {
                             label: (context) => ` ${context.formattedValue} report${Number(context.formattedValue) !== 1 ? 's' : ''}`
                         }
+                    }
+                },
+                onClick: function(evt, elements) {
+                    if (elements && elements.length > 0) {
+                        const idx = elements[0].index;
+                        const statusMap = ['submitted', 'in_progress', 'completed'];
+                        const status = statusMap[idx];
+                        window.location.href = '/School_Facility_Maintenance_System/frontend/pages/reports.php?status=' + encodeURIComponent(status);
                     }
                 }
             }
@@ -485,7 +587,7 @@ function initializeCharts(data) {
     const priorityCanvas = document.getElementById('priorityChart');
     if (priorityCanvas) {
         const priorityCtx = priorityCanvas.getContext('2d');
-        new Chart(priorityCtx, {
+        const priorityChart = new Chart(priorityCtx, {
             type: 'bar',
             data: {
                 labels: ['Low', 'Medium', 'High', 'Critical'],
@@ -528,6 +630,14 @@ function initializeCharts(data) {
                         callbacks: {
                             label: (context) => ` ${context.parsed.y} report${context.parsed.y !== 1 ? 's' : ''}`
                         }
+                    }
+                },
+                onClick: function(evt, elements) {
+                    if (elements && elements.length > 0) {
+                        const idx = elements[0].index;
+                        const priorityMap = ['low', 'medium', 'high', 'critical'];
+                        const priority = priorityMap[idx];
+                        window.location.href = '/School_Facility_Maintenance_System/frontend/pages/reports.php?priority=' + encodeURIComponent(priority);
                     }
                 }
             }

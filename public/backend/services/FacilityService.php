@@ -367,8 +367,28 @@ class FacilityService {
 
     public function listItems($itemType = null) {
         try {
-            $rows = $this->itemModel->getAll($itemType);
-            return ['success' => true, 'message' => 'Items retrieved successfully', 'items' => $rows];
+            $q = isset($_GET['q']) ? trim((string)$_GET['q']) : '';
+            $perPage = isset($_GET['per_page']) ? max(1, min(200, (int)$_GET['per_page'])) : 20;
+            $page = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
+            $offset = ($page - 1) * $perPage;
+
+            $res = $this->itemModel->getAllPaginated($itemType, $q, $perPage, $offset);
+            $items = $res['items'] ?? [];
+            $total = isset($res['total']) ? (int)$res['total'] : count($items);
+
+            return [
+                'success' => true,
+                'message' => 'Items retrieved successfully',
+                'data' => [
+                    'items' => $items,
+                    'pagination' => [
+                        'total' => $total,
+                        'per_page' => $perPage,
+                        'current_page' => $page,
+                        'last_page' => (int)ceil($total / max(1, $perPage))
+                    ]
+                ]
+            ];
         } catch (Exception $e) {
             Logger::error('Failed to list items', ['item_type' => $itemType, 'error' => $e->getMessage()]);
             return ['success' => false, 'message' => 'Failed to retrieve items', 'code' => Response::HTTP_INTERNAL_ERROR];

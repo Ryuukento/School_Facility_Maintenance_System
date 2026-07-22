@@ -15,13 +15,12 @@
         </div>
     </div>
 
-    <script src="<?php echo htmlspecialchars(public_url('/frontend/assets/js/utils.js')); ?>"></script>
-    <script src="<?php echo htmlspecialchars(public_url('/frontend/assets/js/api.js')); ?>"></script>
-    <script src="<?php echo htmlspecialchars(public_url('/frontend/assets/js/main.js')); ?>"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
-    <script src="<?php echo htmlspecialchars(public_url('/frontend/assets/js/notification.js')); ?>"></script>
-    <script src="<?php echo htmlspecialchars(public_url('/frontend/assets/js/sidebar.js')); ?>"></script>
-    <script src="<?php echo htmlspecialchars(public_url('/frontend/assets/js/network-indicator.js')); ?>"></script>
+    <script src="<?php echo htmlspecialchars(public_url('/frontend/assets/js/utils.js?v=20260521')); ?>"></script>
+    <script src="<?php echo htmlspecialchars(public_url('/frontend/assets/js/api.js?v=20260521')); ?>"></script>
+    <script src="<?php echo htmlspecialchars(public_url('/frontend/assets/js/components.js?v=20260521')); ?>"></script>
+    <script src="<?php echo htmlspecialchars(public_url('/frontend/assets/js/main.js?v=20260521')); ?>"></script>
+    <script src="<?php echo htmlspecialchars(public_url('/frontend/assets/js/notification.js?v=20260521')); ?>"></script>
+    <script src="<?php echo htmlspecialchars(public_url('/frontend/assets/js/sidebar.js?v=20260521')); ?>"></script>
+    <script src="<?php echo htmlspecialchars(public_url('/frontend/assets/js/network-indicator.js?v=20260521')); ?>"></script>
 </body>
 </html>

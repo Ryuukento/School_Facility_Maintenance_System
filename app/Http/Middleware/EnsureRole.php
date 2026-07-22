@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Services\RoleNormalizerService;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -10,8 +11,8 @@ class EnsureRole
 {
     public function handle(Request $request, Closure $next, string ...$roles): Response
     {
-        $authUser = $request->session()->get('auth_user', []);
-        $role = strtolower(trim((string)($authUser['role'] ?? '')));
+        $authUser = $request->session()->get('auth_user', $request->session()->get('user', []));
+        $role = RoleNormalizerService::normalize($authUser['role'] ?? '');
 
         if ($role === '') {
             return response()->json([
