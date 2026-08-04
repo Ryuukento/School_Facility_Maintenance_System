@@ -583,14 +583,7 @@ async function loadReports(filters = {}) {
         
         allReports = response.data.reports;
         console.log(`📊 Total reports loaded: ${allReports.length}`);
-        
-        if (allReports.length === 0) {
-            document.getElementById('reports-container').innerHTML = getReportsEmptyMarkup();
-            const paginationEl = document.getElementById('pagination-container');
-            if (paginationEl) paginationEl.innerHTML = '';
-            return;
-        }
-        
+
         renderReportsView();
     } catch (error) {
         console.error('❌ Error loading reports:', error);
@@ -1250,6 +1243,7 @@ function filterReports() {
     }
 
     console.log('[DEBUG] Filters sent to backend:', filters);
+    selectedWeek = 0;
     currentPage = 1;
     loadReports(filters);
 }
