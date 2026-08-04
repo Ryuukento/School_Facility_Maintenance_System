@@ -12,6 +12,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 class ReportController extends Controller
@@ -151,7 +152,13 @@ class ReportController extends Controller
             'priority' => ['nullable', 'string', 'in:low,medium,high,critical'],
             'status' => ['nullable', 'string', 'in:submitted,in_progress,completed,closed,cancelled'],
             'assigned_to' => ['nullable', 'integer', 'exists:users,user_id'],
-            'department_id' => ['nullable', 'integer', 'exists:departments,department_id'],
+            // TASK 19 — Target Maintenance Department: the reporter now picks
+            // which department is responsible for fixing the issue, so this
+            // must resolve to an active department, never a client-trusted
+            // free value. Stays nullable (not required) so the asset/damage
+            // path below, which still derives department_id from the
+            // reporter when none is supplied, is unaffected.
+            'department_id' => ['nullable', 'integer', Rule::exists('departments', 'department_id')->where('status', 'active')],
             'due_date' => ['nullable', 'date'],
         ]);
 

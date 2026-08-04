@@ -18,6 +18,14 @@ require_once __DIR__ . '/../../backend/config/database.php';
 // Establish database connection
 $pdo = getDBConnection();
 
+// TASK 19 — Target Maintenance Department: the reporter's own department and
+// the department responsible for fixing the issue are not the same thing, so
+// the reporter must explicitly pick who the report is for. Reuses the exact
+// active-departments query already used by reports.php's filter dropdown and
+// maintenance-create-report.php's Department field (no new API/query).
+$deptStmt = $pdo->query("SELECT department_id, name FROM departments WHERE status = 'active' ORDER BY name");
+$departments = $deptStmt->fetchAll(PDO::FETCH_ASSOC);
+
 $user = $_SESSION['user'];
 $pageTitle = 'Create Report - SFMS';
 include __DIR__ . '/../includes/header.php';
@@ -61,6 +69,19 @@ include __DIR__ . '/../includes/header.php';
                         <option value="high">High - Important</option>
                         <option value="critical">Critical - Immediate</option>
                     </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="department">Target Maintenance Department *</label>
+                    <select id="department" name="department_id" required>
+                        <option value="">Select department...</option>
+                        <?php foreach ($departments as $dept): ?>
+                            <option value="<?php echo $dept['department_id']; ?>">
+                                <?php echo htmlspecialchars($dept['name']); ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                    <small class="text-muted d-block">Which department is responsible for fixing this issue.</small>
                 </div>
                 
                 <div class="form-group">
@@ -166,6 +187,7 @@ document.getElementById('report-form').addEventListener('submit', async (e) => {
         location: document.getElementById('location').value.trim(),
         priority: document.getElementById('priority').value,
         description: document.getElementById('description').value.trim(),
+        department_id: document.getElementById('department').value || null,
         need_change_item_id: null
     };
 
@@ -183,7 +205,7 @@ document.getElementById('report-form').addEventListener('submit', async (e) => {
     }
     
     // Validate
-    if (!formData.title || !formData.location || !formData.description) {
+    if (!formData.title || !formData.location || !formData.description || !formData.department_id) {
         alertContainer.innerHTML = '<div class="alert alert-danger">Please fill in all required fields</div>';
         return;
     }
