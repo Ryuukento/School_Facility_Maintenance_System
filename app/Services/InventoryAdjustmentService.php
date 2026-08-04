@@ -11,7 +11,9 @@ use Illuminate\Validation\ValidationException;
 class InventoryAdjustmentService
 {
     public function __construct(
-        private readonly ActivityLogService $activityLogService
+        private readonly ActivityLogService $activityLogService,
+        // TASK 18 — notify once on a genuine NORMAL -> LOW/OUT_OF_STOCK transition.
+        private readonly InventoryLowStockNotifier $inventoryLowStockNotifier
     ) {
     }
 
@@ -61,8 +63,17 @@ class InventoryAdjustmentService
             // Mirrors ItemController::store()'s post-transaction status
             // re-derivation for the same 'adjustment' transaction type.
             $locked->refresh();
+            $previousStatus = $locked->status;
             $locked->status = InventoryStatusService::deriveStatus((int) $locked->quantity, (int) ($locked->reorder_level ?? 0));
             $locked->save();
+
+            // TASK 18 — fires only on a genuine NORMAL -> LOW/OUT_OF_STOCK transition.
+            $this->inventoryLowStockNotifier->handleStatusChange(
+                $locked->id,
+                $locked->name,
+                $previousStatus,
+                $locked->status
+            );
 
             $this->activityLogService->logFromSession([
                 'user_id' => $performedBy,

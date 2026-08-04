@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\InventoryTransaction;
 use App\Models\Item;
 use App\Models\MaintenanceReport;
+use App\Models\User;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -12,7 +13,9 @@ use Illuminate\Validation\ValidationException;
 class NeedChangeService
 {
     public function __construct(
-        private readonly ActivityLogService $activityLogService
+        private readonly ActivityLogService $activityLogService,
+        // TASK 18 — "Replacement Approved" notification.
+        private readonly NotificationService $notificationService
     ) {
     }
 
@@ -101,7 +104,43 @@ class NeedChangeService
                 ],
             ]);
 
+            // TASK 18 — "Replacement Approved" notification.
+            $this->notifyReplacementApproved($locked, $item->name, $quantity, $approvedBy);
+
             return $locked;
         });
+    }
+
+    /**
+     * TASK 18 — notifies the report's creator and assignee (if any), plus all
+     * active Super Admins, that the Need Change replacement was approved and
+     * inventory released. Reuses entity_type 'report' (Task 17 architecture)
+     * so the notification deep-links to the same report page. Excludes the
+     * approving user from the recipient list to avoid self-notification.
+     */
+    private function notifyReplacementApproved(MaintenanceReport $locked, string $itemName, int $quantity, int $approvedBy): void
+    {
+        $title = 'Replacement Approved — Report #' . $locked->report_id;
+        $message = 'Your Need Change request for "' . $itemName . '" (qty: ' . $quantity
+            . ') on Report #' . $locked->report_id . ' has been approved and released from inventory.';
+
+        $recipientIds = collect([$locked->created_by, $locked->assigned_to])
+            ->filter(fn ($id) => !empty($id))
+            ->map(fn ($id) => (int) $id);
+
+        $superAdminRoles = RoleNormalizerService::rawValuesFor(['super_admin']);
+        $superAdminIds = User::query()
+            ->where('status', 'active')
+            ->whereIn('role', $superAdminRoles)
+            ->pluck('user_id')
+            ->map(fn ($id) => (int) $id);
+
+        $recipientIds = $recipientIds->merge($superAdminIds)
+            ->unique()
+            ->reject(fn (int $id) => $id === (int) $approvedBy);
+
+        foreach ($recipientIds as $recipientId) {
+            $this->notificationService->notify($recipientId, $title, $message, 'report', $locked->report_id);
+        }
     }
 }

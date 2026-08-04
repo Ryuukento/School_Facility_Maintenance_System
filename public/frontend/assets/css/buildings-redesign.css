@@ -233,6 +233,16 @@
     transform: translateY(-2px);
 }
 
+/* TASK 18 — highlight for ?highlight=<building_id> deep links (Building
+   Updated notification). Mirrors .users-card-highlight's color. The base
+   .summary-card border (styles.css) is unscoped/no-!important, and this
+   file loads after styles.css, so a plain .summary-card-highlight class
+   already wins on source order — no extra specificity needed. */
+.summary-card-highlight {
+    border-color: rgba(168, 139, 250, 0.85) !important;
+    box-shadow: 0 0 0 3px rgba(168, 139, 250, 0.35), 0 18px 40px rgba(0, 0, 0, 0.28) !important;
+}
+
 .print-preview-page {
     position: relative;
     margin: 1.25rem 0 0;

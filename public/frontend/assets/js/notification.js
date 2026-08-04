@@ -8,11 +8,81 @@ const NotificationManager = {
     currentFilter: 'all',
     lastNotifications: [],
 
+    /**
+     * TASK 17 — Notification Deep Linking: centralized routing map.
+     *
+     * Every notification type that can carry entity_type/entity_id (see
+     * migration 2026_08_04_000200_add_entity_columns_to_notifications_table)
+     * is routed through exactly this table — no notification type builds a
+     * URL anywhere else in this file. `check` hits the same single-record
+     * GET endpoint the rest of the app already uses for that entity (so
+     * "respect Task 9 authorization" means literally reusing the API's own
+     * per-record 403, not re-implementing a permission rule client-side).
+     * `build` returns the existing detail page URL for that entity — again
+     * no new pages, just the ones report-detail.php / dispatch-detail.php /
+     * repair-detail.php / damage-report-detail.php / users.php already are.
+     *
+     * 'user' has no GET /api/users/{id} endpoint (only the super_admin-only
+     * list endpoint exists), so it is marked clientOnly and checked via the
+     * same super_admin role gate the API enforces on that list — this
+     * notification type is only ever sent to super_admins in the first
+     * place (see AuthController::forgotPasswordRequest()).
+     */
+    ENTITY_ROUTES: {
+        report: {
+            check: (id) => (window.SFMS_PUBLIC_URL ? window.SFMS_PUBLIC_URL(`/api/reports/${id}`) : `/api/reports/${id}`),
+            // Reuses the existing role-aware report URL builder below
+            // unchanged — new entity-linked rows and legacy text-extracted
+            // rows land on exactly the same detail page logic.
+            build: (id) => NotificationManager.getNotificationTargetUrl(id),
+        },
+        dispatch: {
+            check: (id) => (window.SFMS_PUBLIC_URL ? window.SFMS_PUBLIC_URL(`/api/dispatches/${id}`) : `/api/dispatches/${id}`),
+            build: (id) => (window.SFMS_PUBLIC_URL ? window.SFMS_PUBLIC_URL('/frontend/pages/dispatch-detail.php') : '/frontend/pages/dispatch-detail.php') + `?id=${id}`,
+        },
+        repair_request: {
+            check: (id) => (window.SFMS_PUBLIC_URL ? window.SFMS_PUBLIC_URL(`/api/repairs/${id}`) : `/api/repairs/${id}`),
+            build: (id) => (window.SFMS_PUBLIC_URL ? window.SFMS_PUBLIC_URL('/frontend/pages/repair-detail.php') : '/frontend/pages/repair-detail.php') + `?id=${id}`,
+        },
+        damage_report: {
+            check: (id) => (window.SFMS_PUBLIC_URL ? window.SFMS_PUBLIC_URL(`/api/damage-reports/${id}`) : `/api/damage-reports/${id}`),
+            build: (id) => (window.SFMS_PUBLIC_URL ? window.SFMS_PUBLIC_URL('/frontend/pages/damage-report-detail.php') : '/frontend/pages/damage-report-detail.php') + `?id=${id}`,
+        },
+        user: {
+            clientOnly: true,
+            build: (id) => (window.SFMS_PUBLIC_URL ? window.SFMS_PUBLIC_URL('/frontend/pages/users.php') : '/frontend/pages/users.php') + `?highlight=${id}`,
+        },
+        // TASK 18 — extends the Task 17 ENTITY_ROUTES map (not a redesign) for
+        // the three new notification events that need deep links.
+        purchase_receipt: {
+            // purchase-receipts.php already supports a ?id= detail view
+            // (see $receiptId/$isDetail), so this follows the same
+            // server-checked report/dispatch pattern below.
+            check: (id) => (window.SFMS_PUBLIC_URL ? window.SFMS_PUBLIC_URL(`/api/purchase-receipts/${id}`) : `/api/purchase-receipts/${id}`),
+            build: (id) => (window.SFMS_PUBLIC_URL ? window.SFMS_PUBLIC_URL('/frontend/pages/purchase-receipts.php') : '/frontend/pages/purchase-receipts.php') + `?id=${id}`,
+        },
+        inventory: {
+            // GET /api/items/{id} has no extra role gate beyond authentication,
+            // matching who can view the Inventory page itself.
+            check: (id) => (window.SFMS_PUBLIC_URL ? window.SFMS_PUBLIC_URL(`/api/items/${id}`) : `/api/items/${id}`),
+            build: (id) => (window.SFMS_PUBLIC_URL ? window.SFMS_PUBLIC_URL('/frontend/pages/inventory.php') : '/frontend/pages/inventory.php') + `?highlight=${id}`,
+        },
+        building: {
+            // No GET /api/buildings/{id} show endpoint exists, so — like
+            // 'user' — this is clientOnly. Unlike 'user' it must allow both
+            // super_admin and maintenance_admin (the two roles the Building
+            // Updated notification is sent to), via the allowedRoles override.
+            clientOnly: true,
+            allowedRoles: ['super_admin', 'maintenance_admin'],
+            build: (id) => (window.SFMS_PUBLIC_URL ? window.SFMS_PUBLIC_URL('/frontend/pages/buildings-overview.php') : '/frontend/pages/buildings-overview.php') + `?highlight=${id}`,
+        },
+    },
+
     init() {
         const bell = document.getElementById('notificationBell');
         const dropdown = document.getElementById('notificationDropdown');
-        
-        if (!bell) return;
+
+        if (!bell || !dropdown) return;
         
         bell.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -138,14 +208,23 @@ const NotificationManager = {
             const timeAgo = this.getTimeAgo(notif.created_at);
             const notificationId = Number(notif.notification_id) || 0;
             const reportId = Number(notif.report_id) || 0;
-            
+            // TASK 17 — Notification Deep Linking: entity_type is a short,
+            // fixed enum written only by our own backend (see
+            // NotificationService::notify()), so it is whitelisted rather
+            // than HTML-escaped before being inlined into the onclick
+            // attribute's JS string literal.
+            const rawEntityType = String(notif.entity_type || '');
+            const entityType = /^[a-z_]+$/.test(rawEntityType) ? rawEntityType : '';
+            const entityTypeJs = entityType ? `'${entityType}'` : 'null';
+            const entityId = Number(notif.entity_id) || 0;
+
             html += `
-                <div class="notification-item ${isUnread}" data-notification-id="${notificationId}" data-report-id="${reportId}" onclick="NotificationManager.handleNotificationClick(${notificationId}, ${reportId}, this)">
+                <div class="notification-item ${isUnread}" data-notification-id="${notificationId}" data-report-id="${reportId}" data-entity-type="${UI.escapeHtml(entityType)}" data-entity-id="${entityId}" onclick="NotificationManager.handleNotificationClick(${notificationId}, ${reportId}, ${entityTypeJs}, ${entityId}, this)">
                     <div class="notification-icon">${icon}</div>
                     <div class="notification-content">
-                        <div class="notification-title">${notif.title}</div>
-                        <div class="notification-message">${notif.message}</div>
-                        <div class="notification-time">${timeAgo}</div>
+                        <div class="notification-title">${UI.escapeHtml(notif.title)}</div>
+                        <div class="notification-message">${UI.escapeHtml(notif.message)}</div>
+                        <div class="notification-time">${UI.escapeHtml(timeAgo)}</div>
                     </div>
                     ${isUnread ? '<span class="notification-dot"></span>' : ''}
                 </div>
@@ -155,10 +234,8 @@ const NotificationManager = {
         list.innerHTML = html;
     },
     
-    async handleNotificationClick(notificationId, reportId, itemEl = null) {
+    async handleNotificationClick(notificationId, reportId, entityType = null, entityId = 0, itemEl = null) {
         const notif = this.lastNotifications.find(n => Number(n.notification_id) === Number(notificationId));
-        const resolvedReportId = this.resolveNotificationReportId(reportId, notif);
-        const targetUrl = this.getNotificationTargetUrl(resolvedReportId);
 
         // Never block navigation because of mark-as-read errors.
         try {
@@ -178,12 +255,121 @@ const NotificationManager = {
             console.warn('Unable to mark notification as read:', error);
         }
 
-        if (targetUrl) {
-            window.location.href = targetUrl;
+        // TASK 17 — Browser Behavior: mark as read -> close dropdown -> navigate.
+        this.closeDropdown();
+
+        // entityType/entityId come from the caller's own onclick args (works
+        // for header.php's server-rendered items, which never appear in
+        // lastNotifications) but fall back to the looked-up notif object when
+        // available, so a stale/omitted argument still resolves correctly.
+        const resolvedEntityType = entityType || (notif && notif.entity_type) || null;
+        const resolvedEntityId = Number(entityId || (notif && notif.entity_id) || 0) || 0;
+
+        const result = await this.resolveNotificationTarget({
+            entity_type: resolvedEntityType,
+            entity_id: resolvedEntityId,
+            report_id: reportId,
+            title: notif ? notif.title : '',
+            message: notif ? notif.message : '',
+        });
+
+        if (result && result.url) {
+            window.location.href = result.url;
             return;
         }
 
+        if (result && result.error === 'permission') {
+            Components.alert('You do not have permission to access this item.', 'danger');
+            return;
+        }
+
+        if (result && result.error) {
+            Components.alert('Unable to open this notification right now. Please try again.', 'danger');
+            return;
+        }
+
+        // Nothing identifiable to navigate to — same silent-refresh fallback
+        // this file has always used.
         this.loadNotifications();
+    },
+
+    /**
+     * TASK 17 — Notification Deep Linking: single routing entry point every
+     * notification type goes through. If the notification carries a known
+     * entity_type/entity_id (see migration
+     * 2026_08_04_000200_add_entity_columns_to_notifications_table and
+     * NotificationService::notify()), it is preflight-checked against the
+     * SAME single-record API endpoint the rest of the app already uses for
+     * that entity, so an unauthorized user is never handed a detail URL the
+     * API itself would 403 on ("respect Task 9 authorization... do not
+     * redirect anyway").
+     *
+     * Rows with no entity_type (every notification created before this task
+     * shipped) fall through unchanged to the Task 13.1 text-extraction path
+     * — that logic is reused verbatim, not rewritten.
+     *
+     * @returns {Promise<{url:string}|{error:'permission'|'failed'}|null>}
+     *   null means "nothing identifiable" (pre-existing silent-refresh case).
+     */
+    async resolveNotificationTarget(notif) {
+        const entityType = notif && notif.entity_type;
+        const entityId = Number(notif && notif.entity_id) || 0;
+        const route = entityType ? this.ENTITY_ROUTES[entityType] : null;
+
+        if (route && entityId) {
+            if (route.clientOnly) {
+                // TASK 18 — allowedRoles defaults to ['super_admin'] so
+                // 'user's pre-existing super_admin-only behavior is
+                // unchanged; 'building' overrides it to also allow
+                // maintenance_admin.
+                const allowedRoles = route.allowedRoles || ['super_admin'];
+                const role = (document.body && document.body.dataset && document.body.dataset.userRole) || '';
+                if (!allowedRoles.includes(String(role).toLowerCase())) {
+                    return { error: 'permission' };
+                }
+                return { url: route.build(entityId) };
+            }
+
+            try {
+                const response = await fetch(route.check(entityId), {
+                    credentials: 'include',
+                    headers: { 'Accept': 'application/json' },
+                });
+
+                if (response.status === 403) {
+                    return { error: 'permission' };
+                }
+
+                if (!response.ok) {
+                    return { error: 'failed' };
+                }
+
+                const payload = await response.json().catch(() => null);
+                if (payload && payload.success) {
+                    return { url: route.build(entityId) };
+                }
+
+                return { error: 'failed' };
+            } catch (error) {
+                console.warn('Unable to resolve notification target:', error);
+                return { error: 'failed' };
+            }
+        }
+
+        // TASK 13.1 §5/§6 — dispatch notifications are resolved FIRST, because
+        // for a dispatch notification a report id is either absent or points
+        // at the originating maintenance report, which is not what the message
+        // is about. extractDispatchCode() returns '' for every non-dispatch
+        // notification, so this yields null and the pre-existing report path
+        // below runs exactly as it always has.
+        let targetUrl = await this.resolveDispatchTargetUrl(notif);
+
+        if (!targetUrl) {
+            const resolvedReportId = this.resolveNotificationReportId(notif && notif.report_id, notif);
+            targetUrl = this.getNotificationTargetUrl(resolvedReportId);
+        }
+
+        return targetUrl ? { url: targetUrl } : null;
     },
 
     updateBadgeCount(delta) {
@@ -239,6 +425,66 @@ const NotificationManager = {
         }
 
         return 0;
+    },
+
+    /**
+     * TASK 13.1 §5 — make a dispatch notification open the Dispatch Detail
+     * page it is talking about.
+     *
+     * The notifications table has no link/url column, and adding one would be
+     * a schema change this task excludes. So the dispatch is identified the
+     * same way resolveNotificationReportId() above already identifies a report
+     * — by reading the identifier out of the notification text. Every dispatch
+     * notification DispatchService emits embeds the dispatch_code verbatim
+     * ("Dispatch DSP-XXXX has been approved..."), so the code is reliably
+     * present; the id is not, which is why a lookup is needed at all.
+     *
+     * This is additive and fully guarded: a notification with no DSP- code in
+     * it returns null immediately and falls through to the existing report
+     * behaviour untouched.
+     */
+    extractDispatchCode(notif) {
+        if (!notif) return '';
+
+        const sourceText = `${notif.title || ''} ${notif.message || ''}`;
+        const match = sourceText.match(/\bDSP-[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*/);
+        // Trailing sentence punctuation is not part of the code.
+        return match ? match[0].replace(/[.,;:]+$/, '') : '';
+    },
+
+    async resolveDispatchTargetUrl(notif) {
+        const code = this.extractDispatchCode(notif);
+        if (!code) {
+            return null;
+        }
+
+        const url = (path) => (window.SFMS_PUBLIC_URL ? window.SFMS_PUBLIC_URL(path) : path);
+
+        // Fallback: the list page pre-filtered to this code. Used when the
+        // lookup fails OR when the dispatch is not visible to this user —
+        // the API decides that, not the client, so an unauthorised user is
+        // never handed a detail URL they cannot open.
+        const listUrl = `${url('/frontend/pages/dispatches.php')}?search=${encodeURIComponent(code)}`;
+
+        try {
+            const response = await fetch(
+                `${url('/api/dispatches')}?search=${encodeURIComponent(code)}&per_page=1`,
+                { credentials: 'include', headers: { 'Accept': 'application/json' } }
+            );
+            const payload = await response.json();
+
+            if (response.ok && payload.success) {
+                const rows = Array.isArray(payload.data && payload.data.data) ? payload.data.data : [];
+                const id = Number(rows[0] && rows[0].id) || 0;
+                if (id > 0) {
+                    return `${url('/frontend/pages/dispatch-detail.php')}?id=${id}`;
+                }
+            }
+        } catch (error) {
+            console.warn('Unable to resolve dispatch from notification:', error);
+        }
+
+        return listUrl;
     },
 
     getNotificationTargetUrl(reportId) {

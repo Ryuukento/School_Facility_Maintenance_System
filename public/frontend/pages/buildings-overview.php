@@ -324,7 +324,25 @@ function renderEmptyOverview(title, hint = '') {
 }
 
 async function initOverview() {
-    loadBuildings();
+    await loadBuildings();
+    // TASK 18 — a 'building' notification (Building Updated) lands here via
+    // ?highlight=<building_id>. loadBuildings() is the default landing view
+    // (currentLevel = 'building'), so the card is already rendered — just
+    // find and highlight it, mirroring highlightUserFromQuery() in users.php.
+    highlightBuildingFromQuery();
+}
+
+function highlightBuildingFromQuery() {
+    const params = new URLSearchParams(window.location.search);
+    const highlightId = Number(params.get('highlight') || 0);
+    if (!highlightId) return;
+
+    const card = document.querySelector(`.summary-card[data-type="building"][data-id="${highlightId}"]`);
+    if (!card) return;
+
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    card.classList.add('summary-card-highlight');
+    setTimeout(() => card.classList.remove('summary-card-highlight'), 3000);
 }
 
 function clearActions() {

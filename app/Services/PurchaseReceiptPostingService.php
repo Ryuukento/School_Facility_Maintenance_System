@@ -4,12 +4,21 @@ namespace App\Services;
 
 use App\Models\InventoryTransaction;
 use App\Models\Item;
+use App\Models\User;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class PurchaseReceiptPostingService
 {
+    public function __construct(
+        private readonly NotificationService $notificationService,
+        // TASK 18 — notify once on a genuine NORMAL -> LOW/OUT_OF_STOCK transition
+        // for any item touched by this receipt.
+        private readonly InventoryLowStockNotifier $inventoryLowStockNotifier
+    ) {
+    }
+
     public function postReceipt(int $receiptId, ?int $performedBy = null, ?string $ipAddress = null): void
     {
         DB::transaction(function () use ($receiptId, $performedBy, $ipAddress): void {
@@ -62,11 +71,20 @@ class PurchaseReceiptPostingService
                 ]);
 
                 $item->refresh();
+                $previousStatus = $item->status;
                 $item->status = InventoryStatusService::deriveStatus(
                     (int) $item->quantity,
                     (int) ($item->reorder_level ?? 0)
                 );
                 $item->save();
+
+                // TASK 18 — fires only on a genuine NORMAL -> LOW/OUT_OF_STOCK transition.
+                $this->inventoryLowStockNotifier->handleStatusChange(
+                    $item->id,
+                    $item->name,
+                    $previousStatus,
+                    $item->status
+                );
             }
 
             DB::table('purchase_receipts')
@@ -87,7 +105,33 @@ class PurchaseReceiptPostingService
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
+
+            // TASK 18 — "Purchase Receipt Posted" notification.
+            $this->notifySuperAdmins($receiptId, (string) $receipt->or_number, $lineItems->count(), $performedBy);
         });
+    }
+
+    /**
+     * TASK 18 — notifies all active Super Admins that a purchase receipt was
+     * posted (per user's adjustment: Super Admin only, no Inventory Admin
+     * role invented). Excludes the user who performed the posting, if any.
+     */
+    private function notifySuperAdmins(int $receiptId, string $orNumber, int $lineItemCount, ?int $performedBy): void
+    {
+        $title = 'Purchase Receipt Posted: OR#' . $orNumber;
+        $message = 'Purchase receipt OR#' . $orNumber . ' was posted with '
+            . $lineItemCount . ' line item(s).';
+
+        $recipientRoles = RoleNormalizerService::rawValuesFor(['super_admin']);
+        $recipientIds = User::query()
+            ->where('status', 'active')
+            ->whereIn('role', $recipientRoles)
+            ->when($performedBy, fn ($query) => $query->where('user_id', '!=', $performedBy))
+            ->pluck('user_id');
+
+        foreach ($recipientIds as $recipientId) {
+            $this->notificationService->notify((int) $recipientId, $title, $message, 'purchase_receipt', $receiptId);
+        }
     }
 
     private function resolveInventoryItem(object $line): Item

@@ -3,6 +3,9 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\User;
+use App\Services\NotificationService;
+use App\Services\RoleNormalizerService;
 use App\Support\ApiResponder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -11,6 +14,12 @@ use Illuminate\Support\Facades\DB;
 class BuildingController extends Controller
 {
     use ApiResponder;
+
+    public function __construct(
+        // TASK 18 — "Building Updated" notification.
+        private readonly NotificationService $notificationService
+    ) {
+    }
 
     /**
      * GET /api/buildings
@@ -191,7 +200,37 @@ class BuildingController extends Controller
             'updated_at'  => now(),
         ]);
 
+        // TASK 18 — "Building Updated" notification.
+        $this->notifyBuildingUpdated($request, $id, $name);
+
         return $this->ok('Building updated successfully');
+    }
+
+    /**
+     * TASK 18 — notifies active Super Admins and Head Maintenance (maintenance_admin)
+     * users that a building's details were updated. Excludes the acting user
+     * to avoid self-notification. entity_type is 'building' — there is no
+     * building detail page, so the frontend ENTITY_ROUTES entry for
+     * 'building' is clientOnly and navigates to buildings-overview.php with
+     * a highlight, mirroring the existing 'user' entity route.
+     */
+    private function notifyBuildingUpdated(Request $request, int $buildingId, string $buildingName): void
+    {
+        $performedBy = (int) $request->session()->get('user_id');
+
+        $title = 'Building Updated: ' . $buildingName;
+        $message = 'Building "' . $buildingName . '" details were updated.';
+
+        $recipientRoles = RoleNormalizerService::rawValuesFor(['super_admin', 'maintenance_admin']);
+        $recipientIds = User::query()
+            ->where('status', 'active')
+            ->whereIn('role', $recipientRoles)
+            ->when($performedBy, fn ($query) => $query->where('user_id', '!=', $performedBy))
+            ->pluck('user_id');
+
+        foreach ($recipientIds as $recipientId) {
+            $this->notificationService->notify((int) $recipientId, $title, $message, 'building', $buildingId);
+        }
     }
 
     /** DELETE /api/buildings/{id} */

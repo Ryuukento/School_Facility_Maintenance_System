@@ -7,6 +7,16 @@
             return raw;
         }
 
+        // Guard against double-resolution: callers sometimes pass a URL that
+        // has already been built with window.SFMS_PUBLIC_URL(). Re-running it
+        // through SFMS_PUBLIC_URL() a second time would prepend the app base
+        // path twice (e.g. /SFMS/SFMS/api/...). If raw already starts with
+        // the configured base path, treat it as already resolved.
+        const basePath = String(window.SFMS_BASE_PATH || '').replace(/\/$/, '');
+        if (basePath !== '' && raw.startsWith(basePath)) {
+            return raw;
+        }
+
         if (window.SFMS_PUBLIC_URL) {
             return window.SFMS_PUBLIC_URL(raw);
         }

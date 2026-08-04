@@ -17,9 +17,20 @@
 
     <script src="<?php echo htmlspecialchars(public_url('/frontend/assets/js/utils.js?v=20260521')); ?>"></script>
     <script src="<?php echo htmlspecialchars(public_url('/frontend/assets/js/api.js?v=20260521')); ?>"></script>
-    <script src="<?php echo htmlspecialchars(public_url('/frontend/assets/js/components.js?v=20260521')); ?>"></script>
+    <!-- TASK 18 verification fix — cache-buster bumped because resolveAppUrl()
+         in components.js gained a guard against double-resolving URLs that
+         were already built with window.SFMS_PUBLIC_URL() (pre-existing bug,
+         unrelated to Task 18's notification work; discovered while browser-
+         verifying the Purchase Receipt flow — see purchase-receipts.php,
+         which passes an already-resolved PURCHASE_API into fetchJson()). -->
+    <script src="<?php echo htmlspecialchars(public_url('/frontend/assets/js/components.js?v=20260804')); ?>"></script>
     <script src="<?php echo htmlspecialchars(public_url('/frontend/assets/js/main.js?v=20260521')); ?>"></script>
-    <script src="<?php echo htmlspecialchars(public_url('/frontend/assets/js/notification.js?v=20260521')); ?>"></script>
+    <!-- TASK 18 — cache-buster bumped again because notification.js gained
+         3 new ENTITY_ROUTES entries (purchase_receipt, inventory, building)
+         and an allowedRoles override in resolveNotificationTarget()'s
+         clientOnly branch; browsers holding the 20260804 copy would
+         otherwise keep using the old routing table. -->
+    <script src="<?php echo htmlspecialchars(public_url('/frontend/assets/js/notification.js?v=20260804b')); ?>"></script>
     <script src="<?php echo htmlspecialchars(public_url('/frontend/assets/js/sidebar.js?v=20260521')); ?>"></script>
     <script src="<?php echo htmlspecialchars(public_url('/frontend/assets/js/network-indicator.js?v=20260521')); ?>"></script>
 </body>

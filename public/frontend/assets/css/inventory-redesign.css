@@ -467,6 +467,13 @@ main.inventory-page .inventory-items-table tbody tr:hover td {
     background: var(--inventory-surface-hover);
 }
 
+/* TASK 18 — highlight for ?highlight=<item_id> deep links (Low Stock /
+   Out of Stock notifications). Mirrors .users-card-highlight's color. */
+main.inventory-page .inventory-items-table tbody tr.inventory-row-highlight td {
+    background: rgba(168, 139, 250, 0.16);
+    box-shadow: inset 0 0 0 2px rgba(168, 139, 250, 0.85);
+}
+
 main.inventory-page .inventory-item-id {
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     font-size: 12px;

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\InventoryTransaction;
+use App\Services\InventoryLowStockNotifier;
 use App\Services\InventoryStatusService;
 use App\Services\RoleNormalizerService;
 use App\Support\ApiResponder;
@@ -21,6 +22,12 @@ class InventoryStockController extends Controller
 
     private const READ_ROLES  = ['super_admin', 'maintenance_admin', 'maintenance_staff'];
     private const WRITE_ROLES = ['super_admin', 'maintenance_admin'];
+
+    public function __construct(
+        // TASK 18 — notify once on a genuine NORMAL -> LOW/OUT_OF_STOCK transition.
+        private readonly InventoryLowStockNotifier $inventoryLowStockNotifier
+    ) {
+    }
 
     // ─── Session / auth helpers ───────────────────────────────────────────────
 
@@ -594,6 +601,14 @@ class InventoryStockController extends Controller
                 ]
             );
 
+            // TASK 18 — fires only on a genuine NORMAL -> LOW/OUT_OF_STOCK transition.
+            $this->inventoryLowStockNotifier->handleStatusChange(
+                $id,
+                $name,
+                $existing['status'] ?? null,
+                $status
+            );
+
             DB::commit();
 
             return $this->ok('Stock item updated successfully', ['item' => $this->fetchStockItemById($id)]);
@@ -869,6 +884,14 @@ class InventoryStockController extends Controller
             $roomAsset = $this->createOrUpdateRoomAsset($stockItem, $roomId, $quantity, $notes ?: null);
 
             $this->syncDeploymentAllocation($id, $roomId, $quantity, $performedBy ?: null, $reportId);
+
+            // TASK 18 — fires only on a genuine NORMAL -> LOW/OUT_OF_STOCK transition.
+            $this->inventoryLowStockNotifier->handleStatusChange(
+                $id,
+                $stockItem['name'],
+                $stockItem['status'] ?? null,
+                $newStatus
+            );
 
             DB::commit();
 

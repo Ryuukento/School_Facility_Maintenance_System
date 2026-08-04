@@ -2325,7 +2325,7 @@ function renderItems(items) {
             ? '<span class="inventory-inline-chip is-low">Low stock warning</span>'
             : '';
 
-        html += '<tr>';
+        html += `<tr data-row-item-id="${Number(item.id)}">`;
         html += `<td class="inventory-item-id">#${item.id ?? '-'}</td>`;
         html += `<td class="inventory-item-cell"><div class="inventory-item-name">${inventoryEscapeHtml(item.name || 'Unnamed Item')}</div>${item.brand ? `<div class="inventory-item-meta">Brand: ${inventoryEscapeHtml(item.brand)}</div>` : ''}${item.model ? `<div class="inventory-item-meta">Model: ${inventoryEscapeHtml(item.model)}</div>` : ''}${item.unit_type ? `<div class="inventory-item-meta">Unit: ${inventoryEscapeHtml(item.unit_type)}</div>` : ''}${lowStockMarkup}</td>`;
         html += `<td class="inventory-table-cell-muted">${item.category_name || 'Uncategorized'}</td>`;
@@ -2361,6 +2361,20 @@ function renderItems(items) {
             button.addEventListener('click', () => deleteInventoryItem(Number(button.getAttribute('data-item-id') || 0)));
         });
     }
+}
+
+// TASK 18 — mirrors highlightUserFromQuery() in users.php.
+function highlightInventoryItemFromQuery() {
+    const params = new URLSearchParams(window.location.search);
+    const highlightId = Number(params.get('highlight') || 0);
+    if (!highlightId) return;
+
+    const row = document.querySelector(`[data-row-item-id="${highlightId}"]`);
+    if (!row) return;
+
+    row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    row.classList.add('inventory-row-highlight');
+    setTimeout(() => row.classList.remove('inventory-row-highlight'), 3000);
 }
 
 async function loadInventory() {
@@ -2413,6 +2427,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     await loadInventory();
+    // TASK 18 — an 'inventory' notification (item became Low Stock / Out of
+    // Stock) lands here via ?highlight=<item_id>. getVisibleInventoryItems()
+    // shows every item by default (no category filter pre-applied), so the
+    // row is already rendered — just find and highlight it, mirroring
+    // highlightUserFromQuery() in users.php.
+    highlightInventoryItemFromQuery();
     await loadInventoryEntryHistory();
 
     const addButton = document.getElementById('addItemsButton');
