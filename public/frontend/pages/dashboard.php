@@ -13,6 +13,15 @@ $user = $_SESSION['user'];
 <main class="container maintenance-admin-dashboard-page">
     <div class="card">
         <div class="card-header d-flex justify-between align-center">
+            <?php if (($user['role'] ?? '') === 'super_admin'): ?>
+            <!-- TASK 16: super_admin-only control for the single School Settings
+                 row (school_year / current_semester) that scopes the KPI cards
+                 below. Read-only for every other role. -->
+            <div id="school-settings-widget" style="text-align:right;">
+                <div id="school-settings-label" style="font-size:0.85rem;color:var(--text-secondary,#6b7280);">Loading semester…</div>
+                <button type="button" id="school-settings-edit-btn" class="btn btn-sm btn-secondary" style="margin-top:4px;">Change Semester</button>
+            </div>
+            <?php endif; ?>
         </div>
         <div class="card-body">
             <!-- Summary Cards Grid -->
@@ -22,7 +31,7 @@ $user = $_SESSION['user'];
                     <div class="summary-card-content">
                         <h3 class="summary-card-title">Total reports</h3>
                         <div class="summary-card-value" id="stat-total">-</div>
-                        <p class="summary-card-desc summary-trend-positive">all reports in the system</p>
+                        <p class="summary-card-desc summary-trend-positive" id="stat-total-desc">this semester</p>
                     </div>
                     <div class="summary-card-icon" aria-hidden="true">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: #a78bfa; stroke: #a78bfa;">
@@ -81,7 +90,7 @@ $user = $_SESSION['user'];
                     <div class="summary-card-content">
                         <h3 class="summary-card-title">Completed</h3>
                         <div class="summary-card-value" id="stat-completed">-</div>
-                        <p class="summary-card-desc summary-trend-positive">this month</p>
+                        <p class="summary-card-desc summary-trend-positive">this semester</p>
                     </div>
                     <div class="summary-card-icon" aria-hidden="true">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: #34d399; stroke: #34d399;">
@@ -170,6 +179,43 @@ $user = $_SESSION['user'];
         </div>
     </div>
 </main>
+
+<?php if (($user['role'] ?? '') === 'super_admin'): ?>
+<!-- School Settings Modal (TASK 16) -->
+<div id="schoolSettingsModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>School Settings</h2>
+            <span class="modal-close" onclick="closeSchoolSettingsModal()">&times;</span>
+        </div>
+        <div class="modal-body">
+            <div id="school-settings-alert"></div>
+            <form id="schoolSettingsForm">
+                <div class="form-group">
+                    <label for="school-settings-year">School Year *</label>
+                    <input type="text" id="school-settings-year" class="form-control" placeholder="e.g. 2026-2027" required>
+                </div>
+                <div class="form-group">
+                    <label for="school-settings-semester">Current Semester *</label>
+                    <select id="school-settings-semester" class="form-control" required>
+                        <option value="First Semester">First Semester</option>
+                        <option value="Second Semester">Second Semester</option>
+                    </select>
+                </div>
+            </form>
+            <p style="font-size:0.8rem;color:var(--text-secondary,#6b7280);">
+                Changing the semester resets the Total reports, Pending, In progress, and Completed
+                cards to only count reports created from this moment forward. No report is deleted,
+                archived, or modified — historical reports remain fully visible on the Reports page.
+            </p>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeSchoolSettingsModal()">Cancel</button>
+            <button class="btn btn-primary" id="school-settings-save-btn" onclick="saveSchoolSettings()">Save</button>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
 
 <!-- Building Modal -->
 <div id="buildingModal" class="modal">
@@ -975,6 +1021,100 @@ function refreshDashboardChartsForTheme() {
         _addBarHoverCursor(priorityCanvas, () => reportsPriorityChart);
     }
 }
+// TASK 16 — School Settings (school_year / current_semester) widget.
+// Read-only display is fetched for every role via /api/dashboard/stats;
+// the edit modal + save action only exist in the DOM for super_admin.
+function renderSchoolSettingsLabel(schoolYear, currentSemester) {
+    const labelEl = document.getElementById('school-settings-label');
+    if (labelEl) {
+        labelEl.textContent = (currentSemester || '—') + ' · ' + (schoolYear || '—');
+    }
+}
+
+function openSchoolSettingsModal() {
+    const modal = document.getElementById('schoolSettingsModal');
+    if (!modal) return;
+    const alertEl = document.getElementById('school-settings-alert');
+    if (alertEl) alertEl.innerHTML = '';
+    fetch(window.SFMS_PUBLIC_URL('/api/school-settings'), { credentials: 'include', cache: 'no-store' })
+        .then(r => r.json())
+        .then(json => {
+            if (json.success && json.data) {
+                document.getElementById('school-settings-year').value = json.data.school_year || '';
+                document.getElementById('school-settings-semester').value = json.data.current_semester || 'First Semester';
+            }
+        })
+        .catch(e => console.error('[Dashboard] school-settings fetch error:', e));
+    modal.classList.add('show');
+}
+
+function closeSchoolSettingsModal() {
+    const modal = document.getElementById('schoolSettingsModal');
+    if (modal) modal.classList.remove('show');
+}
+
+function saveSchoolSettings() {
+    const yearInput = document.getElementById('school-settings-year');
+    const semesterInput = document.getElementById('school-settings-semester');
+    const alertEl = document.getElementById('school-settings-alert');
+    const saveBtn = document.getElementById('school-settings-save-btn');
+    const schoolYear = (yearInput?.value || '').trim();
+    const currentSemester = semesterInput?.value || '';
+
+    if (!schoolYear) {
+        if (alertEl) alertEl.innerHTML = '<div class="alert alert-danger">School Year is required.</div>';
+        return;
+    }
+
+    if (saveBtn) saveBtn.disabled = true;
+
+    fetch(window.SFMS_PUBLIC_URL('/api/school-settings'), {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({ school_year: schoolYear, current_semester: currentSemester }),
+    })
+        .then(r => r.json())
+        .then(json => {
+            if (saveBtn) saveBtn.disabled = false;
+            if (json.success) {
+                renderSchoolSettingsLabel(json.data.school_year, json.data.current_semester);
+                closeSchoolSettingsModal();
+                if (typeof initDashboard === 'function') {
+                    initDashboard();
+                }
+            } else if (alertEl) {
+                alertEl.innerHTML = '<div class="alert alert-danger">' + (json.message || 'Failed to save.') + '</div>';
+            }
+        })
+        .catch(e => {
+            if (saveBtn) saveBtn.disabled = false;
+            if (alertEl) alertEl.innerHTML = '<div class="alert alert-danger">Network error. Please try again.</div>';
+            console.error('[Dashboard] school-settings save error:', e);
+        });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const editBtn = document.getElementById('school-settings-edit-btn');
+    if (editBtn) editBtn.addEventListener('click', openSchoolSettingsModal);
+
+    // Every role sees the read-only "First Semester · 2026-2027" style label
+    // via the dashboard stats payload (no extra request needed), but if this
+    // page loads before that fetch resolves for any reason, fall back to a
+    // direct read of /api/school-settings so the label never sticks on
+    // "Loading semester…".
+    if (document.getElementById('school-settings-label')) {
+        fetch(window.SFMS_PUBLIC_URL('/api/school-settings'), { credentials: 'include', cache: 'no-store' })
+            .then(r => r.json())
+            .then(json => {
+                if (json.success && json.data) {
+                    renderSchoolSettingsLabel(json.data.school_year, json.data.current_semester);
+                }
+            })
+            .catch(e => console.error('[Dashboard] school-settings label fetch error:', e));
+    }
+});
+
 // Modal Functions
 function openBuildingModal() {
     document.getElementById('buildingModal').classList.add('show');
@@ -1352,6 +1492,8 @@ async function fetchDashboardStats() {
         cancelled:     derived  ? (derived.cancelled            || 0)  : 0,
         low_stock:     apiStats ? Number(apiStats.low_stock     || 0)  : 0,
         by_priority:   derived?.by_priority || { low: 0, medium: 0, high: 0, critical: 0 },
+        school_year:      apiStats ? (apiStats.school_year      || '') : '',
+        current_semester: apiStats ? (apiStats.current_semester || '') : '',
     };
     console.log('[Dashboard] final merged stats:', JSON.stringify(merged));
     return merged;
@@ -1809,6 +1951,9 @@ async function initDashboard() {
         if (completedEl) completedEl.textContent = completed;
         const lowEl = document.getElementById('stat-low');
         lowEl.textContent = (stats.low_stock !== undefined) ? stats.low_stock : '—';
+        if (typeof renderSchoolSettingsLabel === 'function') {
+            renderSchoolSettingsLabel(stats.school_year, stats.current_semester);
+        }
         _lastDashboardStats = effectiveChartStats;
 
         // Render chart separately so card values do not fail if chart has issues.

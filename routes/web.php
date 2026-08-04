@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\PurchaseReceiptController;
 use App\Http\Controllers\Api\ReplacementTrackingController;
 use App\Http\Controllers\Api\RoomController;
+use App\Http\Controllers\Api\SchoolSettingsController;
 use App\Http\Controllers\Api\ItemController;
 use App\Http\Controllers\Api\RepairController;
 use App\Http\Controllers\Api\ReportController;
@@ -127,6 +128,14 @@ Route::prefix('api')->group(function (): void {
         Route::get('reports/{report}', [ReportController::class, 'show']);
         Route::patch('reports/{report}', [ReportController::class, 'update']);
         Route::delete('reports/{report}', [ReportController::class, 'destroy']);
+
+        // TASK 16 — single-row global School Settings (school_year /
+        // current_semester) used to scope dashboard KPI statistics to the
+        // current semester. Any authenticated user may read it; only
+        // super_admin may change it.
+        Route::get('school-settings', [SchoolSettingsController::class, 'show']);
+        Route::put('school-settings', [SchoolSettingsController::class, 'update'])
+            ->middleware(EnsureRole::class . ':super_admin');
 
         Route::prefix('dashboard')->group(function (): void {
             Route::get('stats', [DashboardController::class, 'stats']);

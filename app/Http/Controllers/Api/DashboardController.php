@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\MaintenanceReport;
+use App\Models\SchoolSetting;
 use App\Services\RoleNormalizerService;
 use App\Support\ApiResponder;
 use Illuminate\Http\JsonResponse;
@@ -31,11 +32,40 @@ class DashboardController extends Controller
             });
         }
 
-        $stats = (clone $query)
+        // TASK 16 — Semester-based KPI scoping.
+        //
+        // "Total reports / Pending / In progress / Completed" must reflect
+        // only the CURRENT semester, not every report ever created. The
+        // active semester is a single manually-set School Settings row
+        // (school_year + current_semester, no history table, no automatic
+        // date inference — see SchoolSetting model).
+        //
+        // The cutoff is the explicit `semester_started_at` business field —
+        // NOT `updated_at`. `updated_at` is metadata that changes on ANY
+        // edit to the row (e.g. fixing a typo in school_year), which would
+        // silently and incorrectly reset the KPI cards. `semester_started_at`
+        // only changes when a super_admin explicitly starts a new semester
+        // (SchoolSettingsController::update()). This never reads or writes
+        // maintenance_reports.* beyond an ordinary WHERE clause, and never
+        // modifies report history, IDs, audit logs, or dates.
+        $schoolSettings     = SchoolSetting::current();
+        $semesterStartedAt  = $schoolSettings->semester_started_at;
+
+        $semesterScoped = clone $query;
+        if ($semesterStartedAt !== null) {
+            $semesterScoped->where('created_at', '>=', $semesterStartedAt);
+        }
+
+        $stats = $semesterScoped
             ->selectRaw('COUNT(*) as total_reports')
             ->selectRaw("SUM(CASE WHEN status IN ('submitted', 'assigned') THEN 1 ELSE 0 END) as pending")
             ->selectRaw("SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END) as in_progress")
             ->selectRaw("SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed")
+            ->first();
+
+        // "Reports today" is intentionally NOT semester-scoped — it is
+        // already a same-day count, unaffected by lifetime accumulation.
+        $reportsToday = (clone $query)
             ->selectRaw("SUM(CASE WHEN DATE(created_at) = CURDATE() THEN 1 ELSE 0 END) as reports_today")
             ->first();
 
@@ -45,11 +75,13 @@ class DashboardController extends Controller
 
         return $this->ok('Dashboard stats retrieved', [
             'total_reports' => (int) ($stats->total_reports ?? 0),
-            'reports_today' => (int) ($stats->reports_today ?? 0),
+            'reports_today' => (int) ($reportsToday->reports_today ?? 0),
             'pending'       => (int) ($stats->pending       ?? 0),
             'in_progress'   => (int) ($stats->in_progress   ?? 0),
             'completed'     => (int) ($stats->completed     ?? 0),
             'low_stock'     => (int) $lowStock,
+            'school_year'      => $schoolSettings->school_year,
+            'current_semester' => $schoolSettings->current_semester,
             'links'         => [
                 'total_reports' => '/api/reports',
                 'reports_today' => '/api/reports?date=today',
