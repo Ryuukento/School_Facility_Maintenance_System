@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\MaintenanceReport;
 use App\Services\NeedChangeService;
+use App\Services\NotificationService;
 use App\Services\RoleNormalizerService;
 use App\Support\ApiResponder;
 use Illuminate\Http\JsonResponse;
@@ -20,7 +21,14 @@ class ReportController extends Controller
     use ApiResponder;
 
     public function __construct(
-        private readonly NeedChangeService $needChangeService
+        private readonly NeedChangeService $needChangeService,
+        // TASK 20 — Assignment Notification Scoping: reuses the same
+        // NotificationService already injected into DispatchService /
+        // RepairService / DamageReportService, so the single-recipient
+        // "you have been assigned" notification (see update() CASE B)
+        // goes through the one existing notification insert path instead
+        // of a new bespoke one.
+        private readonly NotificationService $notificationService
     ) {
     }
 
@@ -322,6 +330,11 @@ class ReportController extends Controller
         $role     = $this->normalizeRole((string)($authUser['role'] ?? ''));
 
         $previousStatus = (string) $report->status;
+        // TASK 20 — Assignment Notification Scoping: captured before any
+        // changes are applied so the notify-on-assign check below can tell
+        // a genuine reassignment (previous assignee -> new assignee) apart
+        // from an idempotent resubmission of the same assignee.
+        $previousAssignedTo = $report->assigned_to !== null ? (int) $report->assigned_to : null;
         $changes = [];
 
         // CASE D/E — need-change approval/rejection (super_admin only)
@@ -433,6 +446,27 @@ class ReportController extends Controller
         $newStatus = $changes['status'] ?? null;
         if (in_array($newStatus, ['completed', 'closed'], true) && $newStatus !== $previousStatus) {
             $this->notifyReportOwnerOfCompletion($report, $newStatus);
+        }
+
+        // TASK 20 — Assignment Notification Scoping: this is the ONLY
+        // recipient for an assign/reassign event — never a department- or
+        // admin-wide broadcast like notifyAdminsOfNewReport() above (that
+        // "New Report Submitted" flow is unrelated and untouched). Fires
+        // only on a genuine change of assignee, mirroring the same
+        // "re-saving the same value must not re-notify" rule already used
+        // by DispatchService::assignReleasePersonnel() and
+        // RepairService::assignTechnician().
+        if ($newStatus === 'assigned' && array_key_exists('assigned_to', $changes)) {
+            $newAssignedTo = $changes['assigned_to'] !== null ? (int) $changes['assigned_to'] : null;
+            if ($newAssignedTo !== null && $newAssignedTo !== $previousAssignedTo) {
+                $this->notificationService->notify(
+                    $newAssignedTo,
+                    'You Have Been Assigned a Maintenance Report',
+                    'You have been assigned to maintenance report #' . $report->report_id . ' (' . $report->title . ') at ' . ($report->location ?: 'N/A') . '.',
+                    'report',
+                    $report->report_id
+                );
+            }
         }
 
         return $this->ok('Report updated successfully');
