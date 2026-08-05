@@ -10,6 +10,13 @@ if (!isset($_SESSION['auth_user']) && !isset($_SESSION['user'])) {
     header('Location: ' . public_url('/login'), true, 302);
     exit;
 }
+
+// TASK 21 — Stale Session After User Deletion: this page renders its own
+// standalone HTML document (no sidebar/navbar), so it cannot include
+// header.php without corrupting the layout. It reuses the same shared
+// existence check header.php uses instead of duplicating it here.
+require_once __DIR__ . '/../includes/session-guard.php';
+sfms_reject_stale_session();
 ?>
 <!doctype html>
 <html>

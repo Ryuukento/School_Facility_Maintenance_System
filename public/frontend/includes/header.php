@@ -31,6 +31,19 @@ if (!in_array($currentPage, $publicPages) && !isset($_SESSION['user'])) {
     exit;
 }
 
+// TASK 21 — Stale Session After User Deletion: a browser session can keep
+// pointing at a user_id whose row has since been deleted (e.g. by an
+// Administrator) while the tab stays open. Continuing to trust
+// $_SESSION['user'] in that case is what let a deleted user's session reach
+// as far as a database insert and leak a raw SQLSTATE foreign-key error.
+// The actual check lives in session-guard.php so it is implemented exactly
+// once and shared with the pages that render their own standalone layout
+// instead of including this file (edit-report.php, suppliers-manage.php).
+if (!in_array($currentPage, $publicPages)) {
+    require_once __DIR__ . '/session-guard.php';
+    sfms_reject_stale_session();
+}
+
 $pageTitle = $pageTitle ?? 'SFMS';
 $user = $_SESSION['user'] ?? null;
 $isForceProfileUpdate = !empty($user['force_profile_update']);

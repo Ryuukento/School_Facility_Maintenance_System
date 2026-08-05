@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\User;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -21,6 +22,38 @@ class EnsureApiAuthenticated
 
             // Web requests should redirect to the login page.
             return redirect('/login');
+        }
+
+        // TASK 21 — Stale Session After User Deletion: a session can keep
+        // pointing at a user_id whose row has since been deleted (e.g. by an
+        // Administrator) while the browser stays authenticated. Continuing to
+        // trust that session let requests reach as far as a DB insert and
+        // leak a raw SQLSTATE foreign-key error instead of failing
+        // gracefully. Checked once here — the single place already gating
+        // every authenticated route — rather than re-checked per controller.
+        $sessionUser = $request->session()->get('auth_user') ?? $request->session()->get('user');
+        $userId = is_array($sessionUser) ? ($sessionUser['user_id'] ?? null) : null;
+
+        if ($userId === null || !User::query()->whereKey($userId)->exists()) {
+            $request->session()->forget('auth_user');
+            $request->session()->forget('user');
+            $request->session()->forget('user_id');
+            $request->session()->forget('role');
+            $request->session()->forget('last_activity');
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+            $_SESSION = [];
+
+            $message = 'Your session has expired or your account no longer exists. Please sign in again.';
+
+            if ($request->is('api/*') || $request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $message,
+                ], Response::HTTP_UNAUTHORIZED);
+            }
+
+            return redirect('/frontend/pages/index.php?session_expired=1');
         }
 
         return $next($request);

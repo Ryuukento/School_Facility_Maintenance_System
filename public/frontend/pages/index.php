@@ -41,7 +41,13 @@ if (isset($_SESSION['auth_user']) || isset($_SESSION['user'])) {
     <div class="card">
         <section class="form-panel">
             <div class="form-panel-inner">
-                <div id="alert-container"></div>
+                <div id="alert-container">
+                    <?php if (isset($_GET['session_expired'])): ?>
+                    <div class="alert alert-danger">
+                        Your session has expired or your account no longer exists. Please sign in again.
+                    </div>
+                    <?php endif; ?>
+                </div>
 
                 <form id="login-form" autocomplete="off">
                     <h2 class="auth-title">Sign In</h2>
