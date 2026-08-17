@@ -24,7 +24,15 @@ sfms_reject_stale_session();
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <title>Suppliers Management</title>
-    <link rel="stylesheet" href="/frontend/assets/styles.css">
+    <!-- TASK 98.2 fix: this page renders standalone (no header.php), so it
+         never had access to window.SFMS_PUBLIC_URL, and the paths below were
+         hardcoded as domain-root-relative. In this XAMPP subfolder-hosted
+         environment that 404s (app lives under
+         /School_Facility_Maintenance_System, not domain root). public_url()
+         (already require_once'd above via settings.php) is the established
+         PHP-side helper used everywhere else for this, so reuse it here
+         instead of hardcoding. -->
+    <link rel="stylesheet" href="<?php echo htmlspecialchars(public_url('/frontend/assets/css/styles.css')); ?>">
     <style>
         body{font-family:Arial,Helvetica,sans-serif;padding:16px}
         .container{max-width:900px;margin:0 auto}
@@ -50,9 +58,26 @@ sfms_reject_stale_session();
         </form>
     </div>
 </div>
-<script src="/frontend/assets/js/components.js"></script>
+<!-- TASK 98.2 fix: live-verified ReferenceError "UI is not defined" thrown
+     from Components.toast/alert/confirm (components.js) on form submit here.
+     Root cause: those Components wrappers call window.UI (defined in
+     utils.js), and utils.js is normally loaded on every page via
+     footer.php — but this page is standalone (no header/footer include,
+     per the TASK 21 comment above) and only ever loaded components.js,
+     never utils.js. Load utils.js first, same load order footer.php uses
+     elsewhere, so window.UI exists before components.js needs it. -->
+<script src="<?php echo htmlspecialchars(public_url('/frontend/assets/js/utils.js')); ?>"></script>
+<script src="<?php echo htmlspecialchars(public_url('/frontend/assets/js/components.js')); ?>"></script>
 <script>
-const apiPrefix = '/api/suppliers';
+function smEscapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+const apiPrefix = <?php echo json_encode(public_url('/api/suppliers')); ?>;
 async function fetchSuppliers(){
     const q = document.getElementById('search').value;
     const res = await fetch(apiPrefix + '?search=' + encodeURIComponent(q),{credentials:'same-origin'});
@@ -62,7 +87,7 @@ async function fetchSuppliers(){
     const list = document.getElementById('list');list.innerHTML='';
     data.forEach(s=>{
         const el=document.createElement('div');el.className='list-item';
-        el.innerHTML = `<div><strong>${s.name}</strong><div style='color:#6b7280'>${s.contact_email||''}</div></div><div><button data-id='${s.id}' class='edit'>Edit</button></div>`;
+        el.innerHTML = `<div><strong>${smEscapeHtml(s.name)}</strong><div style='color:#6b7280'>${smEscapeHtml(s.contact_email)}</div></div><div><button data-id='${smEscapeHtml(s.id)}' class='edit'>Edit</button></div>`;
         list.appendChild(el);
     });
 }
@@ -72,7 +97,7 @@ document.getElementById('search').addEventListener('keydown',e=>{if(e.key==='Ent
 document.getElementById('list').addEventListener('click',async(e)=>{
     if(e.target.classList.contains('edit')){
         const id = e.target.dataset.id;
-        const res = await fetch('/api/suppliers/' + id,{credentials:'same-origin'});
+        const res = await fetch(apiPrefix + '/' + id,{credentials:'same-origin'});
         const json = await res.json(); if(!json.success){ Components.alert(json.message || 'Failed to load supplier', 'danger'); return }
         const s = json.data.supplier;
         document.getElementById('supplier_id').value = s.id;
