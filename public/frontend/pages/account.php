@@ -1,4 +1,13 @@
 <?php
+if (session_status() === PHP_SESSION_NONE) {
+    session_set_cookie_params(['lifetime'=>0,'path'=>'/','secure'=>false,'httponly'=>true,'samesite'=>'Lax']);
+    session_start();
+}
+if (!isset($_SESSION['user']) && !isset($_SESSION['auth_user']) && !isset($user)) {
+    header('Location: /School_Facility_Maintenance_System/frontend/pages/index.php');
+    exit;
+}
+
 $pageTitle = 'Account - SFMS';
 $currentUser = $user ?? ($_SESSION['user'] ?? []);
 $forceProfileUpdate = !empty($currentUser['force_profile_update']);

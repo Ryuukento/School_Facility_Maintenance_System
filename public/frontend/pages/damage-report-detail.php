@@ -4,6 +4,11 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
+if (!isset($_SESSION['user']) && !isset($_SESSION['auth_user'])) {
+    header('Location: /School_Facility_Maintenance_System/frontend/pages/index.php');
+    exit;
+}
+
 $pageTitle = 'Damage Report Details - SFMS';
 include __DIR__ . '/../includes/header.php';
 ?>
@@ -43,11 +48,10 @@ const DAMAGE_REPORTS_PAGE_BASE = window.SFMS_PUBLIC_URL ? window.SFMS_PUBLIC_URL
 const REPAIRS_PAGE_BASE = window.SFMS_PUBLIC_URL ? window.SFMS_PUBLIC_URL('/repairs') : '/repairs';
 
 function detailNotify(message, type = 'danger') {
-    if (window.Components && typeof Components.alert === 'function') {
-        Components.alert(message, type);
-        return;
-    }
-    window.alert(message);
+    // UI_BROWSER_DIALOG_REPLACEMENT — Components/UI are always loaded (see
+    // includes/footer.php), so this always goes through the reusable
+    // in-app modal; no window.alert() fallback.
+    Components.alert(message, type);
 }
 
 function getDamageIdFromQuery() {

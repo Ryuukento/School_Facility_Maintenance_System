@@ -4,6 +4,11 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
+if (!isset($_SESSION['user']) && !isset($_SESSION['auth_user'])) {
+    header('Location: /School_Facility_Maintenance_System/frontend/pages/index.php');
+    exit;
+}
+
 $pageTitle = 'Replacement Request - SFMS';
 include __DIR__ . '/../includes/header.php';
 ?>
@@ -54,11 +59,10 @@ function getReplacementRepairId() {
 }
 
 function replacementNotify(message, type = 'danger') {
-    if (window.Components && typeof Components.alert === 'function') {
-        Components.alert(message, type);
-        return;
-    }
-    window.alert(message);
+    // UI_BROWSER_DIALOG_REPLACEMENT — Components/UI are always loaded (see
+    // includes/footer.php), so this always goes through the reusable
+    // in-app modal; no window.alert() fallback.
+    Components.alert(message, type);
 }
 
 function initReplacementItemSelect() {
@@ -97,7 +101,7 @@ async function loadReplacementRepair() {
 
         document.getElementById('replacement-page-title').textContent = `Replacement for ${repair.repair_code || 'Repair Request'}`;
         document.getElementById('replacement-page-subtitle').textContent = `Damage report: ${repair.damage_report?.damage_report_code || 'N/A'} | Current status: ${repair.repair_status || 'pending'}`;
-        document.getElementById('replacement-summary').innerHTML = `<div class="text-muted">Item: <strong>${repair.damage_report?.item?.name || 'Unknown'}</strong> | Technician: <strong>${repair.technician?.full_name || 'Unassigned'}</strong></div>`;
+        document.getElementById('replacement-summary').innerHTML = `<div class="text-muted">Item: <strong>${UI.escapeHtml(repair.damage_report?.item?.name) || 'Unknown'}</strong> | Technician: <strong>${UI.escapeHtml(repair.technician?.full_name) || 'Unassigned'}</strong></div>`;
 
         if (repair.repair_status !== 'failed' && !repair.replacement_dispatch) {
             replacementNotify('Replacement is only available after the repair has been marked as failed.', 'warning');

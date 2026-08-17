@@ -4,6 +4,11 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
+if (!isset($_SESSION['user']) && !isset($_SESSION['auth_user'])) {
+    header('Location: /School_Facility_Maintenance_System/frontend/pages/index.php');
+    exit;
+}
+
 $_anUser = $_SESSION['user'] ?? $_SESSION['auth_user'] ?? [];
 $_anRole = strtolower(trim((string)($_anUser['role'] ?? '')));
 if ($_anRole !== 'super_admin' && $_anRole !== 'maintenance_admin' && $_anRole !== 'maintenance_staff') {
@@ -23,14 +28,14 @@ include __DIR__ . '/../includes/header.php';
 </style>
 
 <main class="container" style="margin-top:16px;">
-    <div class="card" id="an-analytics-card" style="border-left:3px solid var(--primary-color);">
-        <div class="card-header d-flex justify-between align-center" style="border-bottom:0.5px solid var(--border);">
+    <div class="card" id="an-analytics-card" style="border-left:3px solid var(--primary-color);margin-top:0;">
+        <div class="card-header d-flex justify-between align-center" style="border-bottom:0.5px solid var(--border);padding:20px 24px 16px;">
             <div>
                 <h2 style="font-size:18px;font-weight:500;margin:0 0 2px;">Analytics Dashboard</h2>
                 <p class="text-muted mb-0" style="font-size:13px;">Inventory health, damage trends, semester comparisons, and dispatch reports.</p>
             </div>
         </div>
-        <div class="card-body">
+        <div class="card-body" style="padding:18px 24px 26px;">
 
             <!-- Tab buttons -->
             <div class="an-tabs" style="display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:20px;">
@@ -55,11 +60,11 @@ include __DIR__ . '/../includes/header.php';
             <!-- ─── TAB 1: Overview ──────────────────────────────────────── -->
             <div id="an-tab1" class="an-tab-content">
 
-                <p style="font-size:14px;font-weight:500;margin:0 0 12px;">Inventory Health</p>
-                <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:28px;">
+                <p style="font-size:14px;font-weight:500;margin:0 0 10px;">Inventory Health</p>
+                <div class="an-metric-grid">
 
                     <!-- Total Items — blue -->
-                    <div style="border:1px solid rgba(37,99,235,0.2);border-radius:12px;padding:20px;display:flex;align-items:center;gap:16px;background:linear-gradient(135deg,rgba(37,99,235,0.06) 0%,transparent 60%);">
+                    <div class="an-metric-card" style="border:1px solid rgba(37,99,235,0.2);background:linear-gradient(135deg,rgba(37,99,235,0.06) 0%,transparent 60%);">
                         <div style="width:48px;height:48px;border-radius:12px;background:rgba(37,99,235,0.12);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
                             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
@@ -74,7 +79,7 @@ include __DIR__ . '/../includes/header.php';
                     </div>
 
                     <!-- Low Stock — orange -->
-                    <div style="border:1px solid rgba(245,158,11,0.25);border-radius:12px;padding:20px;display:flex;align-items:center;gap:16px;background:linear-gradient(135deg,rgba(245,158,11,0.06) 0%,transparent 60%);">
+                    <div class="an-metric-card" style="border:1px solid rgba(245,158,11,0.25);background:linear-gradient(135deg,rgba(245,158,11,0.06) 0%,transparent 60%);">
                         <div style="width:48px;height:48px;border-radius:12px;background:rgba(245,158,11,0.12);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
                             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
@@ -89,7 +94,7 @@ include __DIR__ . '/../includes/header.php';
                     </div>
 
                     <!-- Out of Stock — red -->
-                    <div style="border:1px solid rgba(239,68,68,0.22);border-radius:12px;padding:20px;display:flex;align-items:center;gap:16px;background:linear-gradient(135deg,rgba(239,68,68,0.06) 0%,transparent 60%);">
+                    <div class="an-metric-card" style="border:1px solid rgba(239,68,68,0.22);background:linear-gradient(135deg,rgba(239,68,68,0.06) 0%,transparent 60%);">
                         <div style="width:48px;height:48px;border-radius:12px;background:rgba(239,68,68,0.12);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
                             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <circle cx="12" cy="12" r="10"/>
@@ -104,7 +109,7 @@ include __DIR__ . '/../includes/header.php';
                     </div>
 
                     <!-- Low Stock % — purple -->
-                    <div style="border:1px solid rgba(139,92,246,0.22);border-radius:12px;padding:20px;display:flex;align-items:center;gap:16px;background:linear-gradient(135deg,rgba(139,92,246,0.06) 0%,transparent 60%);">
+                    <div class="an-metric-card" style="border:1px solid rgba(139,92,246,0.22);background:linear-gradient(135deg,rgba(139,92,246,0.06) 0%,transparent 60%);">
                         <div style="width:48px;height:48px;border-radius:12px;background:rgba(139,92,246,0.12);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
                             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <line x1="19" y1="5" x2="5" y2="19"/>
@@ -120,7 +125,7 @@ include __DIR__ . '/../includes/header.php';
 
                 </div>
 
-                <p style="font-size:14px;font-weight:500;margin:0 0 8px;">Items Needing Attention</p>
+                <p style="font-size:14px;font-weight:500;margin:0 0 10px;">Items Needing Attention</p>
                 <div id="an-lowstock-container" class="table-responsive">
                     <div class="ui-empty-state"><strong>Loading...</strong></div>
                 </div>
@@ -151,7 +156,7 @@ include __DIR__ . '/../includes/header.php';
                     </div>
                 </div>
 
-                <p style="font-size:14px;font-weight:500;margin:0 0 8px;">Most Damaged Items</p>
+                <p style="font-size:14px;font-weight:500;margin:0 0 10px;">Most Damaged Items</p>
                 <div style="height:280px;margin-bottom:24px;position:relative;">
                     <canvas id="chart-damaged" style="width:100%;height:100%;"></canvas>
                 </div>
@@ -159,7 +164,7 @@ include __DIR__ . '/../includes/header.php';
                     <div class="ui-empty-state"><strong>Loading...</strong></div>
                 </div>
 
-                <p style="font-size:14px;font-weight:500;margin:0 0 8px;">Inventory Movement by Department</p>
+                <p style="font-size:14px;font-weight:500;margin:0 0 10px;">Inventory Movement by Department</p>
                 <div id="an-deptusage-container" class="table-responsive">
                     <div class="ui-empty-state"><strong>Loading...</strong></div>
                 </div>
@@ -170,27 +175,34 @@ include __DIR__ . '/../includes/header.php';
             <div id="an-tab3" class="an-tab-content" style="display:none;">
 
                 <!-- Year selector -->
-                <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;flex-wrap:wrap;">
+                <div class="an-sem-toolbar">
                     <label style="font-size:12px;color:var(--muted-text);margin:0;white-space:nowrap;">Academic Year</label>
-                    <select id="an-sem-year" class="form-control" style="width:130px;font-size:13px;border-radius:8px;border:0.5px solid var(--border);padding:4px 8px;">
+                    <select id="an-sem-year" class="form-control an-sem-year-select">
                         <!-- Populated by JS -->
                     </select>
-                    <button type="button" id="an-sem-apply" class="btn" style="background:#185FA5;color:#fff;border:none;font-size:13px;border-radius:8px;padding:6px 14px;cursor:pointer;">Apply</button>
-                    <span id="an-sem-year-label" style="font-size:13px;color:var(--muted-text);"></span>
+                    <button type="button" id="an-sem-apply" class="btn an-sem-apply-btn">Apply</button>
+                    <span id="an-sem-year-label" class="an-sem-year-label"></span>
+                </div>
+
+                <!-- Comparison Period — built entirely from the semester-detail
+                     response already fetched below (school year + both semester
+                     date ranges); no additional API calls. -->
+                <div id="an-sem-period" class="an-sem-period-card" style="display:none;">
+                    <!-- Populated by JS -->
                 </div>
 
                 <!-- Summary cards: 4 metrics, each showing S1 vs S2 -->
-                <p style="font-size:14px;font-weight:500;margin:0 0 10px;">Semester Summary</p>
-                <div id="an-sem-cards" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px;">
+                <p class="an-sem-section-title">Semester Summary</p>
+                <div id="an-sem-cards" class="an-sem-cards-grid">
                     <div class="ui-empty-state" style="grid-column:span 4;"><strong>Loading…</strong></div>
                 </div>
 
                 <!-- Semester grouped bar chart -->
-                <div style="background:var(--card-color);border:0.5px solid var(--border);border-radius:12px;padding:1.25rem;margin-bottom:20px;">
+                <div class="an-sem-panel">
                     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;">
                         <div>
                             <p style="font-size:14px;font-weight:500;color:var(--text-light);margin:0 0 3px;">Semester Overview Chart</p>
-                            <p style="font-size:12px;color:var(--muted-text);margin:0;">1st Sem (Jan–Jun) vs 2nd Sem (Jul–Dec)</p>
+                            <p id="an-sem-chart-subtitle" style="font-size:12px;color:var(--muted-text);margin:0;">Loading semester schedule…</p>
                         </div>
                         <div style="display:flex;gap:14px;align-items:center;flex-shrink:0;padding-top:2px;">
                             <span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted-text);">
@@ -209,16 +221,16 @@ include __DIR__ . '/../includes/header.php';
                 </div>
 
                 <!-- Metric comparison table -->
-                <div style="background:var(--card-color);border:0.5px solid var(--border);border-radius:12px;padding:1.25rem;margin-bottom:20px;">
+                <div class="an-sem-panel">
                     <p style="font-size:14px;font-weight:500;margin:0 0 2px;">Metric Comparison</p>
-                    <p style="font-size:12px;color:var(--muted-text);margin:0 0 14px;">Compares 1st Semester (Jan–Jun) vs 2nd Semester (Jul–Dec). Trend shows change from S1 → S2.</p>
+                    <p id="an-sem-table-subtitle" style="font-size:12px;color:var(--muted-text);margin:0 0 14px;">Loading semester schedule…</p>
                     <div id="an-sem-table" class="table-responsive">
                         <div class="ui-empty-state"><strong>Loading…</strong></div>
                     </div>
                 </div>
 
                 <!-- Department breakdown -->
-                <div style="background:var(--card-color);border:0.5px solid var(--border);border-radius:12px;padding:1.25rem;">
+                <div class="an-sem-panel">
                     <p style="font-size:14px;font-weight:500;margin:0 0 2px;">Department Activity</p>
                     <p style="font-size:12px;color:var(--muted-text);margin:0 0 14px;">Damage reports and dispatches per department, split by semester. Top 20 by total activity.</p>
                     <div id="an-sem-dept" class="table-responsive">
@@ -247,17 +259,17 @@ include __DIR__ . '/../includes/header.php';
                     <div></div>
                 </div>
 
-                <p style="font-size:14px;font-weight:500;margin:0 0 8px;">Inventory Activity — Last 12 Months</p>
+                <p style="font-size:14px;font-weight:500;margin:0 0 10px;">Inventory Activity — Last 12 Months</p>
                 <div style="height:280px;margin-bottom:24px;position:relative;">
                     <canvas id="chart-monthly" style="width:100%;height:100%;"></canvas>
                 </div>
 
-                <p style="font-size:14px;font-weight:500;margin:0 0 8px;">Dispatch Report</p>
+                <p style="font-size:14px;font-weight:500;margin:0 0 10px;">Dispatch Report</p>
                 <div id="an-dispatch-container" class="table-responsive" style="margin-bottom:24px;">
                     <div class="ui-empty-state"><strong>Loading...</strong></div>
                 </div>
 
-                <p style="font-size:14px;font-weight:500;margin:0 0 8px;">Repair Report</p>
+                <p style="font-size:14px;font-weight:500;margin:0 0 10px;">Repair Report</p>
                 <div id="an-repair-container" class="table-responsive">
                     <div class="ui-empty-state"><strong>Loading...</strong></div>
                 </div>
@@ -269,12 +281,222 @@ include __DIR__ . '/../includes/header.php';
 </main>
 
 <style>
+/* ============================================================
+   Analytics Dashboard — UI polish (scoped to #an-analytics-card)
+   Spacing / alignment / consistency only. No layout structure,
+   routing, permissions, or data/logic changes.
+   ============================================================ */
+
+/* Overview tab: Inventory Health metric cards (shared layout;
+   per-card colors stay inline). Grid rows stretch by default, so
+   all four cards already render at equal height. */
+#an-tab1 .an-metric-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+    margin-bottom: 28px;
+}
+#an-tab1 .an-metric-card {
+    border-radius: 12px;
+    padding: 20px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+/* Filter rows (Damage Analytics + Dispatch & Repair tabs): outside of
+   .form-group, .form-control has no height/padding of its own, so the
+   date inputs / department select previously rendered at browser-default
+   height while the Apply button used the design system's button height.
+   Giving every field the same explicit height fixes the misalignment. */
+#an-analytics-card .an-filter-row .form-control,
+#an-analytics-card .an-filter-row .btn {
+    height: 40px;
+    box-sizing: border-box;
+}
+#an-analytics-card .an-filter-row .form-control {
+    width: 100%;
+    padding: 0 12px;
+    border-radius: 10px;
+}
+
 /* ── Tab row hover ───────────────────────────────────────────────────── */
 .an-tab-content .table tbody tr { transition: background 0.12s; }
 .an-tab-content .table tbody tr:hover { background: var(--muted-card); }
 /* ── No border on last table row ─────────────────────────────────────── */
 #an-sem-table .table tbody tr:last-child td,
 #an-sem-dept  .table tbody tr:last-child td  { border-bottom: none; }
+
+/* ── Responsive: keep filter rows and metric cards from overflowing on
+   tablet/mobile (the grids above use fixed inline column tracks). ──── */
+@media (max-width: 900px) {
+    #an-tab1 .an-metric-grid { grid-template-columns: repeat(2, 1fr); }
+    #an-analytics-card .an-filter-row { grid-template-columns: 1fr 1fr !important; }
+}
+@media (max-width: 560px) {
+    #an-tab1 .an-metric-grid { grid-template-columns: 1fr; }
+    #an-analytics-card .an-filter-row { grid-template-columns: 1fr !important; }
+}
+
+/* ============================================================
+   Semester Comparison (Tab 3) — visual polish only, scoped to
+   #an-tab3. No selector below is referenced by JS for behavior;
+   anLoadSemesterDetail() only reads/writes element IDs (unchanged:
+   an-sem-year, an-sem-apply, an-sem-year-label, an-sem-period,
+   an-sem-cards, chart-semester, an-sem-chart-subtitle,
+   an-sem-table-subtitle, an-sem-table, an-sem-dept) and now also
+   assigns the class names introduced here to build each card/pill,
+   which is purely presentational.
+   ============================================================ */
+#an-tab3 .an-sem-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+#an-tab3 .an-sem-year-select {
+    width: 150px;
+    font-size: 13px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    padding: 6px 10px;
+}
+#an-tab3 .an-sem-apply-btn {
+    background: var(--primary-color);
+    color: #fff;
+    border: none;
+    font-size: 13px;
+    font-weight: 500;
+    border-radius: 8px;
+    padding: 7px 16px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+#an-tab3 .an-sem-apply-btn:hover { background: var(--primary-dark); }
+#an-tab3 .an-sem-year-label { font-size: 13px; color: var(--muted-text); }
+
+/* Comparison Period — real config data (school year + both semester
+   ranges), assembled client-side from the same payload the cards/
+   chart/table below already use. No new data or endpoints. */
+#an-tab3 .an-sem-period-card {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 32px;
+    background: var(--muted-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 18px;
+    margin-bottom: 20px;
+}
+#an-tab3 .an-sem-period-item { display: flex; flex-direction: column; gap: 2px; }
+#an-tab3 .an-sem-period-label {
+    font-size: 10.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--muted-text);
+}
+#an-tab3 .an-sem-period-value { font-size: 13px; font-weight: 500; color: var(--text-light); }
+
+#an-tab3 .an-sem-section-title { font-size: 14px; font-weight: 500; margin: 0 0 10px; }
+
+#an-tab3 .an-sem-cards-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+    margin-bottom: 24px;
+}
+
+/* Per-metric color identity (matches Metric Comparison table + chart
+   legend semantics): Maintenance Reports = purple, Dispatches = blue,
+   Damage Reports = orange, Repair Requests = green. Accent border/icon
+   only — the S1/S2 values, arrow, and Year Total are unchanged. */
+#an-tab3 .an-sem-card {
+    border-radius: 12px;
+    padding: 1.25rem 1.1rem;
+    border: 1px solid var(--border);
+    border-top: 3px solid var(--border);
+    background: var(--card-color);
+    transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+#an-tab3 .an-sem-card:hover { box-shadow: 0 10px 24px rgba(15, 23, 42, 0.10); transform: translateY(-1px); }
+#an-tab3 .an-sem-card--maintenance { border-top-color: #8b5cf6; }
+#an-tab3 .an-sem-card--dispatches  { border-top-color: #185FA5; }
+#an-tab3 .an-sem-card--damage      { border-top-color: #d97706; }
+#an-tab3 .an-sem-card--repairs     { border-top-color: #1D9E75; }
+
+#an-tab3 .an-sem-card-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 10px;
+}
+#an-tab3 .an-sem-card--maintenance .an-sem-card-icon { background: rgba(139, 92, 246, 0.14); }
+#an-tab3 .an-sem-card--dispatches  .an-sem-card-icon { background: rgba(24, 95, 165, 0.14); }
+#an-tab3 .an-sem-card--damage      .an-sem-card-icon { background: rgba(217, 119, 6, 0.14); }
+#an-tab3 .an-sem-card--repairs     .an-sem-card-icon { background: rgba(29, 158, 117, 0.14); }
+
+#an-tab3 .an-sem-card-label {
+    font-size: 11px;
+    color: var(--muted-text);
+    text-transform: uppercase;
+    letter-spacing: .6px;
+    font-weight: 500;
+    margin-bottom: 12px;
+}
+#an-tab3 .an-sem-card-body {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    margin-bottom: 10px;
+}
+#an-tab3 .an-sem-card-foot {
+    text-align: center;
+    font-size: 12px;
+    color: var(--muted-text);
+    border-top: 1px solid var(--border);
+    padding-top: 8px;
+}
+
+#an-tab3 .an-sem-panel {
+    background: var(--card-color);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.25rem;
+    margin-bottom: 20px;
+}
+#an-tab3 .an-sem-panel:last-child { margin-bottom: 0; }
+
+/* Department Activity numeric pills — token/rgba-based so they render
+   correctly in dark theme too (previously hardcoded light-only hexes
+   #E6F1FB/#0C447C, which read as a near-invisible pale wash on the
+   dark navy card background). */
+#an-tab3 .an-num-pill {
+    background: rgba(24, 95, 165, 0.14);
+    color: #185FA5;
+    border-radius: 99px;
+    padding: 2px 9px;
+    font-size: 11px;
+    font-weight: 500;
+}
+:root[data-theme-resolved='dark'] #an-tab3 .an-num-pill {
+    background: rgba(96, 165, 250, 0.18);
+    color: #93c5fd;
+}
+
+@media (max-width: 900px) {
+    #an-tab3 .an-sem-cards-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 560px) {
+    #an-tab3 .an-sem-cards-grid { grid-template-columns: 1fr 1fr; }
+    #an-tab3 .an-sem-period-card { flex-direction: column; align-items: flex-start; gap: 10px; }
+    #an-tab3 .an-sem-toolbar { gap: 8px; }
+}
 </style>
 
 <script>
@@ -552,7 +774,28 @@ async function anLoadDeptUsage() {
 // TAB 3: Semester Detail
 // ---------------------------------------------------------------------------
 
-let anSemYear = new Date().getFullYear();
+// The academic period is configured once (School Year + 4 semester dates)
+// in School Settings — the SAME source the Dashboard's "Current Academic
+// Session" card reads. There is no per-year history, so there is nothing
+// to "select" here; anSemSchoolYear is populated from the API response
+// purely for display in the (unchanged) selector control.
+let anSemSchoolYear = null;
+
+// Mirrors dashboard.php's date formatting so the two pages read identically.
+function anFormatSemDateShort(dateStr) {
+    if (!dateStr) return '—';
+    const d = new Date(dateStr + 'T00:00:00');
+    if (Number.isNaN(d.getTime())) return dateStr;
+    return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+}
+function anFormatSemDateRange(startStr, endStr) {
+    if (!startStr || !endStr) return '—';
+    return anFormatSemDateShort(startStr) + ' – ' + anFormatSemDateShort(endStr);
+}
+function anFormatSemSchoolYear(schoolYear) {
+    if (!schoolYear) return null;
+    return /^\d{4}-\d{4}$/.test(schoolYear) ? schoolYear.replace('-', '–') : schoolYear;
+}
 
 async function anLoadSemesterDetail() {
     const errHtml = (msg) => `<div class="ui-empty-state"><strong>${anEsc(msg)}</strong></div>`;
@@ -564,24 +807,102 @@ async function anLoadSemesterDetail() {
 
     try {
         const { response, data: payload } = await anFetch(
-            `${AN_API}/semester-detail?year=${anSemYear}`,
+            `${AN_API}/semester-detail`,
             { credentials: 'same-origin', headers: { 'Accept': 'application/json' } }
         );
         if (!response.ok || !payload.success) throw new Error(payload.message || 'Failed');
 
-        const d  = payload.data;
+        const d = payload.data;
+
+        // Update the school-year label/selector from the SAME configured
+        // source the Dashboard's "Current Academic Session" card uses.
+        anSemSchoolYear = d.school_year || null;
+        const lbl = document.getElementById('an-sem-year-label');
+        const _yearSelEl = document.getElementById('an-sem-year');
+        if (_yearSelEl) {
+            _yearSelEl.innerHTML = '';
+            const opt = document.createElement('option');
+            opt.value = anSemSchoolYear || '';
+            opt.textContent = anFormatSemSchoolYear(anSemSchoolYear) || 'Not configured';
+            opt.selected = true;
+            _yearSelEl.appendChild(opt);
+        }
+
+        if (d.configured === false) {
+            if (lbl) lbl.textContent = 'Semester schedule not configured';
+            const notConfiguredMsg = 'Semester schedule has not been configured yet. Set the School Year and semester dates in School Settings to see this comparison.';
+            const emptyHtml = `<div class="ui-empty-state"><strong>${anEsc(notConfiguredMsg)}</strong></div>`;
+            const periodCardEmpty = document.getElementById('an-sem-period');
+            if (periodCardEmpty) { periodCardEmpty.style.display = 'none'; periodCardEmpty.innerHTML = ''; }
+            document.getElementById('an-sem-cards').innerHTML =
+                `<div class="ui-empty-state" style="grid-column:span 4;"><strong>${anEsc(notConfiguredMsg)}</strong></div>`;
+            document.getElementById('an-sem-table').innerHTML = emptyHtml;
+            document.getElementById('an-sem-dept').innerHTML  = emptyHtml;
+            const chartSub = document.getElementById('an-sem-chart-subtitle');
+            const tableSub = document.getElementById('an-sem-table-subtitle');
+            if (chartSub) chartSub.textContent = 'Not configured';
+            if (tableSub) tableSub.textContent = 'Not configured';
+            if (anChartSemester) { anChartSemester.destroy(); anChartSemester = null; }
+            return;
+        }
+
         const s1 = d.semesters?.s1 || {};
         const s2 = d.semesters?.s2 || {};
+        const s1Label = s1.label || '1st Semester';
+        const s2Label = s2.label || '2nd Semester';
+        const s1Range = anFormatSemDateRange(s1.start, s1.end);
+        const s2Range = anFormatSemDateRange(s2.start, s2.end);
 
-        // Update year label
-        const lbl = document.getElementById('an-sem-year-label');
-        if (lbl) lbl.textContent = `Showing data for ${anSemYear}`;
+        if (lbl) lbl.textContent = anFormatSemSchoolYear(anSemSchoolYear) ? `School Year ${anFormatSemSchoolYear(anSemSchoolYear)}` : '';
+
+        const chartSub = document.getElementById('an-sem-chart-subtitle');
+        if (chartSub) chartSub.textContent = `${s1Label} (${s1Range}) vs ${s2Label} (${s2Range})`;
+        const tableSub = document.getElementById('an-sem-table-subtitle');
+        if (tableSub) tableSub.textContent = `Compares ${s1Label} (${s1Range}) vs ${s2Label} (${s2Range}). Trend shows change from S1 → S2.`;
+
+        // ── Comparison Period card — assembled from the same s1/s2 data
+        // above; no additional fetch. ────────────────────────────────────
+        const periodCard = document.getElementById('an-sem-period');
+        if (periodCard) {
+            periodCard.innerHTML = `
+                <div class="an-sem-period-item">
+                    <span class="an-sem-period-label">School Year</span>
+                    <span class="an-sem-period-value">${anEsc(anFormatSemSchoolYear(anSemSchoolYear) || '—')}</span>
+                </div>
+                <div class="an-sem-period-item">
+                    <span class="an-sem-period-label">${anEsc(s1Label)}</span>
+                    <span class="an-sem-period-value">${anEsc(s1Range)}</span>
+                </div>
+                <div class="an-sem-period-item">
+                    <span class="an-sem-period-label">${anEsc(s2Label)}</span>
+                    <span class="an-sem-period-value">${anEsc(s2Range)}</span>
+                </div>`;
+            periodCard.style.display = 'flex';
+        }
+
+        // Per-metric color identity (purple/blue/orange/green) + matching
+        // outline icons, reused by both the summary cards below and the
+        // Metric Comparison table further down.
+        const _metricIconPaths = {
+            maintenance_reports: '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
+            dispatches:          '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>',
+            damage_reports:      '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+            repairs:             '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
+        };
+        const _metricAccent = {
+            maintenance_reports: '#8b5cf6',
+            dispatches:          '#185FA5',
+            damage_reports:      '#d97706',
+            repairs:             '#1D9E75',
+        };
+        const anSemIcon = (key, size) =>
+            `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${_metricAccent[key]}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;">${_metricIconPaths[key]}</svg>`;
 
         const metrics = [
-            { key: 'maintenance_reports', label: 'Maintenance Reports' },
-            { key: 'dispatches',          label: 'Dispatches'          },
-            { key: 'damage_reports',      label: 'Damage Reports'      },
-            { key: 'repairs',             label: 'Repair Requests'     },
+            { key: 'maintenance_reports', label: 'Maintenance Reports', slug: 'maintenance' },
+            { key: 'dispatches',          label: 'Dispatches',          slug: 'dispatches'  },
+            { key: 'damage_reports',      label: 'Damage Reports',      slug: 'damage'      },
+            { key: 'repairs',             label: 'Repair Requests',     slug: 'repairs'     },
         ];
 
         // ── Summary cards ──────────────────────────────────────────────────
@@ -593,9 +914,10 @@ async function anLoadSemesterDetail() {
             const arrowColor = v2 > v1 ? '#1D9E75' : v2 < v1 ? '#A32D2D' : 'var(--muted-text)';
             const arrow      = v2 > v1 ? '↑' : v2 < v1 ? '↓' : '—';
             cardsHtml += `
-                <div style="background:var(--bg-color);border:0.5px solid var(--border);border-radius:12px;padding:1rem 1.1rem;">
-                    <div style="font-size:11px;color:var(--muted-text);text-transform:uppercase;letter-spacing:.6px;font-weight:500;margin-bottom:12px;">${anEsc(m.label)}</div>
-                    <div style="display:flex;justify-content:space-around;align-items:center;margin-bottom:10px;">
+                <div class="an-sem-card an-sem-card--${m.slug}">
+                    <div class="an-sem-card-icon">${anSemIcon(m.key, 18)}</div>
+                    <div class="an-sem-card-label">${anEsc(m.label)}</div>
+                    <div class="an-sem-card-body">
                         <div style="text-align:center;">
                             <div style="font-size:28px;font-weight:500;color:#185FA5;line-height:1;">${v1}</div>
                             <div style="font-size:11px;color:var(--muted-text);margin-top:4px;">1st Sem</div>
@@ -606,7 +928,7 @@ async function anLoadSemesterDetail() {
                             <div style="font-size:11px;color:var(--muted-text);margin-top:4px;">2nd Sem</div>
                         </div>
                     </div>
-                    <div style="text-align:center;font-size:12px;color:var(--muted-text);border-top:1px solid var(--border);padding-top:8px;">
+                    <div class="an-sem-card-foot">
                         Year Total: <strong style="color:var(--text-light);">${total}</strong>
                     </div>
                 </div>`;
@@ -619,6 +941,11 @@ async function anLoadSemesterDetail() {
         if (cvsSem) {
             const C_S1 = '#185FA5';
             const C_S2 = '#1D9E75';
+            // Read the page's own theme tokens so gridlines/ticks stay legible
+            // in both light and dark mode (was hardcoded to a fixed gray).
+            const _rootStyle  = getComputedStyle(document.documentElement);
+            const _tickColor  = (_rootStyle.getPropertyValue('--muted-text') || '').trim() || '#9ca3af';
+            const _gridColor  = (_rootStyle.getPropertyValue('--border') || '').trim() || 'rgba(24,95,165,0.08)';
             anChartSemester = new Chart(cvsSem, {
                 type: 'bar',
                 data: {
@@ -637,25 +964,19 @@ async function anLoadSemesterDetail() {
                 options: {
                     plugins: { legend: { display: false } },
                     scales: {
-                        y: { grid: { color: 'rgba(24,95,165,0.08)' }, ticks: { color: '#9ca3af' } },
-                        x: { ticks: { color: '#9ca3af' } },
+                        y: { grid: { color: _gridColor }, ticks: { color: _tickColor } },
+                        x: { grid: { display: false },    ticks: { color: _tickColor } },
                     },
                 },
             });
         }
 
-        // ── Metric comparison table ────────────────────────────────────────
-        const _metricIcons = {
-            maintenance_reports: '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px;"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>',
-            dispatches:          '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px;"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>',
-            damage_reports:      '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
-            repairs:             '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px;"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
-        };
+        // ── Metric comparison table (reuses the color-coded icons above) ──
         const _thS = 'font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted-text);padding-bottom:8px;border-bottom:0.5px solid var(--border);';
         let tableHtml = '<table class="table" style="width:100%;"><thead><tr>'
             + `<th style="${_thS}">Metric</th>`
-            + `<th style="${_thS}text-align:center;">1st Sem<br><span style="font-size:10px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted-text);">Jan – Jun</span></th>`
-            + `<th style="${_thS}text-align:center;">2nd Sem<br><span style="font-size:10px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted-text);">Jul – Dec</span></th>`
+            + `<th style="${_thS}text-align:center;">1st Sem<br><span style="font-size:10px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted-text);">${anEsc(s1Range)}</span></th>`
+            + `<th style="${_thS}text-align:center;">2nd Sem<br><span style="font-size:10px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted-text);">${anEsc(s2Range)}</span></th>`
             + `<th style="${_thS}text-align:center;">Change</th>`
             + `<th style="${_thS}text-align:center;">Trend</th>`
             + '</tr></thead><tbody>';
@@ -676,7 +997,7 @@ async function anLoadSemesterDetail() {
                     : '<span style="color:var(--muted-text);" title="No change">—</span>';
 
             tableHtml += `<tr>
-                <td>${_metricIcons[m.key] || ''}<strong style="font-weight:500;">${anEsc(m.label)}</strong></td>
+                <td>${anSemIcon(m.key, 14)}&nbsp;<strong style="font-weight:500;">${anEsc(m.label)}</strong></td>
                 <td style="text-align:center;">${v1}</td>
                 <td style="text-align:center;">${v2}</td>
                 <td style="text-align:center;">${diffStr}</td>
@@ -690,7 +1011,7 @@ async function anLoadSemesterDetail() {
         const depts = Array.isArray(d.department_breakdown) ? d.department_breakdown : [];
         if (depts.length === 0) {
             document.getElementById('an-sem-dept').innerHTML =
-                '<div class="ui-empty-state"><strong>No department data for this year.</strong></div>';
+                '<div class="ui-empty-state"><strong>No department data for the configured semesters.</strong></div>';
         } else {
             const _thD = 'font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted-text);padding-bottom:8px;border-bottom:0.5px solid var(--border);';
             let deptHtml = '<table class="table" style="width:100%;"><thead><tr>'
@@ -702,10 +1023,10 @@ async function anLoadSemesterDetail() {
                 + `<th style="${_thD}text-align:center;">Total Activity</th>`
                 + '</tr></thead><tbody>';
 
-            const _numPill = (n) => `<span style="background:#E6F1FB;color:#0C447C;border-radius:99px;padding:2px 9px;font-size:11px;font-weight:500;">${n}</span>`;
+            const _numPill = (n) => `<span class="an-num-pill">${n}</span>`;
             depts.forEach((dept) => {
-                const total   = (dept.s1_damage || 0) + (dept.s2_damage || 0)
-                              + (dept.s1_dispatches || 0) + (dept.s2_dispatches || 0);
+                const total   = Number(dept.s1_damage || 0) + Number(dept.s2_damage || 0)
+                              + Number(dept.s1_dispatches || 0) + Number(dept.s2_dispatches || 0);
                 const _dName  = dept.department_name;
                 const _isNone = !_dName || String(_dName).toLowerCase() === 'no department';
                 const _dCell  = _isNone
@@ -726,6 +1047,8 @@ async function anLoadSemesterDetail() {
 
     } catch (err) {
         const html = `<div class="ui-empty-state"><strong>Failed to load semester data.</strong></div>`;
+        const periodCardErr = document.getElementById('an-sem-period');
+        if (periodCardErr) { periodCardErr.style.display = 'none'; periodCardErr.innerHTML = ''; }
         document.getElementById('an-sem-cards').innerHTML =
             `<div class="ui-empty-state" style="grid-column:span 4;"><strong>${anEsc(err.message || 'Error loading data')}</strong></div>`;
         document.getElementById('an-sem-table').innerHTML = html;
@@ -885,15 +1208,16 @@ document.addEventListener('DOMContentLoaded', () => {
         btn.addEventListener('click', () => anSwitchTab(btn.dataset.tab));
     });
 
-    // Populate year dropdown (current year → 4 years back)
-    const _curYear = new Date().getFullYear();
-    anSemYear = _curYear;
+    // The Academic Year selector shows the single configured school_year
+    // (populated once anLoadSemesterDetail() reads it from School Settings —
+    // the same source as the Dashboard's "Current Academic Session" card).
+    // There is no per-year history to pick between, so a placeholder is
+    // shown until that data arrives.
     const _yearSel = document.getElementById('an-sem-year');
-    for (let y = _curYear; y >= _curYear - 3; y--) {
+    if (_yearSel) {
         const opt = document.createElement('option');
-        opt.value       = y;
-        opt.textContent = y;
-        if (y === _curYear) opt.selected = true;
+        opt.value = '';
+        opt.textContent = 'Loading…';
         _yearSel.appendChild(opt);
     }
 
@@ -901,12 +1225,14 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('an-dmg-apply').addEventListener('click', anLoadTab2Data);
     document.getElementById('an-rpt-apply').addEventListener('click', anLoadTab4Data);
     document.getElementById('an-sem-apply').addEventListener('click', () => {
-        anSemYear = parseInt(document.getElementById('an-sem-year').value, 10) || new Date().getFullYear();
         anLoadSemesterDetail();
     });
 
     // Print button
-    document.getElementById('an-print-btn').addEventListener('click', () => window.print());
+    const anPrintBtn = document.getElementById('an-print-btn');
+    if (anPrintBtn) {
+        anPrintBtn.addEventListener('click', () => window.print());
+    }
 
     // Preload department dropdown (non-blocking; Tab 2 may not be visited)
     anLoadOptions();

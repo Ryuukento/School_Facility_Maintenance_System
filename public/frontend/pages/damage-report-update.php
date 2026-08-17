@@ -4,6 +4,11 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
+if (!isset($_SESSION['user']) && !isset($_SESSION['auth_user'])) {
+    header('Location: /School_Facility_Maintenance_System/frontend/pages/index.php');
+    exit;
+}
+
 $pageTitle = 'Update Damage Report - SFMS';
 include __DIR__ . '/../includes/header.php';
 ?>
@@ -68,11 +73,10 @@ const DAMAGE_REPORTS_API_BASE = window.SFMS_PUBLIC_URL ? window.SFMS_PUBLIC_URL(
 const DAMAGE_REPORTS_PAGE_BASE = window.SFMS_PUBLIC_URL ? window.SFMS_PUBLIC_URL('/damage-reports') : '/damage-reports';
 
 function updateNotify(message, type = 'danger') {
-    if (window.Components && typeof Components.alert === 'function') {
-        Components.alert(message, type);
-        return;
-    }
-    window.alert(message);
+    // UI_BROWSER_DIALOG_REPLACEMENT — Components/UI are always loaded (see
+    // includes/footer.php), so this always goes through the reusable
+    // in-app modal; no window.alert() fallback.
+    Components.alert(message, type);
 }
 
 function getUpdateId() {
@@ -132,7 +136,7 @@ async function loadReport() {
 
         document.getElementById('update-page-title').textContent = `Update ${currentDamageReport.damage_report_code || 'Damage Report'}`;
         document.getElementById('update-page-subtitle').textContent = `Current status: ${formatStatus(currentDamageReport.status)} • Severity: ${String(currentDamageReport.severity_level || '').toUpperCase()}`;
-        document.getElementById('update-current-summary').innerHTML = `<div class="text-muted">Item: <strong>${currentDamageReport.item?.name || 'Unknown'}</strong> • Room: <strong>${currentDamageReport.room?.name || 'N/A'}</strong></div>`;
+        document.getElementById('update-current-summary').innerHTML = `<div class="text-muted">Item: <strong>${UI.escapeHtml(currentDamageReport.item?.name) || 'Unknown'}</strong> • Room: <strong>${UI.escapeHtml(currentDamageReport.room?.name) || 'N/A'}</strong></div>`;
 
         document.getElementById('damage-next-status').value = currentDamageReport.status || 'pending';
         document.getElementById('damage-update-repair-notes').value = currentDamageReport.repair_notes || '';

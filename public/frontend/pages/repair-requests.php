@@ -4,11 +4,16 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
+if (!isset($_SESSION['user']) && !isset($_SESSION['auth_user'])) {
+    header('Location: /School_Facility_Maintenance_System/frontend/pages/index.php');
+    exit;
+}
+
 $pageTitle = 'Repair Requests - SFMS';
 include __DIR__ . '/../includes/header.php';
 ?>
 
-<main class="container" style="margin-top:16px;">
+<main class="container repair-requests-page" style="margin-top:16px;">
     <div class="card" style="margin-bottom:14px;border-left:3px solid var(--primary-color);">
         <div class="card-header">
             <div>
@@ -18,55 +23,88 @@ include __DIR__ . '/../includes/header.php';
         </div>
         <div class="card-body">
             <form id="repair-create-form">
-                <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:12px;">
-                    <div class="form-group">
-                        <label for="repair-damage-search">Damage Report *</label>
-                        <input type="text" id="repair-damage-search" class="form-control" placeholder="Search damage report..." required>
-                        <input type="hidden" id="repair-damage-id">
+                <div class="form-section">
+                    <div class="form-section-header">
+                        <span class="form-section-index">1</span>
+                        <div>
+                            <h3 class="form-section-title">Assignment</h3>
+                            <p class="form-section-subtitle">Which damage report is this repair for, and who's handling it?</p>
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label for="repair-tech-search">Technician Assigned</label>
-                        <input type="text" id="repair-tech-search" class="form-control" placeholder="Search technician...">
-                        <input type="hidden" id="repair-tech-id">
-                    </div>
-                </div>
-
-                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
-                    <div class="form-group">
-                        <label for="repair-type">Repair Type *</label>
-                        <select id="repair-type" class="form-control" required>
-                            <option value="corrective">Corrective</option>
-                            <option value="diagnostic">Diagnostic</option>
-                            <option value="electrical">Electrical</option>
-                            <option value="mechanical">Mechanical</option>
-                            <option value="parts_replacement">Parts Replacement</option>
-                            <option value="preventive">Preventive</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label for="repair-date">Repair Date</label>
-                        <input type="date" id="repair-date" class="form-control">
-                    </div>
-                    <div class="form-group">
-                        <label for="repair-estimated-date">Estimated Completion</label>
-                        <input type="date" id="repair-estimated-date" class="form-control">
+                    <div class="form-section-body">
+                        <div class="form-row-2">
+                            <div class="form-group">
+                                <label for="repair-damage-search">Damage Report *</label>
+                                <input type="text" id="repair-damage-search" class="form-control" placeholder="Search damage report..." required>
+                                <input type="hidden" id="repair-damage-id">
+                            </div>
+                            <div class="form-group">
+                                <label for="repair-tech-search">Technician Assigned</label>
+                                <input type="text" id="repair-tech-search" class="form-control" placeholder="Search technician...">
+                                <input type="hidden" id="repair-tech-id">
+                            </div>
+                        </div>
                     </div>
                 </div>
 
-                <div style="display:grid;grid-template-columns:1.4fr .6fr;gap:12px;">
-                    <div class="form-group">
-                        <label for="repair-description">Repair Description *</label>
-                        <textarea id="repair-description" class="form-control" rows="3" placeholder="Describe the repair scope..." required></textarea>
+                <div class="form-section">
+                    <div class="form-section-header">
+                        <span class="form-section-index">2</span>
+                        <div>
+                            <h3 class="form-section-title">Repair Details</h3>
+                            <p class="form-section-subtitle">Type of work, schedule, and scope.</p>
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label for="repair-cost">Repair Cost</label>
-                        <input type="number" id="repair-cost" class="form-control" min="0" step="0.01" value="0">
+                    <div class="form-section-body">
+                        <div class="form-row-3">
+                            <div class="form-group">
+                                <label for="repair-type">Repair Type *</label>
+                                <select id="repair-type" class="form-control" required>
+                                    <option value="corrective">Corrective</option>
+                                    <option value="diagnostic">Diagnostic</option>
+                                    <option value="electrical">Electrical</option>
+                                    <option value="mechanical">Mechanical</option>
+                                    <option value="parts_replacement">Parts Replacement</option>
+                                    <option value="preventive">Preventive</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="repair-date">Repair Date</label>
+                                <input type="date" id="repair-date" class="form-control">
+                            </div>
+                            <div class="form-group">
+                                <label for="repair-estimated-date">Estimated Completion</label>
+                                <input type="date" id="repair-estimated-date" class="form-control">
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="repair-description">Repair Description *</label>
+                            <textarea id="repair-description" class="form-control" rows="3" placeholder="Describe the repair scope..." required></textarea>
+                        </div>
                     </div>
                 </div>
 
-                <div class="form-group">
-                    <label for="repair-notes">Notes</label>
-                    <textarea id="repair-notes" class="form-control" rows="2" placeholder="Optional assignment or intake notes..."></textarea>
+                <div class="form-section">
+                    <div class="form-section-header">
+                        <span class="form-section-index">3</span>
+                        <div>
+                            <h3 class="form-section-title">Cost &amp; Notes</h3>
+                            <p class="form-section-subtitle">Optional intake details.</p>
+                        </div>
+                    </div>
+                    <div class="form-section-body">
+                        <div class="form-row-2">
+                            <div class="form-group">
+                                <label for="repair-cost">Repair Cost</label>
+                                <input type="number" id="repair-cost" class="form-control" min="0" step="0.01" value="0">
+                            </div>
+                            <div class="form-group">
+                                <label for="repair-notes">Notes</label>
+                                <textarea id="repair-notes" class="form-control" rows="2" placeholder="Optional assignment or intake notes..."></textarea>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="d-flex gap-sm">
@@ -85,7 +123,7 @@ include __DIR__ . '/../includes/header.php';
             </div>
         </div>
         <div class="card-body">
-            <div style="display:grid;grid-template-columns:2fr 1fr auto;gap:10px;margin-bottom:12px;">
+            <div class="report-filters-row report-filters-row-repairs">
                 <input type="search" id="repair-search" class="form-control" placeholder="Search repair code, damage report, item, or technician...">
                 <select id="repair-status-filter" class="form-control">
                     <option value="">All Statuses</option>
@@ -102,7 +140,14 @@ include __DIR__ . '/../includes/header.php';
             </div>
 
             <div id="repair-list-container" class="table-responsive">
-                <div class="ui-empty-state"><strong>Loading repair requests...</strong></div>
+                <div class="ui-empty-state ui-fade-in" aria-live="polite">
+                    <strong>Loading repair requests...</strong>
+                    <div class="ui-skeleton-list" style="margin-top: 12px;">
+                        <div class="ui-skeleton-row w-90"></div>
+                        <div class="ui-skeleton-row w-75"></div>
+                        <div class="ui-skeleton-row w-55"></div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -114,11 +159,10 @@ const REPAIRS_PAGE_BASE = window.SFMS_PUBLIC_URL ? window.SFMS_PUBLIC_URL('/repa
 const DAMAGE_REPORTS_API_BASE = window.SFMS_PUBLIC_URL ? window.SFMS_PUBLIC_URL('/api/damage-reports') : '/api/damage-reports';
 
 function repairNotify(message, type = 'danger') {
-    if (window.Components && typeof Components.alert === 'function') {
-        Components.alert(message, type);
-        return;
-    }
-    window.alert(message);
+    // UI_BROWSER_DIALOG_REPLACEMENT — Components/UI are always loaded (see
+    // includes/footer.php), so this always goes through the reusable
+    // in-app modal; no window.alert() fallback.
+    Components.alert(message, type);
 }
 
 function escapeRepairHtml(value) {
@@ -147,6 +191,14 @@ function initRepairCreateSelects() {
         hiddenId: 'repair-tech-id',
         endpoint: `${REPAIRS_API_BASE}/support/technicians`,
         displayKey: 'full_name',
+        // SearchableSelect's default hidden-value fallback chain checks
+        // it.id then it.department_id before it.user_id — a technician
+        // row has no `id` but DOES have `department_id`, so without this
+        // override the hidden field would end up holding a department id
+        // instead of the selected user's id. Corrected here rather than
+        // in the shared component (used by many other pages). Same fix
+        // as preventive-maintenance.php's technician selects.
+        onSelect: (it) => { document.getElementById('repair-tech-id').value = it.user_id || ''; },
     });
 }
 
@@ -229,6 +281,19 @@ async function submitRepairCreate(event) {
     }
 }
 
+function getRepairLoadingMarkup() {
+    return `
+        <div class="ui-empty-state ui-fade-in" aria-live="polite">
+            <strong>Loading repair requests...</strong>
+            <div class="ui-skeleton-list" style="margin-top: 12px;">
+                <div class="ui-skeleton-row w-90"></div>
+                <div class="ui-skeleton-row w-75"></div>
+                <div class="ui-skeleton-row w-55"></div>
+            </div>
+        </div>
+    `;
+}
+
 async function loadRepairRequests() {
     const params = new URLSearchParams({ per_page: '20' });
     const search = document.getElementById('repair-search').value.trim();
@@ -236,6 +301,9 @@ async function loadRepairRequests() {
 
     if (search) params.set('q', search);
     if (status) params.set('repair_status', status);
+
+    const listContainer = document.getElementById('repair-list-container');
+    if (listContainer) listContainer.innerHTML = getRepairLoadingMarkup();
 
     try {
         const { response, data } = await Components.fetchJson(`${REPAIRS_API_BASE}?${params.toString()}`, {
@@ -251,11 +319,11 @@ async function loadRepairRequests() {
         const container = document.getElementById('repair-list-container');
 
         if (repairs.length === 0) {
-            container.innerHTML = '<div class="ui-empty-state"><strong>No repair requests found.</strong><span>Create a new repair request to begin the workflow.</span></div>';
+            container.innerHTML = '<div class="ui-empty-state ui-fade-in"><strong>No repair requests found.</strong><span>Create a new repair request to begin the workflow.</span></div>';
             return;
         }
 
-        let html = '<table class="table"><thead><tr>';
+        let html = '<table class="table ui-fade-in"><thead><tr>';
         html += '<th>Repair ID</th><th>Damage Report</th><th>Item</th><th>Technician</th><th>Status</th><th>Cost</th><th>Replacement</th><th>Actions</th>';
         html += '</tr></thead><tbody>';
 
@@ -305,5 +373,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 });
 </script>
+
+<link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/enterprise-reports.css?v=20260726-1">
 
 <?php include __DIR__ . '/../includes/footer.php'; ?>
