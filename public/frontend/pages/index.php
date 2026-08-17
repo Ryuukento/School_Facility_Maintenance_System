@@ -214,8 +214,21 @@ if (isset($_SESSION['auth_user']) || isset($_SESSION['user'])) {
     </div>
 </main>
 
-<script src="<?php echo htmlspecialchars(public_url('/frontend/assets/js/utils.js')); ?>"></script>
-<script src="<?php echo htmlspecialchars(public_url('/frontend/assets/js/api.js')); ?>"></script>
+<script>
+    // TASK 98.2 fix: index.php is the one page that doesn't include
+    // header.php, so window.SFMS_PUBLIC_URL was never defined here — api.js
+    // relies on it (see api.js's baseURL) to resolve the app's subfolder
+    // base path correctly. Definition mirrors header.php's exact
+    // implementation so there is only one URL-resolution pattern in the app.
+    window.SFMS_BASE_PATH = <?php echo json_encode(function_exists('sfms_public_base_path') ? sfms_public_base_path() : (defined('APP_PUBLIC_PATH') ? APP_PUBLIC_PATH : '')); ?>;
+    window.SFMS_PUBLIC_URL = window.SFMS_PUBLIC_URL || function (path) {
+        const basePath = String(window.SFMS_BASE_PATH || '').replace(/\/$/, '');
+        const normalizedPath = '/' + String(path || '').replace(/^\/+/, '');
+        return `${basePath}${normalizedPath}`;
+    };
+</script>
+<script src="<?php echo htmlspecialchars(public_url('/frontend/assets/js/utils.js?v=20260816')); ?>"></script>
+<script src="<?php echo htmlspecialchars(public_url('/frontend/assets/js/api.js?v=20260816')); ?>"></script>
 
 <script>
 // Disable zoom and scroll jumping on all devices
