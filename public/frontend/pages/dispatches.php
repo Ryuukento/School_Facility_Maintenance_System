@@ -4,10 +4,22 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
+if (!isset($_SESSION['user']) && !isset($_SESSION['auth_user'])) {
+    header('Location: /School_Facility_Maintenance_System/frontend/pages/index.php');
+    exit;
+}
+
 $_dspUser = $_SESSION['user'] ?? $_SESSION['auth_user'] ?? [];
 $_dspRole = strtolower(trim((string)($_dspUser['role'] ?? '')));
 
-$canCreateDispatch = in_array($_dspRole, ['super_admin', 'maintenance_admin'], true);
+// TASK 13 — Dispatch creation is now Head Maintenance's alone. Creating a
+// dispatch means choosing the Release Personnel for it, and an Administrator
+// is explicitly not permitted to assign personnel. Keeping super_admin here
+// would surface a "New Dispatch" button that leads to a page which now
+// rejects them (dispatch-create.php) and an endpoint that now 403s
+// (EnsureRole:maintenance_admin on POST /api/dispatches), so all three gates
+// are aligned on the same single role.
+$canCreateDispatch = ($_dspRole === 'maintenance_admin');
 
 $pageTitle = 'Dispatches - SFMS';
 include __DIR__ . '/../includes/header.php';
@@ -58,7 +70,14 @@ include __DIR__ . '/../includes/header.php';
             </div>
 
             <div id="dispatch-list-container" class="dispatches-table-shell">
-                <div class="ui-empty-state"><strong>Loading dispatches...</strong></div>
+                <div class="ui-empty-state ui-fade-in" aria-live="polite">
+                    <strong>Loading dispatches...</strong>
+                    <div class="ui-skeleton-list" style="margin-top: 12px;">
+                        <div class="ui-skeleton-row w-90"></div>
+                        <div class="ui-skeleton-row w-75"></div>
+                        <div class="ui-skeleton-row w-55"></div>
+                    </div>
+                </div>
             </div>
 
             <div class="dispatches-pagination">
@@ -68,14 +87,52 @@ include __DIR__ . '/../includes/header.php';
             </div>
         </div>
     </section>
+
+    <!-- TASK 6 — Enterprise Dispatch Table Redesign: lightweight "View Items"
+         modal. Reuses the existing GET /api/dispatches/{id} endpoint (already
+         used by dispatch-detail.php) on demand rather than adding a new
+         endpoint or eager-loading every row's full item list in the list
+         payload — no backend change. -->
+    <div id="dispatch-items-modal" class="modal" style="display:none;" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="dispatch-items-modal-title">
+        <div class="modal-content dispatches-items-modal">
+            <div class="modal-header">
+                <h3 class="modal-title" id="dispatch-items-modal-title">Dispatch Items</h3>
+                <button type="button" class="modal-close" id="dispatch-items-modal-close" aria-label="Close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="dispatch-items-modal-body"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" id="dispatch-items-modal-dismiss">Close</button>
+            </div>
+        </div>
+    </div>
 </main>
 
 <script>
 let dispatchPage = 1;
 let dispatchLastPage = 1;
+// TASK 98.1 — debounce handle for the live free-text search below. Search-
+// by-dispatch-code previously only fired on Enter keydown, which meant real
+// typing (no Enter press) never triggered a request. Mirrors the existing
+// live-search pattern already used elsewhere in this codebase (e.g.
+// inventory.php's #inventory-entry-search 'input' listener).
+let dispatchSearchDebounce = null;
 
 const DISPATCH_API_BASE = window.SFMS_PUBLIC_URL ? window.SFMS_PUBLIC_URL('/api/dispatches') : '/api/dispatches';
 const DISPATCH_PAGE_BASE = window.SFMS_PUBLIC_URL ? window.SFMS_PUBLIC_URL('/dispatches') : '/dispatches';
+
+// TASK 6 — Enterprise Dispatch Table Redesign: readable labels for the
+// three roles that can appear as Approved By (matches the role strings
+// AuthController/User already use — 'super_admin', 'maintenance_admin',
+// 'maintenance_staff'). Falls back to a Title-Cased version of whatever
+// role string is present, so an unrecognized future role still renders
+// something reasonable instead of the raw snake_case value.
+const DISPATCH_ROLE_LABELS = {
+    super_admin: 'Super Admin',
+    maintenance_admin: 'Administrator',
+    maintenance_staff: 'Maintenance Staff',
+};
 
 function dspEscapeHtml(value) {
     return String(value ?? '')
@@ -111,27 +168,215 @@ function dspTextCell(value, { strong = false, fallback = dspMutedDash() } = {}) 
     return strong ? `<strong class="dispatches-emphasis-cell">${content}</strong>` : content;
 }
 
-function dspFormatDate(value) {
+// TASK 6 — splits a timestamp into separate date / time strings so the
+// Date column can render "Jul 29, 2026" above "10:24 AM" instead of one
+// long locale string.
+function dspFormatDateParts(value) {
     if (!value) {
-        return dspMutedDash();
+        return { date: null, time: null };
     }
 
     try {
-        return dspEscapeHtml(new Date(value).toLocaleDateString());
+        const parsed = new Date(value);
+        return {
+            date: parsed.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
+            time: parsed.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+        };
     } catch (error) {
-        return dspEscapeHtml(value);
+        return { date: String(value), time: null };
     }
+}
+
+function dspRoleLabel(role) {
+    const key = String(role || '').toLowerCase().trim();
+    if (!key) return '';
+    return DISPATCH_ROLE_LABELS[key] || key.replace(/_/g, ' ').replace(/\b\w/g, (s) => s.toUpperCase());
 }
 
 function dspStatusBadge(status) {
     const normalized = String(status || '').toLowerCase().replace(/[^a-z0-9-]/g, '');
     const label = String(status || '').replace(/\b\w/g, (s) => s.toUpperCase());
-    return `<span class="badge badge-${normalized} dispatches-status-badge">${dspEscapeHtml(label || 'Unknown')}</span>`;
+    return `<span class="badge badge-${normalized} dispatches-status-badge"><span class="dispatches-status-dot" aria-hidden="true"></span>${dspEscapeHtml(label || 'Unknown')}</span>`;
+}
+
+function getDispatchLoadingMarkup() {
+    return `
+        <div class="ui-empty-state ui-fade-in" aria-live="polite">
+            <strong>Loading dispatches...</strong>
+            <div class="ui-skeleton-list" style="margin-top: 12px;">
+                <div class="ui-skeleton-row w-90"></div>
+                <div class="ui-skeleton-row w-75"></div>
+                <div class="ui-skeleton-row w-55"></div>
+            </div>
+        </div>
+    `;
+}
+
+// TASK 6 — builds the "Dispatch Code" cell: the code itself as the primary,
+// high-emphasis value, with the linked Maintenance Report's title (when
+// this dispatch has one) as a smaller, muted secondary line underneath.
+// Uses fields already present on the list payload (report:report_id,title,...)
+// — no new API call.
+function dspCodeCell(row) {
+    const secondary = row.report && row.report.title
+        ? dspEscapeHtml(row.report.title)
+        : '<span class="dispatches-muted-cell">No linked report</span>';
+
+    return `
+        <div class="dispatches-code-primary">${dspEscapeHtml(row.dispatch_code)}</div>
+        <div class="dispatches-code-secondary">${secondary}</div>
+    `;
+}
+
+function dspDepartmentCell(row) {
+    const name = row.department_name || row.department?.name;
+    if (!name) {
+        return dspMutedDash();
+    }
+
+    return `
+        <div class="dispatches-cell-icon-row">
+            <span class="dispatches-cell-icon" aria-hidden="true">🏢</span>
+            <span class="dispatches-cell-primary">${dspEscapeHtml(name)}</span>
+        </div>
+    `;
+}
+
+function dspRoomCell(row) {
+    const name = row.room_name || row.room?.name;
+    if (!name) {
+        return dspMutedDash();
+    }
+
+    const capacity = row.room?.capacity;
+    const secondary = capacity ? `<div class="dispatches-cell-secondary">Capacity: ${dspEscapeHtml(capacity)}</div>` : '';
+
+    return `
+        <div class="dispatches-cell-primary">${dspEscapeHtml(name)}</div>
+        ${secondary}
+    `;
+}
+
+function dspItemsCell(row) {
+    const count = Number(row.item_count || 0);
+    const label = `${count} Item${count === 1 ? '' : 's'}`;
+
+    return `
+        <div class="dispatches-cell-primary">${dspEscapeHtml(label)}</div>
+        <button type="button" class="dispatches-view-items-btn" data-dispatch-id="${dspEscapeHtml(row.id)}" data-dispatch-code="${dspEscapeHtml(row.dispatch_code)}">View Items</button>
+    `;
+}
+
+function dspApproverCell(row) {
+    if (!row.approved_by_name) {
+        return '<span class="dispatches-muted-cell">Not yet approved</span>';
+    }
+
+    const role = dspRoleLabel(row.approved_by_user?.role);
+    const secondary = role ? `<div class="dispatches-cell-secondary">${dspEscapeHtml(role)}</div>` : '';
+
+    return `
+        <div class="dispatches-cell-primary">${dspEscapeHtml(row.approved_by_name)}</div>
+        ${secondary}
+    `;
+}
+
+// TASK 13.1 §2 — "Release Personnel" column. Everything rendered here is
+// already on the list payload (release_assigned_to_name is an appended
+// attribute; release_assigned_to_user is eager-loaded by
+// DispatchController::index()), so this adds no API call and no new endpoint.
+//
+// The department line is deliberately conservative. The assignee's OWN
+// department name is not in the payload — only their department_id is — and
+// eager-loading the relation would be a backend change this task excludes. In
+// this workflow the assignee always belongs to the dispatch's department, so
+// dispatch.department_name IS their department; but rather than assume that,
+// the ids are compared and the caption is simply omitted when they disagree.
+// Better a missing line than a confidently wrong one.
+function dspAssigneeDepartment(row) {
+    const assignee = row.release_assigned_to_user;
+    const deptName = row.department_name || row.department?.name;
+    if (!assignee || !deptName) return null;
+
+    const a = assignee.department_id === null || assignee.department_id === undefined ? null : Number(assignee.department_id);
+    const d = row.department_id === null || row.department_id === undefined ? null : Number(row.department_id);
+    return a !== null && a === d ? deptName : null;
+}
+
+// TASK 13.2 §7 — the RELEASE state, which is a different fact from the
+// dispatch status in the adjacent Status column: that column says where the
+// dispatch is, this says what the assigned person can do about it right now.
+// Mirrors ddAssignmentStatus() in dispatch-detail.php and opsAssignmentStatus()
+// in maintenance-dashboard.php character for character, so one dispatch reads
+// identically on all three surfaces. Every tone maps onto a badge class that
+// already exists in color-scheme.css — no new colors.
+function dspAssignmentStatus(row) {
+    const status = String(row.status || '').toLowerCase();
+
+    if (!row.release_assigned_to) return { label: 'Not Assigned', tone: 'pending' };
+    if (status === 'cancelled') {
+        return /Rejected:/i.test(String(row.notes || ''))
+            ? { label: 'Rejected', tone: 'cancelled' }
+            : { label: 'Cancelled', tone: 'cancelled' };
+    }
+    if (status === 'released') return { label: 'Released', tone: 'released' };
+    if (status === 'approved') return { label: 'Ready for Release', tone: 'approved' };
+    return { label: 'Waiting for Approval', tone: 'pending' };
+}
+
+function dspReleasePersonnelCell(row) {
+    const name = row.release_assigned_to_name;
+    if (!name) {
+        return '<span class="dispatches-muted-cell">Not assigned</span>';
+    }
+
+    // Reuses the shared avatar trio from styles.css (.user-avatar-wrap /
+    // .avatar-circle / .avatar-img) — the same one the sidebar renders — so
+    // there is no second avatar component. The initial sits underneath and the
+    // photo is layered over it, then removed if it fails to load.
+    const avatarUrl = row.release_assigned_to_user?.avatar;
+    const initial = String(name).trim().charAt(0).toUpperCase() || '?';
+    // TASK 13.2 §9 — the photo now carries the person's name as alt text
+    // instead of alt="", and the initial underneath is aria-hidden, so a
+    // screen reader announces the name exactly once whichever one renders.
+    const photo = avatarUrl
+        ? `<img src="${dspEscapeHtml(avatarUrl)}" alt="${dspEscapeHtml(name)}" class="avatar-img dispatches-assignee-photo" onerror="this.remove();">`
+        : '';
+    const department = dspAssigneeDepartment(row);
+    const state = dspAssignmentStatus(row);
+
+    return `
+        <div class="dispatches-assignee">
+            <span class="user-avatar-wrap dispatches-assignee-avatar">
+                <span class="avatar-circle" aria-hidden="true">${dspEscapeHtml(initial)}</span>${photo}
+            </span>
+            <div class="dispatches-assignee-text">
+                <div class="dispatches-cell-primary">${dspEscapeHtml(name)}</div>
+                ${department ? `<div class="dispatches-cell-secondary">${dspEscapeHtml(department)}</div>` : ''}
+                <span class="badge badge-${dspEscapeHtml(state.tone)} dispatches-assignee-state">${dspEscapeHtml(state.label)}</span>
+            </div>
+        </div>
+    `;
+}
+
+function dspDateCell(row) {
+    const { date, time } = dspFormatDateParts(row.created_at);
+    if (!date) {
+        return dspMutedDash();
+    }
+
+    return `
+        <div class="dispatches-cell-primary">${dspEscapeHtml(date)}</div>
+        ${time ? `<div class="dispatches-cell-secondary">${dspEscapeHtml(time)}</div>` : ''}
+    `;
 }
 
 async function loadDispatches() {
     const search = document.getElementById('dispatch-search').value.trim();
     const status = document.getElementById('dispatch-status').value;
+
+    const listContainer = document.getElementById('dispatch-list-container');
+    if (listContainer) listContainer.innerHTML = getDispatchLoadingMarkup();
 
     const params = new URLSearchParams({ page: String(dispatchPage), per_page: '20' });
     if (search) params.set('search', search);
@@ -162,23 +407,29 @@ async function loadDispatches() {
         const container = document.getElementById('dispatch-list-container');
 
         if (rows.length === 0) {
-            container.innerHTML = '<div class="ui-empty-state"><strong>No dispatches found.</strong><span>Try adjusting your filters or create a new dispatch.</span></div>';
+            container.innerHTML = '<div class="ui-empty-state ui-fade-in"><strong>No dispatches found.</strong><span>Try adjusting your filters or create a new dispatch.</span></div>';
         } else {
-            let html = '<div class="table-responsive"><table class="table dispatches-table"><thead><tr>'
+            let html = '<div class="table-responsive"><table class="table dispatches-table ui-fade-in"><thead><tr>'
                 + '<th>Dispatch Code</th><th>Department</th><th>Room</th><th>Items</th>'
-                + '<th>Status</th><th>Approved By</th><th>Date</th><th>Action</th>'
+                + '<th>Status</th><th>Release Personnel</th><th>Approved By</th><th>Date</th><th class="dispatches-table__action-head">Action</th>'
                 + '</tr></thead><tbody>';
 
             rows.forEach((row) => {
                 html += '<tr>';
-                html += `<td>${dspTextCell(row.dispatch_code, { strong: true })}</td>`;
-                html += `<td>${dspTextCell(row.department?.name)}</td>`;
-                html += `<td>${dspTextCell(row.room?.name)}</td>`;
-                html += `<td class="dispatches-table__qty">${dspTextCell(row.item_count)}</td>`;
-                html += `<td>${dspStatusBadge(row.status)}</td>`;
-                html += `<td>${dspTextCell(row.approved_by_name)}</td>`;
-                html += `<td>${dspFormatDate(row.created_at)}</td>`;
-                html += `<td><a class="btn btn-sm dispatches-table__view-btn" href="${DISPATCH_PAGE_BASE}/${row.id}">View</a></td>`;
+                html += `<td class="dispatches-table__code-cell">${dspCodeCell(row)}</td>`;
+                html += `<td class="dispatches-table__dept-cell">${dspDepartmentCell(row)}</td>`;
+                html += `<td class="dispatches-table__room-cell">${dspRoomCell(row)}</td>`;
+                html += `<td class="dispatches-table__items-cell">${dspItemsCell(row)}</td>`;
+                html += `<td class="dispatches-table__status-cell">${dspStatusBadge(row.status)}</td>`;
+                html += `<td class="dispatches-table__assignee-cell">${dspReleasePersonnelCell(row)}</td>`;
+                html += `<td class="dispatches-table__approver-cell">${dspApproverCell(row)}</td>`;
+                html += `<td class="dispatches-table__date-cell">${dspDateCell(row)}</td>`;
+                html += `<td class="dispatches-table__action-cell">
+                    <a class="dispatches-table__view-btn" href="${DISPATCH_PAGE_BASE}/${row.id}">
+                        <svg class="dispatches-table__view-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M1.5 12S5 5 12 5s10.5 7 10.5 7-3.5 7-10.5 7S1.5 12 1.5 12Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.8"/></svg>
+                        <span>View</span>
+                    </a>
+                </td>`;
                 html += '</tr>';
             });
 
@@ -196,9 +447,101 @@ async function loadDispatches() {
     }
 }
 
+// TASK 6 — "View Items" modal: fetches the existing single-dispatch
+// endpoint on demand and lists item name / quantity. No new endpoint.
+async function dspOpenItemsModal(dispatchId, dispatchCode) {
+    const modal = document.getElementById('dispatch-items-modal');
+    const body = document.getElementById('dispatch-items-modal-body');
+    const title = document.getElementById('dispatch-items-modal-title');
+
+    title.textContent = dispatchCode ? `Items — ${dispatchCode}` : 'Dispatch Items';
+    body.innerHTML = `
+        <div class="ui-skeleton-list">
+            <div class="ui-skeleton-row w-90"></div>
+            <div class="ui-skeleton-row w-75"></div>
+        </div>
+    `;
+    modal.style.display = 'flex';
+    modal.removeAttribute('aria-hidden');
+
+    try {
+        const response = await fetch(`${DISPATCH_API_BASE}/${dispatchId}`, {
+            credentials: 'same-origin',
+            headers: { Accept: 'application/json' },
+        });
+        const payload = await response.json();
+
+        if (!response.ok || !payload.success) {
+            throw new Error(payload.message || 'Failed to load items');
+        }
+
+        const items = Array.isArray(payload.data?.dispatch?.items) ? payload.data.dispatch.items : [];
+
+        if (items.length === 0) {
+            body.innerHTML = '<p class="dispatches-muted-cell">No items recorded for this dispatch.</p>';
+            return;
+        }
+
+        body.innerHTML = '<ul class="dispatches-items-list">' + items.map((it) => `
+            <li class="dispatches-items-list__row">
+                <span class="dispatches-items-list__name">${dspEscapeHtml(it.item?.name ?? 'Unknown item')}</span>
+                <span class="dispatches-items-list__qty">Qty: ${dspEscapeHtml(it.quantity)}</span>
+            </li>
+        `).join('') + '</ul>';
+    } catch (error) {
+        body.innerHTML = '<p class="dispatches-muted-cell">Failed to load items for this dispatch.</p>';
+    }
+}
+
+function dspCloseItemsModal() {
+    const modal = document.getElementById('dispatch-items-modal');
+    modal.style.display = 'none';
+    modal.setAttribute('aria-hidden', 'true');
+}
+
+// TASK 13.1 §4 — the "My Pending Releases" widget on the Maintenance Staff
+// dashboard deep-links here with ?status=approved. Seeding the existing filter
+// controls from the query string (instead of adding a separate "assigned to
+// me" mode) means the arriving user sees the filter that produced their view
+// and can clear or change it like any other. Nothing is trusted from the URL
+// beyond selecting an option that already exists in the <select>: the API
+// re-validates the status, and the list is ALREADY scoped server-side to the
+// staff member's own assignments — this changes presentation only, never
+// visibility.
+function dspApplyQueryStringFilters() {
+    const params = new URLSearchParams(window.location.search);
+
+    const status = String(params.get('status') || '').toLowerCase();
+    const statusSelect = document.getElementById('dispatch-status');
+    if (status && statusSelect && Array.from(statusSelect.options).some((o) => o.value === status)) {
+        statusSelect.value = status;
+    }
+
+    const search = params.get('search');
+    if (search) {
+        document.getElementById('dispatch-search').value = search;
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+    dspApplyQueryStringFilters();
+
+    // TASK 98.1 — live (debounced) search-as-you-type, reusing the existing
+    // loadDispatches()/params.set('search', ...) path already wired to the
+    // backend's `search` (dispatch_code LIKE) parameter. The pre-existing
+    // Enter-key handler is kept below (and clears any pending debounce) so
+    // pressing Enter still searches immediately, exactly as before.
+    document.getElementById('dispatch-search').addEventListener('input', () => {
+        clearTimeout(dispatchSearchDebounce);
+        dispatchSearchDebounce = setTimeout(() => {
+            dispatchPage = 1;
+            loadDispatches();
+        }, 300);
+    });
+
     document.getElementById('dispatch-search').addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
+            clearTimeout(dispatchSearchDebounce);
             dispatchPage = 1;
             loadDispatches();
         }
@@ -210,6 +553,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     document.getElementById('dispatch-filter-clear').addEventListener('click', () => {
+        clearTimeout(dispatchSearchDebounce);
         document.getElementById('dispatch-search').value = '';
         document.getElementById('dispatch-status').value = '';
         dispatchPage = 1;
@@ -230,6 +574,25 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // Event delegation: table rows are re-rendered on every load, so the
+    // "View Items" buttons are bound once on the stable container instead
+    // of being re-bound after every render.
+    document.getElementById('dispatch-list-container').addEventListener('click', (e) => {
+        const btn = e.target.closest('.dispatches-view-items-btn');
+        if (btn) {
+            dspOpenItemsModal(btn.dataset.dispatchId, btn.dataset.dispatchCode);
+        }
+    });
+
+    document.getElementById('dispatch-items-modal-close').addEventListener('click', dspCloseItemsModal);
+    document.getElementById('dispatch-items-modal-dismiss').addEventListener('click', dspCloseItemsModal);
+    document.getElementById('dispatch-items-modal').addEventListener('click', (e) => {
+        if (e.target === document.getElementById('dispatch-items-modal')) dspCloseItemsModal();
+    });
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') dspCloseItemsModal();
+    });
+
     loadDispatches();
 });
 </script>
@@ -244,12 +607,14 @@ document.addEventListener('DOMContentLoaded', () => {
     --dispatch-border-strong: #cbd5e1;
     --dispatch-text: #0f172a;
     --dispatch-text-muted: #64748b;
+    --dispatch-text-faint: #94a3b8;
     --dispatch-row-odd: #ffffff;
     --dispatch-row-even: #f8fafc;
     --dispatch-row-hover: #f5f3ff;
     --dispatch-badge-bg: rgba(109, 40, 217, 0.1);
     --dispatch-badge-border: rgba(109, 40, 217, 0.16);
     --dispatch-shadow: 0 18px 40px rgba(15, 23, 42, 0.06);
+    --dispatch-accent: #7c3aed;
     color: var(--dispatch-text);
 }
 
@@ -261,12 +626,14 @@ document.addEventListener('DOMContentLoaded', () => {
     --dispatch-border-strong: #31415d;
     --dispatch-text: #e2e8f0;
     --dispatch-text-muted: #94a3b8;
+    --dispatch-text-faint: #64748b;
     --dispatch-row-odd: #0f172a;
     --dispatch-row-even: #111c31;
     --dispatch-row-hover: #16233d;
     --dispatch-badge-bg: rgba(139, 92, 246, 0.16);
     --dispatch-badge-border: rgba(139, 92, 246, 0.24);
     --dispatch-shadow: 0 22px 48px rgba(2, 8, 23, 0.28);
+    --dispatch-accent: #a78bfa;
 }
 
 .dispatches-page__header {
@@ -314,7 +681,7 @@ document.addEventListener('DOMContentLoaded', () => {
 .dispatches-panel {
     background: var(--dispatch-surface);
     border: 1px solid var(--dispatch-border);
-    border-radius: 16px;
+    border-radius: 18px;
     box-shadow: var(--dispatch-shadow);
     overflow: hidden;
 }
@@ -323,7 +690,7 @@ document.addEventListener('DOMContentLoaded', () => {
     display: grid;
     grid-template-columns: minmax(0, 1.8fr) minmax(190px, 0.8fr) auto;
     gap: 14px;
-    padding: 22px 24px;
+    padding: 22px 26px;
     border-bottom: 1px solid var(--dispatch-border);
     background: color-mix(in srgb, var(--dispatch-surface) 86%, var(--dispatch-surface-muted));
 }
@@ -350,6 +717,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 .dispatches-toolbar__control {
     width: 100%;
+    padding: 0 14px;
     background: var(--dispatch-surface);
     color: var(--dispatch-text);
     border: 1px solid var(--dispatch-border-strong);
@@ -399,14 +767,15 @@ document.addEventListener('DOMContentLoaded', () => {
 }
 
 .dispatches-table-panel__header {
-    padding: 24px 24px 16px;
+    padding: 26px 26px 18px;
     border-bottom: 1px solid var(--dispatch-border);
     background: var(--dispatch-surface);
 }
 
 .dispatches-table-panel__title {
     margin: 0;
-    font-size: 1.05rem;
+    font-size: 1.08rem;
+    font-weight: 700;
     color: var(--dispatch-text);
 }
 
@@ -417,7 +786,7 @@ document.addEventListener('DOMContentLoaded', () => {
 }
 
 .dispatches-table-shell {
-    padding: 0 24px 24px;
+    padding: 0 26px 26px;
 }
 
 .dispatches-table-shell .ui-empty-state {
@@ -434,12 +803,15 @@ document.addEventListener('DOMContentLoaded', () => {
 .dispatches-page .table-responsive {
     width: 100%;
     overflow-x: auto;
-    padding-top: 24px;
+    padding-top: 22px;
 }
 
+/* TASK 6 — Enterprise Dispatch Table Redesign: taller, roomier rows,
+   stronger header contrast, and per-column primary/secondary text
+   hierarchy replace the previous single-line, cramped table. */
 .dispatches-page .dispatches-table {
     width: 100%;
-    min-width: 940px;
+    min-width: 1040px;
     margin: 0;
     border-collapse: separate;
     border-spacing: 0;
@@ -452,24 +824,35 @@ document.addEventListener('DOMContentLoaded', () => {
 .dispatches-page .dispatches-table thead,
 .dispatches-page .dispatches-table thead tr,
 .dispatches-page .dispatches-table thead th {
-    display: table-header-group;
     background: var(--dispatch-surface-header);
+}
+
+.dispatches-page .dispatches-table thead {
+    display: table-header-group;
 }
 
 .dispatches-page .dispatches-table thead tr {
     display: table-row;
 }
 
+.dispatches-page .dispatches-table thead th {
+    display: table-cell;
+}
+
 .dispatches-page .dispatches-table th {
-    padding: 14px 16px;
+    padding: 16px 18px;
     border: 0;
     border-bottom: 1px solid var(--dispatch-border);
-    font-size: 13px;
+    font-size: 11.5px;
     font-weight: 700;
-    letter-spacing: 0.01em;
-    text-transform: none;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
     color: var(--dispatch-text-muted);
     white-space: nowrap;
+}
+
+.dispatches-table__action-head {
+    text-align: center;
 }
 
 .dispatches-page .dispatches-table tbody tr {
@@ -492,12 +875,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
 .dispatches-page .dispatches-table td {
     display: table-cell;
-    padding: 15px 16px;
+    padding: 18px;
     border: 0;
     border-bottom: 1px solid var(--dispatch-border);
     background: transparent;
     color: var(--dispatch-text);
     vertical-align: middle;
+    line-height: 1.35;
 }
 
 .dispatches-page .dispatches-table tbody tr:last-child td {
@@ -510,37 +894,198 @@ document.addEventListener('DOMContentLoaded', () => {
 }
 
 .dispatches-muted-cell {
-    color: var(--dispatch-text-muted);
+    color: var(--dispatch-text-faint);
 }
 
-.dispatches-table__qty {
-    text-align: center;
-    font-variant-numeric: tabular-nums;
+/* Dispatch Code column — primary/secondary hierarchy, the table's
+   strongest visual anchor. */
+.dispatches-table__code-cell {
+    min-width: 190px;
 }
 
+.dispatches-code-primary {
+    font-size: 14.5px;
+    font-weight: 700;
+    color: var(--dispatch-accent);
+    letter-spacing: 0.01em;
+}
+
+.dispatches-code-secondary {
+    margin-top: 4px;
+    font-size: 12px;
+    color: var(--dispatch-text-faint);
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dispatches-cell-icon-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.dispatches-cell-icon {
+    font-size: 14px;
+    line-height: 1;
+    opacity: 0.85;
+}
+
+.dispatches-cell-primary {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--dispatch-text);
+}
+
+.dispatches-cell-secondary {
+    margin-top: 3px;
+    font-size: 12px;
+    color: var(--dispatch-text-faint);
+}
+
+/* Items column */
+.dispatches-table__items-cell {
+    min-width: 130px;
+}
+
+.dispatches-view-items-btn {
+    margin-top: 5px;
+    padding: 0;
+    border: 0;
+    background: none;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--dispatch-accent);
+    cursor: pointer;
+}
+
+.dispatches-view-items-btn:hover {
+    text-decoration: underline;
+}
+
+.dispatches-view-items-btn:focus-visible {
+    outline: 2px solid var(--dispatch-accent);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
+/* Status column */
 .dispatches-status-badge {
-    padding: 5px 10px !important;
+    display: inline-flex !important;
+    align-items: center;
+    padding: 6px 12px !important;
     border-radius: 999px !important;
     font-size: 11px !important;
-    letter-spacing: 0.02em !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.03em !important;
     text-transform: none !important;
     box-shadow: none;
 }
 
+.dispatches-status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    display: inline-block;
+    margin-right: 6px;
+    flex-shrink: 0;
+}
+
+/* Release Personnel column — TASK 13.1 §2. Reuses the existing
+   .dispatches-cell-primary / .dispatches-cell-secondary hierarchy and the
+   shared .user-avatar-wrap / .avatar-circle / .avatar-img avatar from
+   styles.css, so this column introduces no new component and no new colour.
+   The avatar is scaled down to 32px to suit a table row. */
+.dispatches-table__assignee-cell {
+    min-width: 190px;
+}
+
+/* TASK 13.2 §7 — flex-start rather than center now that the cell can stack
+   three lines; centering would have floated the avatar against the middle
+   line and broken the top alignment shared with every other column. */
+.dispatches-assignee {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+}
+
+.dispatches-assignee-avatar {
+    position: relative;
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    font-size: 13px;
+}
+
+/* The initial-circle defines the box and the photo is layered over it, so a
+   404 on the photo (its onerror removes the <img>) reveals the initial
+   underneath instead of a broken-image frame. */
+.dispatches-assignee-photo {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+}
+
+.dispatches-assignee-text {
+    min-width: 0;
+}
+
+/* TASK 13.2 §7 — the release state. Held one step below the Status column's
+   badge (10px vs 11px, tighter padding, no status dot) on purpose: the two
+   sit side by side, and the release state is the supporting fact. Same
+   .badge-* classes, so no new colors enter the table. */
+.dispatches-assignee-state {
+    display: inline-block;
+    margin-top: 4px;
+    font-size: 10px;
+    padding: 2px 8px;
+    white-space: nowrap;
+}
+
+/* Date column */
+.dispatches-table__date-cell {
+    min-width: 120px;
+}
+
+/* Action column */
+.dispatches-table__action-cell {
+    text-align: center;
+}
+
 .dispatches-table__view-btn {
-    min-height: 34px;
-    padding: 6px 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 36px;
+    padding: 8px 16px;
     border-radius: 10px;
     border: 1px solid var(--dispatch-badge-border);
     background: var(--dispatch-badge-bg);
     color: #7c3aed;
-    box-shadow: none;
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: none;
+    transition: background-color 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+
+.dispatches-table__view-icon {
+    flex-shrink: 0;
 }
 
 .dispatches-table__view-btn:hover {
     background: rgba(124, 58, 237, 0.16);
     border-color: rgba(124, 58, 237, 0.24);
     color: #6d28d9;
+    transform: translateY(-1px);
+}
+
+.dispatches-table__view-btn:focus-visible {
+    outline: 2px solid #7c3aed;
+    outline-offset: 2px;
 }
 
 :root[data-theme-resolved='dark'] .dispatches-page .dispatches-table__view-btn {
@@ -556,12 +1101,50 @@ document.addEventListener('DOMContentLoaded', () => {
     justify-content: space-between;
     align-items: center;
     gap: 16px;
-    padding: 0 24px 24px;
+    padding: 0 26px 26px;
 }
 
 .dispatches-pagination__info {
     color: var(--dispatch-text-muted);
     font-size: 0.95rem;
+}
+
+/* View Items modal */
+.dispatches-items-modal {
+    max-width: 420px;
+}
+
+.dispatches-items-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.dispatches-items-list__row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 14px;
+    border: 1px solid var(--dispatch-border);
+    border-radius: 10px;
+    background: var(--dispatch-surface-muted);
+}
+
+.dispatches-items-list__name {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--dispatch-text);
+}
+
+.dispatches-items-list__qty {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--dispatch-text-muted);
+    white-space: nowrap;
 }
 
 @media (max-width: 980px) {
@@ -610,7 +1193,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     .dispatches-page .dispatches-table {
-        min-width: 820px;
+        min-width: 900px;
     }
 
     .dispatches-page .dispatches-table thead {
@@ -624,6 +1207,7 @@ document.addEventListener('DOMContentLoaded', () => {
         border-radius: 0;
     }
 
+    .dispatches-page .dispatches-table th,
     .dispatches-page .dispatches-table td {
         display: table-cell !important;
         text-align: left !important;
