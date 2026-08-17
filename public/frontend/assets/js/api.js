@@ -3,20 +3,33 @@
  */
 
 const API = {
-    baseURL: window.API_BASE_URL || '/api',
+    // TASK 98.2 fix: this used to be `window.API_BASE_URL || '/api'`, but
+    // window.API_BASE_URL is never actually set anywhere in the codebase, so
+    // baseURL always resolved to the domain-root-relative '/api'. In this
+    // XAMPP subfolder-hosted environment (app lives under
+    // /School_Facility_Maintenance_System, not domain root) that 404s on
+    // every call — confirmed live for API.logout(), which silently failed
+    // and meant LOGOUT events never reached activity_logs. window.SFMS_PUBLIC_URL
+    // (defined in header.php, and now also on index.php) is the existing,
+    // already-used-elsewhere-in-this-file (see getNotifications below)
+    // helper that correctly resolves the app's subfolder base path, so reuse
+    // it here instead of introducing a second URL-resolution mechanism.
+    baseURL: typeof window.SFMS_PUBLIC_URL === 'function'
+        ? window.SFMS_PUBLIC_URL('/api')
+        : (window.API_BASE_URL || '/api'),
     csrfToken: window.CSRF_TOKEN || '',
     
     /**
      * Login user
      */
-    async login(email, password) {
+    async login(username, password) {
         const response = await fetch(`${this.baseURL}/auth/login`, {
             method: 'POST',
             credentials: 'include',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ email, password })
+            body: JSON.stringify({ username, password })
         });
         
         const data = await response.json();
@@ -323,6 +336,13 @@ const API = {
         return badges[status] || 'badge-primary';
     }
 };
+
+// Expose API on window: top-level `const` does not attach to the global
+// object, but main.js's performLogout() (and other callers) check
+// `window.API` before using it. Without this, API.logout() is silently
+// skipped and the app falls straight through to the server-side
+// logout.php redirect, which never records a LOGOUT activity-log entry.
+window.API = API;
 
 /**
  * Session helper - using localStorage
