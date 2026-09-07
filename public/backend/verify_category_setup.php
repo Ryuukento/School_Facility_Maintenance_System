@@ -4,7 +4,8 @@
  * Tagalog: Direct na pag-test sa database para sa category-based inventory system
  */
 
-    require_once __DIR__ . '/config/database.php';
+require_once __DIR__ . '/_dev_guard.php';
+require_once __DIR__ . '/config/database.php';
 
 $pdo = getDBConnection();
 $results = [];

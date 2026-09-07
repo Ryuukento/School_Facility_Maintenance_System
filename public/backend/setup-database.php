@@ -4,6 +4,7 @@
  * Creates necessary tables for buildings and rooms
  */
 
+require_once __DIR__ . '/_dev_guard.php';
 require_once __DIR__ . '/config/database.php';
 
 try {

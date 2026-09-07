@@ -1,8 +1,9 @@
-﻿<?php
+<?php
 /**
  * reports_display.php
  * Simple server-side page to fetch and render saved reports from DB.
  */
+require_once __DIR__ . '/_dev_guard.php';
 require_once __DIR__ . '/config/database.php';
 
 try {

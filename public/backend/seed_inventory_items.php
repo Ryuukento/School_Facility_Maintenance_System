@@ -4,6 +4,7 @@
  * Populates inventory items for each category in SFMS
  */
 
+require_once __DIR__ . '/_dev_guard.php';
 require_once __DIR__ . '/bootstrap.php';
 
 // Sample room_id para sa items (assuming may default room or using 1)

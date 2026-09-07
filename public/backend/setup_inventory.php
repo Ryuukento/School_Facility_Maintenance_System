@@ -3,6 +3,7 @@
  * Update/Seed Inventory Categories and Items
  */
 
+require_once __DIR__ . '/_dev_guard.php';
 require_once __DIR__ . '/bootstrap.php';
 
 try {
