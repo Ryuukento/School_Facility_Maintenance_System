@@ -133,6 +133,7 @@ class ReportCompletionNotificationTest extends TestCase
         $response = $this
             ->actingAsSessionUser($reporterId, 'maintenance_staff')
             ->postJson('/api/reports', [
+                'problem_type' => 'Plumbing',
                 'title' => 'Leaking Faucet',
                 'description' => 'Water leaking under the sink.',
                 'location' => 'Room 204',
@@ -175,6 +176,8 @@ class ReportCompletionNotificationTest extends TestCase
             $table->unsignedInteger('report_id')->nullable();
             $table->string('title');
             $table->text('message');
+            $table->string('entity_type', 40)->nullable();
+            $table->unsignedBigInteger('entity_id')->nullable();
             $table->boolean('is_read')->default(false);
             $table->timestamps();
         });

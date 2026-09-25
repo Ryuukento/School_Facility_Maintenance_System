@@ -6,6 +6,9 @@
             --auth-muted: #cdbfe6;
             --auth-input: rgba(58, 25, 102, 0.42);
             --auth-border: rgba(168, 85, 247, 0.42);
+            /* Updated by keyboard-aware-scroll.js in login.blade.php to the on-screen
+               keyboard's height, so the form has real scroll room to clear it. */
+            --kb-offset: 0px;
         }
 
         * {
@@ -93,64 +96,6 @@
             position: relative;
         }
 
-        .page-auth-header {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            z-index: 4;
-            width: 100%;
-            height: 72px;
-            display: flex;
-            align-items: center;
-            justify-content: flex-start;
-            gap: 12px;
-            color: #f7f2ff;
-            background: rgba(25, 12, 56, 0.92);
-            border-top: 0;
-            border-left: 0;
-            border-right: 0;
-            border-bottom: 1px solid rgba(168, 85, 247, 0.34);
-            border-radius: 0;
-            padding: 0 24px;
-            box-shadow: 0 8px 18px rgba(8, 4, 30, 0.45);
-            backdrop-filter: blur(8px);
-        }
-
-        .page-auth-logo {
-            width: 80px;
-            height: 80px;
-            object-fit: contain;
-            flex-shrink: 0;
-            padding: 0;
-            border-radius: 0;
-            background: transparent;
-        }
-
-        .page-auth-text {
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            gap: 2px;
-            min-width: 0;
-        }
-
-        .page-auth-title {
-            font-size: 0.93rem;
-            letter-spacing: 0.04em;
-            text-transform: uppercase;
-            font-weight: 800;
-            color: #f8fafc;
-            line-height: 1.1;
-        }
-
-        .page-auth-subtitle {
-            font-size: 0.82rem;
-            font-weight: 500;
-            color: #d3c7ef;
-            line-height: 1.2;
-        }
-
         .login-container {
             position: relative;
             z-index: 2;
@@ -159,10 +104,65 @@
             flex: 1 1 auto;
         }
 
+        /* TASK F (login redesign v2) — large, soft decorative arcs behind the
+           card, per the "large subtle circular/arc decorative elements"
+           requirement. Purely cosmetic: negative z-index keeps it behind
+           .card (which has no explicit z-index / position, so it paints in
+           the normal in-flow stacking step, above negative-z-index content)
+           without needing to touch the card's own stacking. pointer-events
+           is off so it can never intercept clicks/keyboard focus. */
+        .login-container::before {
+            content: "";
+            position: absolute;
+            inset: -12% -6%;
+            z-index: -1;
+            pointer-events: none;
+            background-image:
+                radial-gradient(circle at 12% 18%, rgba(168, 85, 247, 0.16) 0%, rgba(168, 85, 247, 0) 30%),
+                radial-gradient(circle at 90% 82%, rgba(139, 92, 246, 0.14) 0%, rgba(139, 92, 246, 0) 32%);
+        }
+
+        .login-container::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            z-index: -1;
+            pointer-events: none;
+            border-radius: 50%;
+            width: min(64vw, 900px);
+            height: min(64vw, 900px);
+            max-width: 900px;
+            max-height: 900px;
+            margin: auto;
+            border: 1px solid rgba(196, 181, 253, 0.08);
+            box-shadow: 0 0 0 60px rgba(196, 181, 253, 0.03) inset;
+        }
+
         .login-container .card {
-            width: min(980px, calc(100vw - 36px));
-            min-height: 640px;
-            height: min(640px, calc(100vh - 88px));
+            /* TASK #16D — reverted to the original 980x640 footprint.
+               TASK #16C had widened this to 1100x760 to make room for the
+               450px logo; that made the whole card (including the right
+               login panel) visibly larger, which is explicitly not
+               wanted. The 450px logo is now fit inside this original,
+               unchanged card size by tightening the left panel's own
+               internal spacing instead (see the @media (min-width: 901px)
+               spacing block and the logo rule, both further down this
+               file). The existing @media (max-width: 900px) block further
+               down this file already fully overrides width/height/
+               min-height/max-height for the single-column mobile/tablet
+               layout and is untouched.
+
+               TASK E (login redesign) — sized down again to a ~900x600
+               footprint per the requested ~850-950 x 560-620 envelope
+               (980x640 read as slightly larger than wanted). The 450px
+               logo referenced above is being reduced in the same change
+               (see .login-container .pitch-panel .form-brand img further
+               down this file), so the "tight spacing to fit a big logo
+               into an unchanged card" problem this comment describes no
+               longer applies — logo and card are shrinking together. */
+            width: min(900px, calc(100vw - 36px));
+            min-height: 580px;
+            height: min(600px, calc(100vh - 88px));
             max-height: calc(100vh - 88px);
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -171,13 +171,24 @@
             background: rgba(28, 13, 66, 0.9);
             box-shadow: 0 34px 80px rgba(16, 8, 45, 0.62);
             border: 1px solid rgba(139, 92, 246, 0.3);
-            margin-top: 64px;
             backdrop-filter: blur(10px);
         }
 
         .login-container .card.register-mode {
             grid-template-columns: 1fr 1fr;
         }
+
+        /* TASK #16D — the TASK #16C "large tablet" (900-1200px) card
+           override that used to live here has been removed. It only
+           existed to restore the 980/640 size at 900-1200px while the
+           base rule above was enlarged to 1100/760 for true desktop; now
+           that the base rule itself is back to 980/640 at every width
+           down to the existing 900px stacking breakpoint, that extra tier
+           is redundant. The 450px logo is shown uniformly from >900px
+           down to the 900px breakpoint (see the logo rule further down
+           this file); the pre-existing @media (max-width: 900px) block
+           still fully overrides card sizing for the single-column
+           mobile/tablet layout below that, untouched. */
 
         .form-panel {
             background: rgba(17, 7, 44, 0.95);
@@ -208,7 +219,15 @@
 
         .login-container .card:not(.register-mode) .auth-subtitle {
             font-size: 1.08rem;
-            margin-bottom: 30px;
+            /* TASK F (login redesign v2) — was 30px, tuned for when the
+               forgot-password form (the only :not(.register-mode) form with
+               a subtitle at the time) was the sole consumer. #login-form now
+               has its own restored subtitle too, and the card's height is
+               capped (~600px, see .login-container .card), so this is
+               trimmed to keep the taller sign-in view fitting without an
+               internal scrollbar; still comfortably more than the base
+               .auth-subtitle's 22px. */
+            margin-bottom: 20px;
         }
 
         .login-container .card:not(.register-mode) .form-group {
@@ -223,7 +242,7 @@
         .login-container .card:not(.register-mode) .form-group input {
             padding: 16px 16px;
             font-size: 1.04rem;
-            border-radius: 13px;
+            border-radius: 12px;
         }
 
         .login-container .card:not(.register-mode) .password-field-wrapper input {
@@ -570,7 +589,16 @@
         .btn {
             width: 100%;
             border: none;
-            border-radius: 999px;
+            /* TASK E (login redesign) — was 999px (full pill). The redesign
+               spec calls for a professional ~10-12px radius consistent with
+               the inputs, not a pill shape. This is the only place button
+               radius is set (later rules only touch .btn-primary's
+               background/shadow/min-height/padding), so this one change
+               reshapes both Sign In and the secondary "Back to Sign In"
+               buttons. Chip-style elements like .login-lock-timer /
+               .login-lock-progress are unrelated (not <button>s) and are
+               intentionally left as pills. */
+            border-radius: 12px;
             padding: 12px 20px;
             cursor: pointer;
             font-family: inherit;
@@ -1037,29 +1065,6 @@
                 padding: 26px 16px;
             }
 
-            .page-auth-header {
-                top: 0;
-                height: 64px;
-                border-radius: 0;
-                padding: 0 10px;
-                gap: 7px;
-            }
-
-            .page-auth-logo {
-                width: 52px;
-                height: 52px;
-            }
-
-            .page-auth-title {
-                font-size: 0.68rem;
-                letter-spacing: 0.02em;
-            }
-
-            .page-auth-subtitle {
-                display: block;
-                font-size: 0.62rem;
-            }
-
             .form-brand img {
                 width: 120px;
                 height: 120px;
@@ -1101,16 +1106,6 @@
             background:
                 linear-gradient(rgba(96, 165, 250, 0.08) 1px, transparent 1px),
                 linear-gradient(90deg, rgba(96, 165, 250, 0.08) 1px, transparent 1px);
-        }
-
-        .page-auth-header {
-            background: rgba(10, 22, 41, 0.9);
-            border-bottom: 1px solid rgba(148, 163, 184, 0.34);
-            box-shadow: 0 8px 18px rgba(2, 8, 23, 0.45);
-        }
-
-        .page-auth-subtitle {
-            color: #a9bddb;
         }
 
         .login-container .card {
@@ -1289,20 +1284,16 @@
     object-position: center center !important;
 }
 
-/* User-requested visual tweak: white side panel with dark text for logo clarity. */
-.login-container .pitch-panel {
-    background: #ffffff !important;
-    border-right: 1px solid rgba(15, 23, 42, 0.12) !important;
-    padding-left: 0 !important;
-    padding-right: 0 !important;
-}
-
-.login-container .pitch-content,
-.login-container .form-brand-name,
-.login-container .form-brand-subtitle {
-    color: #111827 !important;
-}
-
+/* TASK F (login redesign v2) — REVERSAL of the earlier "white side panel"
+   tweak above (kept here in history via this comment, not deleted
+   silently): the new reference design calls for the left branding panel to
+   be a dark purple/institutional panel again, with high-contrast white
+   typography, matching Image 2. Removing the !important white/dark-text
+   overrides lets the base `.pitch-panel` rule (dark gradient,
+   `color: #efe9ff`) and the base `.form-brand-name` / `.form-brand-subtitle`
+   colors (white / light lavender, both defined earlier in this file) apply
+   again unmodified. The right-hand `.form-panel` stays white — untouched by
+   this block, both before and after this change. */
 .login-container .pitch-panel .form-brand {
     padding-left: 16px;
     padding-right: 16px;
@@ -1318,7 +1309,12 @@
 
     body {
         display: block;
-        min-height: 100dvh;
+        /* svh (small viewport height), not dvh: dvh grows live as Chrome's
+           address bar hides on scroll, which shrinks the scrollable range
+           mid-scroll and makes the browser clamp scrollTop back toward 0.
+           svh is fixed to the viewport size with browser UI fully expanded,
+           so it never changes during a scroll gesture. */
+        min-height: 100svh;
         height: auto;
         position: relative;
     }
@@ -1332,33 +1328,11 @@
         position: static;
         min-height: auto;
         height: auto;
-        padding: 70px 12px 12px;
+        padding: 12px;
         align-items: flex-start;
         overflow: visible;
         display: block;
         flex: none;
-    }
-
-    .page-auth-header {
-        position: fixed;
-        height: auto;
-        min-height: 56px;
-        padding: 8px 12px;
-    }
-
-    .page-auth-logo {
-        width: 40px;
-        height: 40px;
-    }
-
-    .page-auth-title {
-        font-size: 0.66rem;
-        letter-spacing: 0.03em;
-    }
-
-    .page-auth-subtitle {
-        font-size: 0.58rem;
-        line-height: 1.1;
     }
 
     .login-container .card,
@@ -1476,31 +1450,42 @@
     }
 }
 
+/* Keyboard-aware mobile behavior: while a login/register field is focused
+   (class toggled by keyboard-aware-scroll.js), collapse the hero/branding
+   panel and reserve scroll room so the field + submit button always clear
+   the on-screen keyboard, similar to Gmail/Facebook/GCash. Scoped to the
+   existing mobile breakpoint only -- desktop/tablet layout is untouched. */
+@media (max-width: 900px) {
+    .pitch-panel,
+    .login-container .card.register-mode .pitch-panel {
+        transition: min-height 0.22s ease, padding 0.22s ease, opacity 0.18s ease;
+    }
+
+    body.keyboard-open .pitch-panel,
+    body.keyboard-open .login-container .card.register-mode .pitch-panel {
+        min-height: 0;
+        height: 0;
+        padding: 0;
+        opacity: 0;
+        overflow: hidden;
+        border-bottom: 0;
+        pointer-events: none;
+    }
+
+    .form-panel-inner {
+        transition: padding-bottom 0.2s ease;
+    }
+
+    body.keyboard-open .form-panel-inner {
+        padding-bottom: var(--kb-offset, 0px);
+    }
+}
+
 @media (max-width: 480px) {
     main.login-container {
-        padding: 60px 10px 10px;
-            min-height: 100dvh;
-            height: auto;
-    }
-
-    .page-auth-header {
-        min-height: 50px;
-        padding: 6px 10px;
-        gap: 8px;
-    }
-
-    .page-auth-logo {
-        width: 34px;
-        height: 34px;
-    }
-
-    .page-auth-title {
-        font-size: 0.6rem;
-        letter-spacing: 0.02em;
-    }
-
-    .page-auth-subtitle {
-        font-size: 0.52rem;
+        padding: 10px;
+        min-height: 100svh;
+        height: auto;
     }
 
     .login-container .card,
@@ -1512,18 +1497,18 @@
 
     .pitch-panel,
     .login-container .card.register-mode .pitch-panel {
-        min-height: 84px;
-        padding: 6px 10px 0;
+        min-height: 64px;
+        padding: 5px 10px 0;
     }
 
     .form-brand img {
-        width: min(96px, 32vw);
+        width: min(76px, 26vw);
     }
 
     .pitch-image-wrap img {
-        max-height: 64px;
-        min-height: 56px;
-        border-radius: 12px;
+        max-height: 44px;
+        min-height: 36px;
+        border-radius: 10px;
     }
 
     .form-panel,
@@ -1569,4 +1554,639 @@
     .form-panel-inner {
         max-width: 100%;
     }
+}
+
+/* ===================================================================
+   LIGHT SIGN-IN PANEL
+   -------------------------------------------------------------------
+   The right-hand Sign In panel was dark purple while the rest of the
+   system has moved to a light UI. This block repaints that panel
+   white and takes its text/inputs to dark-on-light. It is UI only —
+   no markup, no JS, no auth logic was touched.
+
+   WHY IT LIVES AT THE END OF THIS FILE, not in a new stylesheet:
+   login.css is already the login page's own stylesheet (the brief says
+   not to create a duplicate one), and this file has accumulated
+   several layered override blocks over time — including a
+   "Professional blue enterprise overrides" block that is, almost
+   certainly by accident, nested INSIDE the `@media (max-width: 460px)`
+   query that opens earlier in the file, so it only ever applies on
+   very narrow screens. Rewriting those older blocks in place risked
+   changing behaviour at breakpoints unrelated to this task, so this
+   block is appended last instead: on source order alone it wins
+   everywhere, at every width, including inside that stray 460px block.
+
+   `!important` appears ONLY where the rule being overridden is itself
+   `!important` (the password field's anti-autofill rules and the
+   validation-state rules). Nothing else needs it.
+
+   The LEFT branding/pitch panel, the logo and the campus image are
+   deliberately NOT touched here — the existing white treatment for
+   that side already sits above.
+   =================================================================== */
+
+/* Re-point the file's own design tokens at the light palette. Rules
+   further up that already read these variables (the title, subtitle,
+   inputs and primary button) pick the new values up automatically.
+   The purple accent is the system purple from color-scheme.css, which
+   index.php loads immediately before this file. */
+:root {
+    --auth-gradient: linear-gradient(135deg, #8b5cf6 0%, #a78bfa 100%);
+    --auth-accent: #8b5cf6;
+    --auth-accent-deep: #6d28d9;
+    --auth-ink: #0f172a;      /* near-black navy for the Sign In heading */
+    --auth-muted: #475569;    /* readable secondary text on white */
+    --auth-input: #f8fafc;    /* very light gray field fill */
+    --auth-border: #cbd5e1;   /* subtle gray field border */
+}
+
+/* ---- The panel itself ---------------------------------------------
+   White, with a soft light border + shadow so it reads as a distinct
+   surface against the page background. Rounded corners and the
+   two-column grid are inherited untouched from the rules above. */
+.login-container .card {
+    background: #ffffff;
+    /* TASK #16 — clean, clearly-visible purple border (system accent) so the
+       white card reads as a distinct surface against the dark purple page
+       background, per the reference design. Rounded corners (border-radius
+       is inherited untouched from the base .login-container .card rule
+       above) are preserved automatically since border follows the box's
+       existing radius. */
+    border: 2px solid var(--auth-accent, #8b5cf6);
+    box-shadow: 0 24px 60px rgba(76, 29, 149, 0.16), 0 2px 8px rgba(15, 23, 42, 0.06);
+}
+
+.login-container .form-panel {
+    background: #ffffff;
+    border-left: 1px solid rgba(139, 92, 246, 0.16);
+}
+
+/* ---- Typography ---------------------------------------------------
+   Sizes, weights and letter-spacing are all left alone — only colour
+   changes, so the existing hierarchy is preserved exactly. */
+
+.login-container .auth-title {
+    color: #0f172a;
+}
+
+.login-container .auth-subtitle {
+    color: #475569;
+}
+
+/* TASK F (login redesign v2) — the 24px override that used to live here was
+   added when #login-form had no subtitle element at all, to replace the
+   breathing room a removed eyebrow/subtitle pair used to provide below
+   "Sign In". Section 6 of this task restores a subtitle ("Access your
+   account to continue") to #login-form's markup, so that compensation is
+   no longer needed; letting the base `.auth-title` margin-bottom (6px)
+   apply again avoids double-spacing now that a real .auth-subtitle
+   element follows the heading, exactly as it does for the other two
+   forms on this page. */
+
+.login-container .form-group label {
+    color: #334155;
+}
+
+/* ---- Inputs -------------------------------------------------------
+   Light fill, dark text, subtle gray border; purple border + ring on
+   focus. Padding/radius/size untouched. */
+.login-container .form-group input {
+    background: #f8fafc;
+    /* TASK #16 — light purple-tinted border at rest (same light-purple tone
+       already used elsewhere on this page for .btn-secondary/.alert-info),
+       stepping up to the full system purple + ring on focus below. Purely a
+       colour change: padding, radius, and every input attribute/behaviour
+       are untouched. */
+    border: 1px solid #ddd6fe;
+    color: #0f172a;
+}
+
+.login-container .form-group input::placeholder {
+    color: #94a3b8;
+}
+
+.login-container .form-group input:focus {
+    border-color: #8b5cf6;
+    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.18);
+    background: #ffffff;
+}
+
+/* The password field's "keep the visual stable across
+   focus/readonly/autofill" rules above are !important, so the light
+   equivalents have to be too. Same intent, light values. */
+.login-container .password-field-wrapper input,
+.login-container .password-field-wrapper input:active,
+.login-container .password-field-wrapper input[readonly] {
+    background-color: #f8fafc !important;
+    color: #0f172a !important;
+    -webkit-text-fill-color: #0f172a;
+    caret-color: #0f172a;
+}
+
+.login-container .password-field-wrapper input:focus {
+    background-color: #ffffff !important;
+    -webkit-text-fill-color: #0f172a;
+}
+
+.login-container .password-field-wrapper input:-webkit-autofill,
+.login-container .password-field-wrapper input:-webkit-autofill:hover,
+.login-container .password-field-wrapper input:-webkit-autofill:focus,
+.login-container .password-field-wrapper input:-webkit-autofill:active {
+    -webkit-text-fill-color: #0f172a !important;
+    -webkit-box-shadow: 0 0 0 1000px #f8fafc inset !important;
+    box-shadow: 0 0 0 1000px #f8fafc inset !important;
+}
+
+/* ---- Password visibility toggle (behaviour unchanged) ------------- */
+.login-container .password-toggle-btn {
+    color: #64748b;
+}
+
+.login-container .password-toggle-btn:hover {
+    color: #6d28d9;
+    background: rgba(139, 92, 246, 0.12);
+}
+
+.login-container .password-toggle-btn:focus-visible {
+    outline: 2px solid #8b5cf6;
+}
+
+/* ---- Remember me (behaviour unchanged) ---------------------------- */
+.login-container .remember-me-control {
+    color: #1e293b;
+}
+
+.login-container .remember-me-control input {
+    accent-color: #8b5cf6;
+}
+
+/* ---- Forgot password (behaviour unchanged) ------------------------ */
+.login-container .forgot-password-link {
+    color: #7c3aed;
+}
+
+.login-container .forgot-password-link:hover {
+    color: #5b21b6;
+}
+
+.login-container .forgot-password-link:focus-visible {
+    outline: 2px solid #8b5cf6;
+}
+
+/* ---- Buttons ------------------------------------------------------
+   The primary button stays purple and prominent against the white
+   panel — it now carries the system purple gradient. */
+.login-container .btn-primary {
+    color: #ffffff;
+    background: linear-gradient(135deg, #8b5cf6 0%, #a78bfa 100%);
+    box-shadow: 0 10px 22px rgba(139, 92, 246, 0.32);
+    /* TASK #16B — target 48-52px button height. The base .btn rule (higher
+       up in this file) sets padding/font-size/border-radius/transition;
+       min-height is additive here and doesn't touch any of that, so the
+       pill shape, label text and click behaviour are unchanged. */
+    min-height: 50px;
+    padding: 14px 24px;
+}
+
+.login-container .btn-primary:hover:not(:disabled) {
+    box-shadow: 0 14px 28px rgba(139, 92, 246, 0.42);
+    /* base .btn-primary:hover (earlier in this file) already applies
+       transform: translateY(-1px) for the subtle lift; untouched here. */
+}
+
+/* TASK #16B — slightly pressed look on click. The base file has no
+   :active rule for this button, so this is purely additive. */
+.login-container .btn-primary:active:not(:disabled) {
+    transform: translateY(0);
+    box-shadow: 0 6px 14px rgba(139, 92, 246, 0.3);
+}
+
+/* Secondary ("Back to Sign In") has to stop being a dark-on-dark chip
+   now that the panel behind it is white. */
+.login-container .btn-secondary {
+    color: #4c1d95;
+    background: #f5f3ff;
+    border: 1px solid #ddd6fe;
+}
+
+.login-container .btn-secondary:hover:not(:disabled) {
+    background: #ede9fe;
+    border-color: #c4b5fd;
+}
+
+.login-container .auth-or-separator {
+    color: #64748b;
+}
+
+.login-container .form-note {
+    color: #64748b;
+}
+
+/* ---- Footer (NEW element, TASK #16B) --------------------------------
+   Small, muted, centered copyright line at the bottom of the right
+   panel, shared across all three forms (sign in / forgot password /
+   register) since it sits outside the <form> elements in the markup.
+   Kept deliberately compact (small font, modest margin/padding) so it
+   doesn't push the card's fixed-height layout (.login-container .card
+   has a capped height further up this file) into scrolling on the
+   default sign-in view. */
+.login-container .auth-footer {
+    margin: 18px 0 0;
+    padding-top: 12px;
+    border-top: 1px solid rgba(139, 92, 246, 0.12);
+    text-align: center;
+    color: #94a3b8;
+    font-size: 0.72rem;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+}
+
+/* ---- Alerts on a white panel --------------------------------------
+   These were translucent light-on-dark fills; on white they had to be
+   re-tinted or they would have been unreadable. Wording, markup and
+   the JS that toggles them are unchanged. */
+.login-container .alert-danger {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    color: #b91c1c;
+}
+
+.login-container .alert-success {
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    color: #15803d;
+}
+
+.login-container .alert-info {
+    background: #f5f3ff;
+    border: 1px solid #ddd6fe;
+    color: #5b21b6;
+}
+
+.login-container .login-lock-alert {
+    background: #fef2f2;
+    border-color: #fecaca;
+    box-shadow: 0 10px 24px rgba(185, 28, 28, 0.1);
+}
+
+.login-container .login-lock-title {
+    color: #b91c1c;
+}
+
+.login-container .login-lock-timer {
+    color: #991b1b;
+    border: 1px solid #fca5a5;
+    background: #fee2e2;
+}
+
+.login-container .login-lock-message {
+    color: #b91c1c;
+}
+
+.login-container .login-lock-progress {
+    background: rgba(185, 28, 28, 0.16);
+}
+
+/* ---- Validation states (register form) ----------------------------
+   The rules being overridden are !important, so these must be too.
+   Only colours change; which class is applied when is still decided
+   by the existing validation JS. */
+.login-container .form-field-error input {
+    border-color: #ef4444 !important;
+    background-color: #fef2f2 !important;
+}
+
+.login-container .form-field-valid input {
+    border-color: #22c55e !important;
+    background-color: #f0fdf4 !important;
+}
+
+.login-container .field-error-text {
+    color: #dc2626;
+}
+
+.login-container .password-strength-meter {
+    background: #e9e4f8;
+}
+
+/* ------------------------------------------------------------------------
+   LEFT PANEL BRANDING REFINEMENT: one cohesive centered composition
+   ------------------------------------------------------------------------
+   Follow-up to the block this replaces. That first pass put the system
+   title in its own bordered/boxed card, pinned to the bottom of the panel
+   (reusing .pitch-image-wrap's old bottom-alignment plumbing) while the
+   logo/school-name group stayed pinned to the top -- .pitch-content's
+   original `justify-content: space-between` split them apart, leaving a
+   large empty gap between the two.
+
+   This revision groups the logo, school name/subtitle, a thin divider,
+   and the system title into a single wrapper, `.pitch-brand-group`, and
+   centers that whole group vertically with `margin: auto 0`. Auto margins
+   on a flex child absorb all free space evenly above and below it,
+   regardless of the parent's own justify-content -- so .pitch-content's
+   pre-existing `space-between` (left untouched, see the base rule above)
+   has nothing left to distribute once there's only one child, and simply
+   becomes inert. That's what removes the excessive empty space: the
+   composition now sits centered as one block instead of being stretched
+   to the panel's full height.
+
+   The title itself dropped its boxed background/border/shadow -- it's
+   now plain, centered text under a subtle gradient divider line, sized
+   smaller than the school name (`.form-brand-name`) via clamp() so it
+   scales without overflowing at any width. The markup no longer uses
+   `.pitch-image-wrap` at all (see index.php); that class's rules, and
+   its responsive per-breakpoint variants scattered through the @media
+   blocks earlier in this file, are consequently now fully inert (they
+   already stopped matching an <img> after the previous change, and now
+   don't match anything at all). They're deliberately left in place
+   rather than hunted down across every breakpoint block, the same
+   "delete vs. deliberately left inert" approach already used elsewhere
+   in this codebase -- removing them is low-value and carries real risk
+   of mismatched braces in a file this size for a purely cosmetic
+   cleanup. The logo and school name/subtitle text are unchanged aside
+   from a smaller, uniform logo size (see .form-brand img below) so the
+   whole group reads as one balanced unit instead of a giant hero image
+   above two small lines of text. The right-side Sign In panel is not
+   touched by any rule in this block. */
+.pitch-brand-group {
+    margin: auto 0;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: clamp(14px, 2.4vw, 22px);
+}
+
+.login-container .pitch-panel .form-brand {
+    margin: 0;
+    gap: 10px;
+}
+
+.login-container .pitch-panel .form-brand-text {
+    transform: none;
+}
+
+.login-container .pitch-panel .form-brand img {
+    /* TASK E (login redesign) — was an explicit 450x450 (TASK #16C/16D),
+       sized to be a dominant hero image inside the old 980x640 card. The
+       redesign spec calls for a logo that's "prominent, not oversized"
+       inside the new, smaller ~900x600 card (see .login-container .card
+       above), so this drops to 190x190. Same asset
+       (public/frontend/assets/images/logo.png); object-fit: contain is
+       restated here (in addition to the low-specificity base rule
+       earlier in this file) so the aspect ratio is guaranteed preserved
+       no matter which rule "wins" elsewhere. This applies uniformly from
+       >900px down to the existing 900px breakpoint — see the tablet
+       (<=900px) and mobile (<=480px) overrides appended at the end of
+       this file, which step this box down further, without touching
+       this rule.
+
+       The @media (min-width: 901px) block that used to sit here (tighter
+       pitch-panel/form-brand gaps) existed solely to squeeze the old
+       450px logo into the card without overlapping the text below it.
+       At 190px that pressure is gone, so it was removed rather than kept
+       as a no-op layer — the base .pitch-panel / .pitch-brand-group /
+       .form-brand gaps (earlier in this file) now apply directly and
+       give the smaller logo more natural breathing room. */
+    width: 190px;
+    height: 190px;
+    max-width: 190px;
+    object-fit: contain;
+    /* TASK F (login redesign v2) — soft purple glow around the logo, per
+       the "purple glow around logo" / "premium institutional brand panel"
+       requirement. drop-shadow (not box-shadow) so it follows the logo's
+       actual (non-rectangular) opaque pixels rather than its bounding box. */
+    filter: drop-shadow(0 0 26px rgba(168, 85, 247, 0.45));
+}
+
+/* TASK F (login redesign v2) — top-of-panel tagline and bottom-of-panel
+   campus-life text, per spec section 4. Both are new elements; markup added
+   in index.php as direct children of .pitch-content, flanking
+   .pitch-brand-group. .pitch-content already centers .pitch-brand-group
+   vertically via that group's own `margin: auto 0` (see the "LEFT PANEL
+   BRANDING REFINEMENT" comment above) — because only .pitch-brand-group has
+   auto margins, it alone absorbs the panel's free vertical space, which
+   pins this tagline to the top and the campus text to the bottom without
+   any extra positioning rules here. */
+.pitch-tagline {
+    margin: 0;
+    text-align: center;
+    color: #c4b5fd;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+}
+
+/* Investigated public/frontend/assets/images/ for an existing campus or
+   building photo to sit behind this text (per spec: "prefer existing
+   assets, do not invent/download a new one"). None of the project's
+   existing image assets are suitable: 1.jpg/Ube.jpg/Violet.jpg are
+   promotional uniform photos with real faces, 2.jpg/3.jpg are indoor
+   event/stage photos, and buildings-illustration.png /
+   buildings-overview-illustration.png are blue-neon isometric icon
+   graphics already used elsewhere (buildings-overview.php) and clash with
+   this purple palette. So this is plain script-style text directly on the
+   panel's own dark gradient, with no background image — see the final
+   report for this note surfaced to the user rather than silently worked
+   around. */
+.pitch-campus-text {
+    margin: 0;
+    text-align: left;
+    align-self: flex-start;
+    color: rgba(233, 213, 255, 0.72);
+    font-family: Georgia, 'Times New Roman', serif;
+    font-style: italic;
+    font-size: 0.92rem;
+    letter-spacing: 0.01em;
+}
+
+.pitch-divider {
+    display: block;
+    width: 56px;
+    height: 3px;
+    border-radius: 999px;
+    background: linear-gradient(
+        90deg,
+        rgba(139, 92, 246, 0) 0%,
+        rgba(139, 92, 246, 0.85) 50%,
+        rgba(139, 92, 246, 0) 100%
+    );
+}
+
+.pitch-system-title {
+    margin: 0;
+    width: 100%;
+    max-width: 320px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+    text-align: center;
+    /* TASK F (login redesign v2) — was #5b21b6 (deep purple), tuned for the
+       now-reverted white panel. Now the panel is dark again, this needs to
+       be a light tone to stay readable; matches the light-lavender used by
+       .form-brand-subtitle elsewhere on this same panel. */
+    color: #ddd6fe;
+    font-family: 'Poppins', 'Plus Jakarta Sans', 'Segoe UI', sans-serif;
+    font-weight: 800;
+    letter-spacing: 0.015em;
+    line-height: 1.42;
+    font-size: clamp(0.8rem, 0.55vw + 0.65rem, 0.95rem);
+    text-wrap: balance;
+}
+
+/* ---------------------------------------------------------------------
+   TASK E (login redesign) — responsive logo sizing (tablet + mobile).
+   Appended at the very end of the file (same "later wins" pattern used
+   throughout this stylesheet) so these overrides beat the 190x190
+   desktop rule on `.login-container .pitch-panel .form-brand img` above
+   at matching viewport widths, without editing that rule or touching
+   the several other already-inert `.form-brand img` declarations
+   scattered through the older @media blocks earlier in this file (those
+   have lower selector specificity and were already superseded before
+   this update — left alone deliberately, per the same reasoning
+   documented next to the desktop rule; this same specificity gap is why
+   those older rules' 112px/76px figures were never actually reaching the
+   screen and are not a reference point for the values below).
+   Two tiers, using the same selector so source order alone decides which
+   wins at a given width (narrower condition placed LATER so it correctly
+   beats the wider one it's nested inside):
+     - <=900px "tablet": scales with viewport width, capped well below
+       the old 300-350px so the single-column stacked pitch-panel (see
+       the <=900px block above) stays compact instead of being pushed
+       tall by an oversized logo.
+     - <=480px "mobile": smaller still, so Logo -> branding -> Sign In
+       all fit near the top of the screen without pushing the form down
+       past the fold. */
+@media (max-width: 900px) {
+    .login-container .pitch-panel .form-brand img {
+        width: clamp(120px, 18vw, 150px);
+        height: clamp(120px, 18vw, 150px);
+        max-width: clamp(120px, 18vw, 150px);
+        object-fit: contain;
+    }
+}
+
+@media (max-width: 480px) {
+    .login-container .pitch-panel .form-brand img {
+        width: clamp(80px, 22vw, 100px);
+        height: clamp(80px, 22vw, 100px);
+        max-width: clamp(80px, 22vw, 100px);
+        object-fit: contain;
+    }
+}
+
+/* =========================================================================
+   TASK F (login redesign v2) — right (Sign In) panel additions
+   -------------------------------------------------------------------------
+   New, purely additive rules for: the small accent line above "Sign In",
+   left-aligned icons inside the username/password fields, the redesigned
+   arrow + "Sign In" button, and the "Secure Access" divider row above the
+   footer. None of these rename/remove any existing selector above — the
+   existing input/button/footer rules keep doing everything they did
+   before; these only add new classes used by new markup in index.php.
+   ========================================================================= */
+
+/* Small purple line above the "Sign In" heading. Decorative only. */
+.signin-accent-line {
+    display: block;
+    width: 44px;
+    height: 3px;
+    border-radius: 999px;
+    margin-bottom: 8px;
+    background: linear-gradient(90deg, #8b5cf6 0%, #c4b5fd 100%);
+}
+
+/* Left-aligned icon inside the username field. `.input-icon-wrapper` is a
+   new, single-purpose wrapper (only used around #username) so this can't
+   affect the register/forgot-password forms, which don't use it. */
+.input-icon-wrapper {
+    position: relative;
+}
+
+.input-icon-wrapper .input-icon,
+.password-field-wrapper .input-icon {
+    position: absolute;
+    top: 50%;
+    left: 14px;
+    transform: translateY(-50%);
+    width: 18px;
+    height: 18px;
+    color: #94a3b8;
+    pointer-events: none;
+}
+
+/* Specificity note: .login-container .card:not(.register-mode) .form-group
+   input (defined much earlier in this file, for the ~16px/13px/11px
+   padding tiers across breakpoints) has 4 classes + 1 element, the same
+   specificity as the selectors below -- both prefixes are repeated here so
+   this tied selector wins purely by being later in the file, at every
+   breakpoint, without needing !important or touching those older rules. */
+.login-container .card:not(.register-mode) .input-icon-wrapper input,
+.input-icon-wrapper input {
+    padding-left: 42px;
+}
+
+/* Password field already has right-side padding reserved for the
+   show/hide toggle (see .password-field-wrapper input rules above); this
+   only adds the matching left-side space for the new lock icon. Same
+   specificity-tie reasoning as .input-icon-wrapper input above. */
+.login-container .card:not(.register-mode) .password-field-wrapper input,
+.password-field-wrapper input {
+    padding-left: 42px;
+}
+
+/* Arrow + "Sign In" button. `.btn` already centers its label by default in
+   every browser tested (buttons center inline content); flex here just
+   guarantees a consistent gap between the arrow and the text and keeps
+   both vertically centered, for both this button and the plain-text
+   secondary button, which is unaffected since it has only one child. */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.btn-arrow-icon {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+}
+
+/* "Secure Access" divider row, sits between the button and the footer. */
+.secure-access-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.secure-access-line {
+    flex: 1 1 auto;
+    height: 1px;
+    background: linear-gradient(90deg, rgba(139, 92, 246, 0), rgba(139, 92, 246, 0.35), rgba(139, 92, 246, 0));
+}
+
+.secure-access-text {
+    flex: 0 0 auto;
+    color: #94a3b8;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+/* The secure-access row above now provides the visual divider that this
+   footer rule used to provide on its own (see the "Footer" comment further
+   up this file) — drop the footer's own top border/margin so there isn't a
+   double line, while keeping its font/color/padding exactly as before. */
+.login-container .auth-footer {
+    border-top: 0;
+    margin-top: 6px;
+    padding-top: 0;
 }

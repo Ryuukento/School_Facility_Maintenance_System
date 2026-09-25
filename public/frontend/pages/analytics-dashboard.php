@@ -15,7 +15,7 @@ if ($_anRole !== 'super_admin' && $_anRole !== 'maintenance_admin' && $_anRole !
     $_anRole = 'maintenance_staff';
 }
 
-$pageTitle = 'Analytics Dashboard - SFMS';
+$pageTitle = 'Analytics - SFMS';
 include __DIR__ . '/../includes/header.php';
 ?>
 
@@ -31,36 +31,109 @@ include __DIR__ . '/../includes/header.php';
     <div class="card" id="an-analytics-card" style="border-left:3px solid var(--primary-color);margin-top:0;">
         <div class="card-header d-flex justify-between align-center" style="border-bottom:0.5px solid var(--border);padding:20px 24px 16px;">
             <div>
-                <h2 style="font-size:18px;font-weight:500;margin:0 0 2px;">Analytics Dashboard</h2>
-                <p class="text-muted mb-0" style="font-size:13px;">Inventory health, damage trends, semester comparisons, and dispatch reports.</p>
+                <h2 style="font-size:18px;font-weight:500;margin:0 0 2px;">Analytics</h2>
+                <p class="text-muted mb-0" style="font-size:13px;">View maintenance, damage, inventory, semester, and dispatch analytics.</p>
             </div>
         </div>
         <div class="card-body" style="padding:18px 24px 26px;">
 
-            <!-- Tab buttons -->
-            <div class="an-tabs" style="display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:20px;">
-                <button type="button" class="an-tab-btn" data-tab="an-tab1"
-                        style="background:transparent;border:none;border-bottom:2px solid transparent;padding:10px 18px;cursor:pointer;font-size:14px;font-weight:400;color:var(--muted-text);">
+            <!-- Tab buttons — one cohesive nav for the four analytics views.
+                 Active/inactive state is applied via the .active class in JS
+                 (anSwitchTab()) rather than inline styles; see the CSS block
+                 below (#an-analytics-card .an-tab-btn) for the visual spec. -->
+            <div class="an-tabs">
+                <button type="button" class="an-tab-btn active" data-tab="an-tab1">
                     Overview
                 </button>
-                <button type="button" class="an-tab-btn" data-tab="an-tab2"
-                        style="background:transparent;border:none;border-bottom:2px solid transparent;padding:10px 18px;cursor:pointer;font-size:14px;font-weight:400;color:var(--muted-text);">
+                <button type="button" class="an-tab-btn" data-tab="an-tab2">
                     Damage Analytics
                 </button>
-                <button type="button" class="an-tab-btn" data-tab="an-tab3"
-                        style="background:transparent;border:none;border-bottom:2px solid transparent;padding:10px 18px;cursor:pointer;font-size:14px;font-weight:400;color:var(--muted-text);">
+                <button type="button" class="an-tab-btn" data-tab="an-tab3">
                     Semester Comparison
                 </button>
-                <button type="button" class="an-tab-btn" data-tab="an-tab4"
-                        style="background:transparent;border:none;border-bottom:2px solid transparent;padding:10px 18px;cursor:pointer;font-size:14px;font-weight:400;color:var(--muted-text);">
-                    Dispatch &amp; Repair
+                <button type="button" class="an-tab-btn" data-tab="an-tab4">
+                    <?php /* TASK 13 PHASE 8 — was "Dispatch & Repair". The
+                             Repair Report table this tab also carried was
+                             removed with the retired /api/analytics/repair-report
+                             endpoint; the tab itself stays because its Dispatch
+                             Report and Inventory Activity chart are unaffected. */ ?>
+                    Dispatch
                 </button>
             </div>
 
             <!-- ─── TAB 1: Overview ──────────────────────────────────────── -->
             <div id="an-tab1" class="an-tab-content">
 
-                <p style="font-size:14px;font-weight:500;margin:0 0 10px;">Inventory Health</p>
+                <!-- Key Analytics Summary — reuses /api/dashboard/stats (the
+                     same unrestricted endpoint the main Dashboard reads; see
+                     anLoadSummary()). No new query/endpoint. total_reports/
+                     pending/in_progress/completed come back null when no
+                     semester is active — shown as "—" plus the note below
+                     rather than guessed at. -->
+                <p class="an-section-title">Key Analytics Summary</p>
+                <div class="an-metric-grid">
+
+                    <!-- Total Reports — purple -->
+                    <div class="an-metric-card" style="border:1px solid rgba(109,40,217,0.2);background:linear-gradient(135deg,rgba(109,40,217,0.06) 0%,transparent 60%);">
+                        <div style="width:48px;height:48px;border-radius:12px;background:rgba(109,40,217,0.12);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#6d28d9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                <polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <div style="font-size:11px;color:var(--muted-text);text-transform:uppercase;letter-spacing:.6px;font-weight:500;margin-bottom:4px;">Total Reports</div>
+                            <div id="an-sum-total" style="font-size:32px;font-weight:700;color:#6d28d9;line-height:1;">—</div>
+                            <div style="font-size:11px;color:var(--muted-text);margin-top:4px;">This semester</div>
+                        </div>
+                    </div>
+
+                    <!-- Pending/Open — amber -->
+                    <div class="an-metric-card" style="border:1px solid rgba(217,119,6,0.22);background:linear-gradient(135deg,rgba(217,119,6,0.06) 0%,transparent 60%);">
+                        <div style="width:48px;height:48px;border-radius:12px;background:rgba(217,119,6,0.12);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <div style="font-size:11px;color:var(--muted-text);text-transform:uppercase;letter-spacing:.6px;font-weight:500;margin-bottom:4px;">Pending / Open</div>
+                            <div id="an-sum-pending" style="font-size:32px;font-weight:700;color:#d97706;line-height:1;">—</div>
+                            <div style="font-size:11px;color:var(--muted-text);margin-top:4px;">Awaiting action</div>
+                        </div>
+                    </div>
+
+                    <!-- In Progress — blue -->
+                    <div class="an-metric-card" style="border:1px solid rgba(29,78,216,0.2);background:linear-gradient(135deg,rgba(29,78,216,0.06) 0%,transparent 60%);">
+                        <div style="width:48px;height:48px;border-radius:12px;background:rgba(29,78,216,0.12);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#1d4ed8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 12a9 9 0 1 1-6.219-8.56"/><polyline points="21 3 21 9 15 9"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <div style="font-size:11px;color:var(--muted-text);text-transform:uppercase;letter-spacing:.6px;font-weight:500;margin-bottom:4px;">In Progress</div>
+                            <div id="an-sum-inprogress" style="font-size:32px;font-weight:700;color:#1d4ed8;line-height:1;">—</div>
+                            <div style="font-size:11px;color:var(--muted-text);margin-top:4px;">Being worked on</div>
+                        </div>
+                    </div>
+
+                    <!-- Completed — green -->
+                    <div class="an-metric-card" style="border:1px solid rgba(4,120,87,0.2);background:linear-gradient(135deg,rgba(4,120,87,0.06) 0%,transparent 60%);">
+                        <div style="width:48px;height:48px;border-radius:12px;background:rgba(4,120,87,0.12);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#047857" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <div style="font-size:11px;color:var(--muted-text);text-transform:uppercase;letter-spacing:.6px;font-weight:500;margin-bottom:4px;">Completed</div>
+                            <div id="an-sum-completed" style="font-size:32px;font-weight:700;color:#047857;line-height:1;">—</div>
+                            <div style="font-size:11px;color:var(--muted-text);margin-top:4px;">Resolved</div>
+                        </div>
+                    </div>
+
+                </div>
+                <p id="an-sum-note" style="font-size:12px;color:var(--muted-text);margin:-18px 0 26px;"></p>
+
+                <p class="an-section-title">Inventory Health</p>
                 <div class="an-metric-grid">
 
                     <!-- Total Items — blue -->
@@ -125,9 +198,11 @@ include __DIR__ . '/../includes/header.php';
 
                 </div>
 
-                <p style="font-size:14px;font-weight:500;margin:0 0 10px;">Items Needing Attention</p>
-                <div id="an-lowstock-container" class="table-responsive">
-                    <div class="ui-empty-state"><strong>Loading...</strong></div>
+                <div class="an-panel">
+                    <p class="an-section-title">Items Needing Attention</p>
+                    <div id="an-lowstock-container" class="table-responsive">
+                        <div class="ui-empty-state"><strong>Loading...</strong></div>
+                    </div>
                 </div>
 
             </div>
@@ -156,17 +231,58 @@ include __DIR__ . '/../includes/header.php';
                     </div>
                 </div>
 
-                <p style="font-size:14px;font-weight:500;margin:0 0 10px;">Most Damaged Items</p>
-                <div style="height:280px;margin-bottom:24px;position:relative;">
-                    <canvas id="chart-damaged" style="width:100%;height:100%;"></canvas>
-                </div>
-                <div id="an-damaged-container" class="table-responsive" style="margin-bottom:24px;">
-                    <div class="ui-empty-state"><strong>Loading...</strong></div>
+                <!-- Damage Summary — pure client-side aggregation of the same
+                     `most_damaged` rows rendered in the chart/table below;
+                     no additional fetch (see anLoadDamagedItems()). -->
+                <p class="an-section-title">Damage Summary</p>
+                <div class="an-metric-grid an-metric-grid--compact">
+
+                    <!-- Damaged Item Types — orange -->
+                    <div class="an-metric-card" style="border:1px solid rgba(217,119,6,0.22);background:linear-gradient(135deg,rgba(217,119,6,0.06) 0%,transparent 60%);">
+                        <div style="width:48px;height:48px;border-radius:12px;background:rgba(217,119,6,0.12);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <div style="font-size:11px;color:var(--muted-text);text-transform:uppercase;letter-spacing:.6px;font-weight:500;margin-bottom:4px;">Damaged Item Types</div>
+                            <div id="an-dmg-sum-types" style="font-size:32px;font-weight:700;color:#d97706;line-height:1;">—</div>
+                            <div style="font-size:11px;color:var(--muted-text);margin-top:4px;">Distinct items</div>
+                        </div>
+                    </div>
+
+                    <!-- Total Damage Events — red -->
+                    <div class="an-metric-card" style="border:1px solid rgba(220,38,38,0.22);background:linear-gradient(135deg,rgba(220,38,38,0.06) 0%,transparent 60%);">
+                        <div style="width:48px;height:48px;border-radius:12px;background:rgba(220,38,38,0.12);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                                <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <div style="font-size:11px;color:var(--muted-text);text-transform:uppercase;letter-spacing:.6px;font-weight:500;margin-bottom:4px;">Total Damage Events</div>
+                            <div id="an-dmg-sum-count" style="font-size:32px;font-weight:700;color:#dc2626;line-height:1;">—</div>
+                            <div style="font-size:11px;color:var(--muted-text);margin-top:4px;">All recorded incidents</div>
+                        </div>
+                    </div>
+
                 </div>
 
-                <p style="font-size:14px;font-weight:500;margin:0 0 10px;">Inventory Movement by Department</p>
-                <div id="an-deptusage-container" class="table-responsive">
-                    <div class="ui-empty-state"><strong>Loading...</strong></div>
+                <div class="an-panel">
+                    <p class="an-section-title">Most Damaged Items</p>
+                    <div style="height:280px;margin-bottom:20px;position:relative;">
+                        <canvas id="chart-damaged" style="width:100%;height:100%;"></canvas>
+                    </div>
+                    <div id="an-damaged-container" class="table-responsive">
+                        <div class="ui-empty-state"><strong>Loading...</strong></div>
+                    </div>
+                </div>
+
+                <div class="an-panel">
+                    <p class="an-section-title">Inventory Movement by Department</p>
+                    <div id="an-deptusage-container" class="table-responsive">
+                        <div class="ui-empty-state"><strong>Loading...</strong></div>
+                    </div>
                 </div>
 
             </div>
@@ -240,7 +356,7 @@ include __DIR__ . '/../includes/header.php';
 
             </div>
 
-            <!-- ─── TAB 4: Dispatch & Repair Reports ─────────────────────── -->
+            <!-- ─── TAB 4: Dispatch Reports ──────────────────────────────── -->
             <div id="an-tab4" class="an-tab-content" style="display:none;">
 
                 <div class="an-filter-row"
@@ -259,19 +375,86 @@ include __DIR__ . '/../includes/header.php';
                     <div></div>
                 </div>
 
-                <p style="font-size:14px;font-weight:500;margin:0 0 10px;">Inventory Activity — Last 12 Months</p>
-                <div style="height:280px;margin-bottom:24px;position:relative;">
-                    <canvas id="chart-monthly" style="width:100%;height:100%;"></canvas>
+                <!-- TASK 5 — the Date From / Date To filter above applies to
+                     the Dispatch Report table below (TASK 13 PHASE 8: the
+                     Repair Report table it also used to feed is retired), not
+                     to this chart: anLoadMonthlyChart() calls
+                     /api/analytics/monthly-comparison with no date params, and
+                     the endpoint's window is a fixed rolling 12 months. Rather
+                     than rename the title to hide that, the fixed window is
+                     stated outright so the filter's scope is unambiguous. The
+                     series is now zero-filled server-side, so every one of the
+                     12 months is plotted (months with no activity previously
+                     vanished from the axis instead of showing 0). -->
+                <!-- Dispatch Summary — pure client-side aggregation of the
+                     same `dispatches` rows rendered in the table below; no
+                     additional fetch (see anLoadDispatchReport()). -->
+                <p class="an-section-title">Dispatch Summary</p>
+                <div class="an-metric-grid an-metric-grid--compact">
+
+                    <!-- Total Dispatches — purple -->
+                    <div class="an-metric-card" style="border:1px solid rgba(109,40,217,0.2);background:linear-gradient(135deg,rgba(109,40,217,0.06) 0%,transparent 60%);">
+                        <div style="width:48px;height:48px;border-radius:12px;background:rgba(109,40,217,0.12);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#6d28d9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <div style="font-size:11px;color:var(--muted-text);text-transform:uppercase;letter-spacing:.6px;font-weight:500;margin-bottom:4px;">Total Dispatches</div>
+                            <div id="an-rpt-sum-count" style="font-size:32px;font-weight:700;color:#6d28d9;line-height:1;">—</div>
+                            <div style="font-size:11px;color:var(--muted-text);margin-top:4px;">In selected range</div>
+                        </div>
+                    </div>
+
+                    <!-- Total Items Dispatched — blue -->
+                    <div class="an-metric-card" style="border:1px solid rgba(24,95,165,0.22);background:linear-gradient(135deg,rgba(24,95,165,0.06) 0%,transparent 60%);">
+                        <div style="width:48px;height:48px;border-radius:12px;background:rgba(24,95,165,0.12);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#185FA5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                                <polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <div style="font-size:11px;color:var(--muted-text);text-transform:uppercase;letter-spacing:.6px;font-weight:500;margin-bottom:4px;">Items Dispatched</div>
+                            <div id="an-rpt-sum-items" style="font-size:32px;font-weight:700;color:#185FA5;line-height:1;">—</div>
+                            <div style="font-size:11px;color:var(--muted-text);margin-top:4px;">Distinct line items</div>
+                        </div>
+                    </div>
+
+                    <!-- Total Quantity Dispatched — green -->
+                    <div class="an-metric-card" style="border:1px solid rgba(4,120,87,0.2);background:linear-gradient(135deg,rgba(4,120,87,0.06) 0%,transparent 60%);">
+                        <div style="width:48px;height:48px;border-radius:12px;background:rgba(4,120,87,0.12);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#047857" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <div style="font-size:11px;color:var(--muted-text);text-transform:uppercase;letter-spacing:.6px;font-weight:500;margin-bottom:4px;">Total Quantity</div>
+                            <div id="an-rpt-sum-qty" style="font-size:32px;font-weight:700;color:#047857;line-height:1;">—</div>
+                            <div style="font-size:11px;color:var(--muted-text);margin-top:4px;">Units dispatched</div>
+                        </div>
+                    </div>
+
                 </div>
 
-                <p style="font-size:14px;font-weight:500;margin:0 0 10px;">Dispatch Report</p>
-                <div id="an-dispatch-container" class="table-responsive" style="margin-bottom:24px;">
-                    <div class="ui-empty-state"><strong>Loading...</strong></div>
+                <div class="an-panel">
+                    <p class="an-section-title" style="margin:0 0 4px;">Inventory Activity — Last 12 Months</p>
+                    <p style="font-size:12px;color:var(--muted-text);margin:0 0 14px;">Rolling 12-month window — not affected by the date filter above. Units of stock moved per month.</p>
+                    <div style="height:280px;position:relative;">
+                        <canvas id="chart-monthly" style="width:100%;height:100%;"></canvas>
+                    </div>
                 </div>
 
-                <p style="font-size:14px;font-weight:500;margin:0 0 10px;">Repair Report</p>
-                <div id="an-repair-container" class="table-responsive">
-                    <div class="ui-empty-state"><strong>Loading...</strong></div>
+                <!-- TASK 13 PHASE 8 — the "Repair Report" heading and its
+                     #an-repair-container table were removed from below the
+                     Dispatch Report. They were fed by
+                     GET /api/analytics/repair-report, which this task retires.
+                     The Dispatch Report is now the only table in this tab. -->
+                <div class="an-panel">
+                    <p class="an-section-title">Dispatch Report</p>
+                    <div id="an-dispatch-container" class="table-responsive">
+                        <div class="ui-empty-state"><strong>Loading...</strong></div>
+                    </div>
                 </div>
 
             </div>
@@ -287,16 +470,61 @@ include __DIR__ . '/../includes/header.php';
    routing, permissions, or data/logic changes.
    ============================================================ */
 
-/* Overview tab: Inventory Health metric cards (shared layout;
-   per-card colors stay inline). Grid rows stretch by default, so
-   all four cards already render at equal height. */
-#an-tab1 .an-metric-grid {
+/* ── Tab nav — shared across all four views. Active state is applied
+   via the .active class in anSwitchTab() (classList.toggle), not
+   inline styles. Purple accent per the PHILCST theme (--primary-color),
+   replacing the old one-off blue (#185FA5). overflow-x lets the row
+   scroll horizontally on narrow screens instead of wrapping/clipping. */
+.an-tabs {
+    display: flex;
+    gap: 4px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 20px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+.an-tab-btn {
+    appearance: none;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: 10px 16px;
+    font-size: 13.5px;
+    font-weight: 500;
+    color: var(--muted-text);
+    white-space: nowrap;
+    cursor: pointer;
+    border-radius: 8px 8px 0 0;
+    transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+.an-tab-btn:hover {
+    color: var(--primary-color);
+    background: var(--muted-card);
+}
+.an-tab-btn.active {
+    color: var(--primary-color);
+    border-bottom-color: var(--primary-color);
+    font-weight: 600;
+}
+
+/* Metric card grids — shared across all four tabs (Overview's Key
+   Analytics Summary + Inventory Health, Damage Analytics' Damage
+   Summary, Dispatch's Dispatch Summary). auto-fit + minmax makes the
+   grid self-responsive without manual breakpoints: cards wrap onto new
+   rows once they'd drop below ~200px, and never overflow the card.
+   The --compact modifier is for smaller 2-3-card summary rows so they
+   don't stretch full-width on wide (1920px) screens. Per-card colors
+   stay inline. */
+#an-analytics-card .an-metric-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     gap: 14px;
     margin-bottom: 28px;
 }
-#an-tab1 .an-metric-card {
+#an-analytics-card .an-metric-grid--compact {
+    grid-template-columns: repeat(auto-fit, minmax(200px, 240px));
+}
+#an-analytics-card .an-metric-card {
     border-radius: 12px;
     padding: 20px;
     display: flex;
@@ -304,7 +532,31 @@ include __DIR__ . '/../includes/header.php';
     gap: 16px;
 }
 
-/* Filter rows (Damage Analytics + Dispatch & Repair tabs): outside of
+/* Section titles — shared heading style for grouped sections within a
+   tab (e.g. "Key Analytics Summary", "Damage Summary"). */
+#an-analytics-card .an-section-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-light);
+    margin: 0 0 10px;
+}
+
+/* Shared chart/table panel wrapper — visually matches Tab 3's existing
+   .an-sem-panel (kept separate/untouched there) so all four tabs read
+   as one consistent card system. Metric-card grids stay unwrapped by
+   design (matches the existing Tab 3 convention); only chart/table
+   sections get this bordered panel. */
+#an-analytics-card .an-panel {
+    background: var(--card-color);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.25rem;
+    margin-bottom: 20px;
+}
+#an-analytics-card .an-panel:last-child { margin-bottom: 0; }
+
+/* Filter rows (Damage Analytics + Dispatch tabs — the latter was the
+   "Dispatch & Repair" tab before TASK 13 PHASE 8): outside of
    .form-group, .form-control has no height/padding of its own, so the
    date inputs / department select previously rendered at browser-default
    height while the Apply button used the design system's button height.
@@ -327,14 +579,13 @@ include __DIR__ . '/../includes/header.php';
 #an-sem-table .table tbody tr:last-child td,
 #an-sem-dept  .table tbody tr:last-child td  { border-bottom: none; }
 
-/* ── Responsive: keep filter rows and metric cards from overflowing on
-   tablet/mobile (the grids above use fixed inline column tracks). ──── */
+/* ── Responsive: keep filter rows from overflowing on tablet/mobile
+   (the grid uses a fixed inline column track). Metric grids above are
+   already self-responsive via auto-fit and need no breakpoint here. ── */
 @media (max-width: 900px) {
-    #an-tab1 .an-metric-grid { grid-template-columns: repeat(2, 1fr); }
     #an-analytics-card .an-filter-row { grid-template-columns: 1fr 1fr !important; }
 }
 @media (max-width: 560px) {
-    #an-tab1 .an-metric-grid { grid-template-columns: 1fr; }
     #an-analytics-card .an-filter-row { grid-template-columns: 1fr !important; }
 }
 
@@ -402,17 +653,23 @@ include __DIR__ . '/../includes/header.php';
 
 #an-tab3 .an-sem-section-title { font-size: 14px; font-weight: 500; margin: 0 0 10px; }
 
+/* TASK 13 PHASE 8 (Repair retirement) — this grid was repeat(4, 1fr) for
+   the four semester metric cards. AnalyticsService::semesterDetail() no
+   longer returns a `repairs` key, so the Repair Requests card is gone and
+   the grid is now 3-up. This is the "smallest safe adjustment" the brief
+   calls for: without it the three surviving cards would stretch across a
+   4-column track and leave a dead cell. */
 #an-tab3 .an-sem-cards-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 14px;
     margin-bottom: 24px;
 }
 
 /* Per-metric color identity (matches Metric Comparison table + chart
    legend semantics): Maintenance Reports = purple, Dispatches = blue,
-   Damage Reports = orange, Repair Requests = green. Accent border/icon
-   only — the S1/S2 values, arrow, and Year Total are unchanged. */
+   Damage Reports = orange. Accent border/icon only — the S1/S2 values,
+   arrow, and Year Total are unchanged. */
 #an-tab3 .an-sem-card {
     border-radius: 12px;
     padding: 1.25rem 1.1rem;
@@ -425,7 +682,9 @@ include __DIR__ . '/../includes/header.php';
 #an-tab3 .an-sem-card--maintenance { border-top-color: #8b5cf6; }
 #an-tab3 .an-sem-card--dispatches  { border-top-color: #185FA5; }
 #an-tab3 .an-sem-card--damage      { border-top-color: #d97706; }
-#an-tab3 .an-sem-card--repairs     { border-top-color: #1D9E75; }
+/* TASK 13 PHASE 8 — the .an-sem-card--repairs accent rule was removed here
+   (and its matching icon-background rule below). The three surviving
+   modifiers are untouched. */
 
 #an-tab3 .an-sem-card-icon {
     width: 34px;
@@ -439,7 +698,6 @@ include __DIR__ . '/../includes/header.php';
 #an-tab3 .an-sem-card--maintenance .an-sem-card-icon { background: rgba(139, 92, 246, 0.14); }
 #an-tab3 .an-sem-card--dispatches  .an-sem-card-icon { background: rgba(24, 95, 165, 0.14); }
 #an-tab3 .an-sem-card--damage      .an-sem-card-icon { background: rgba(217, 119, 6, 0.14); }
-#an-tab3 .an-sem-card--repairs     .an-sem-card-icon { background: rgba(29, 158, 117, 0.14); }
 
 #an-tab3 .an-sem-card-label {
     font-size: 11px;
@@ -540,18 +798,9 @@ function anStockBadge(qty, threshold) {
     return '<span style="background:#d1fae5;color:#065f46;padding:2px 8px;border-radius:10px;font-size:12px;font-weight:500;">Available</span>';
 }
 
-function anRepairBadge(status) {
-    const map = {
-        pending:     'background:#fef3c7;color:#92400e',
-        assigned:    'background:#dbeafe;color:#1e40af',
-        in_progress: 'background:#ffedd5;color:#9a3412',
-        completed:   'background:#d1fae5;color:#065f46',
-        archived:    'background:#f3f4f6;color:#374151',
-    };
-    const style = map[status] || 'background:#f3f4f6;color:#374151';
-    const label = String(status || '').replace(/_/g, ' ').replace(/\b\w/g, (s) => s.toUpperCase());
-    return `<span style="${style};padding:2px 8px;border-radius:10px;font-size:12px;font-weight:500;">${anEsc(label)}</span>`;
-}
+// TASK 13 PHASE 8 — anRepairBadge() was removed here. It rendered the
+// repair_requests.repair_status vocabulary for the Repair Report table's
+// Status column, and that table is gone. It had no other caller.
 
 // ---------------------------------------------------------------------------
 // Tab switching (lazy-loads each tab on first activation)
@@ -562,16 +811,13 @@ function anSwitchTab(tabId) {
     document.getElementById(tabId).style.display = 'block';
 
     document.querySelectorAll('.an-tab-btn').forEach((btn) => {
-        const active = btn.dataset.tab === tabId;
-        btn.style.borderBottom = active ? '2px solid #185FA5' : '2px solid transparent';
-        btn.style.color        = active ? '#185FA5' : 'var(--muted-text)';
-        btn.style.fontWeight   = active ? '500'     : '400';
+        btn.classList.toggle('active', btn.dataset.tab === tabId);
     });
 
     if (!anLoadedTabs.has(tabId)) {
         anLoadedTabs.add(tabId);
         switch (tabId) {
-            case 'an-tab1': anLoadHealth(); anLoadLowStock(); break;
+            case 'an-tab1': anLoadSummary(); anLoadHealth(); anLoadLowStock(); break;
             case 'an-tab2': anLoadTab2Data(); break;
             case 'an-tab3': anLoadSemesterDetail(); break;
             case 'an-tab4': anLoadTab4Data(); break;
@@ -634,6 +880,40 @@ async function anLoadLowStock() {
     }
 }
 
+// Key Analytics Summary — reuses the existing, unrestricted
+// /api/dashboard/stats endpoint (same one the main Dashboard page calls;
+// no new endpoint/query). total_reports/pending/in_progress/completed
+// come back `null` when no semester is currently active — that is shown
+// as an explicit note rather than guessed at or left blank/zeroed.
+async function anLoadSummary() {
+    const noteEl = document.getElementById('an-sum-note');
+    try {
+        const url = window.SFMS_PUBLIC_URL
+            ? window.SFMS_PUBLIC_URL('/api/dashboard/stats')
+            : '/api/dashboard/stats';
+        const { response, data: payload } = await anFetch(
+            url,
+            { credentials: 'same-origin', headers: { 'Accept': 'application/json' } }
+        );
+        if (!response.ok || !payload.success) throw new Error(payload.message || 'Failed');
+        const d = payload.data;
+
+        document.getElementById('an-sum-total').textContent      = d.total_reports ?? '—';
+        document.getElementById('an-sum-pending').textContent    = d.pending       ?? '—';
+        document.getElementById('an-sum-inprogress').textContent = d.in_progress   ?? '—';
+        document.getElementById('an-sum-completed').textContent  = d.completed     ?? '—';
+
+        if (noteEl) {
+            noteEl.textContent = d.semester_active
+                ? ''
+                : 'No active semester — report counts will resume once the next semester starts.';
+        }
+    } catch (_) {
+        // Cards stay as '—' — non-fatal; other Overview widgets load independently
+        if (noteEl) noteEl.textContent = '';
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Options — populates Tab 2 department dropdown (called once at init)
 // ---------------------------------------------------------------------------
@@ -686,6 +966,13 @@ async function anLoadDamagedItems() {
         if (!response.ok || !payload.success) throw new Error(payload.message || 'Failed');
         const rows = Array.isArray(payload.data?.most_damaged) ? payload.data.most_damaged : [];
 
+        // Damage Summary cards — pure client-side aggregation of the same
+        // `rows` rendered into the table below; no additional fetch.
+        const sumTypes = document.getElementById('an-dmg-sum-types');
+        const sumCount = document.getElementById('an-dmg-sum-count');
+        if (sumTypes) sumTypes.textContent = rows.length;
+        if (sumCount) sumCount.textContent = rows.reduce((t, r) => t + (Number(r.damage_count) || 0), 0);
+
         // ── Horizontal bar chart — top 10, reversed so highest bar is at top ──
         if (anChartDamaged) { anChartDamaged.destroy(); anChartDamaged = null; }
         const top10 = rows.slice(0, 10).slice().reverse();
@@ -703,9 +990,15 @@ async function anLoadDamagedItems() {
                 },
                 options: {
                     indexAxis: 'y',
+                    // READABILITY TASK: axis tick color was '#b8aacc', a pale
+                    // lavender-gray that reads as near-invisible on this
+                    // chart's white card (≈1.8:1 contrast) — the y-axis here
+                    // is the item NAME for each bar, not decoration, so it
+                    // needs to be readable, not just muted. No data/scale
+                    // values changed, only the tick label color.
                     scales: {
-                        y: { ticks: { color: '#b8aacc' } },
-                        x: { grid:  { color: 'rgba(168,139,250,0.1)' }, ticks: { color: '#b8aacc' } },
+                        y: { ticks: { color: '#4b5563' } },
+                        x: { grid:  { color: 'rgba(168,139,250,0.1)' }, ticks: { color: '#4b5563' } },
                     },
                 },
             });
@@ -880,20 +1173,24 @@ async function anLoadSemesterDetail() {
             periodCard.style.display = 'flex';
         }
 
-        // Per-metric color identity (purple/blue/orange/green) + matching
-        // outline icons, reused by both the summary cards below and the
-        // Metric Comparison table further down.
+        // Per-metric color identity (purple/blue/orange) + matching outline
+        // icons, reused by both the summary cards below and the Metric
+        // Comparison table further down.
+        //
+        // TASK 13 PHASE 8 (Repair retirement) — the `repairs` entry (green
+        // #1D9E75, gear/settings glyph) was removed from this map, from
+        // _metricAccent below, and from the `metrics` array. Green is still
+        // used on this tab for the S2 chart series and the positive-trend
+        // arrow; only the per-metric Repair identity is gone.
         const _metricIconPaths = {
             maintenance_reports: '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
             dispatches:          '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>',
             damage_reports:      '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
-            repairs:             '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
         };
         const _metricAccent = {
             maintenance_reports: '#8b5cf6',
             dispatches:          '#185FA5',
             damage_reports:      '#d97706',
-            repairs:             '#1D9E75',
         };
         const anSemIcon = (key, size) =>
             `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${_metricAccent[key]}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;">${_metricIconPaths[key]}</svg>`;
@@ -902,7 +1199,13 @@ async function anLoadSemesterDetail() {
             { key: 'maintenance_reports', label: 'Maintenance Reports', slug: 'maintenance' },
             { key: 'dispatches',          label: 'Dispatches',          slug: 'dispatches'  },
             { key: 'damage_reports',      label: 'Damage Reports',      slug: 'damage'      },
-            { key: 'repairs',             label: 'Repair Requests',     slug: 'repairs'     },
+            // TASK 13 PHASE 8 — { key: 'repairs', label: 'Repair Requests',
+            // slug: 'repairs' } was removed. This array drives BOTH the
+            // summary cards (4 → 3) and the Metric Comparison table below
+            // (4 rows → 3), so the single deletion covers both surfaces.
+            // AnalyticsService::semesterDetail() no longer returns a
+            // `repairs` key, so leaving it would have rendered a card and a
+            // table row permanently reading 0.
         ];
 
         // ── Summary cards ──────────────────────────────────────────────────
@@ -912,7 +1215,17 @@ async function anLoadSemesterDetail() {
             const v2         = s2[m.key] ?? 0;
             const total      = v1 + v2;
             const arrowColor = v2 > v1 ? '#1D9E75' : v2 < v1 ? '#A32D2D' : 'var(--muted-text)';
-            const arrow      = v2 > v1 ? '↑' : v2 < v1 ? '↓' : '—';
+            // TASK 7 — were ↑ / ↓ / — text glyphs. These are NOT decorative:
+            // the arrow is the only thing stating the direction of the trend,
+            // so each gets a real accessible name via the registry's `label`
+            // option (which emits role="img" + aria-label) instead of
+            // aria-hidden. Direction is therefore never carried by colour
+            // alone, which is all arrowColor above was doing.
+            const arrowName  = v2 > v1 ? 'arrow-up' : v2 < v1 ? 'arrow-down' : 'minus';
+            const arrowLabel = v2 > v1 ? 'Increased' : v2 < v1 ? 'Decreased' : 'No change';
+            const arrow      = window.UIIcons
+                ? window.UIIcons.svg(arrowName, { size: 20, label: arrowLabel })
+                : '';
             cardsHtml += `
                 <div class="an-sem-card an-sem-card--${m.slug}">
                     <div class="an-sem-card-icon">${anSemIcon(m.key, 18)}</div>
@@ -949,15 +1262,21 @@ async function anLoadSemesterDetail() {
             anChartSemester = new Chart(cvsSem, {
                 type: 'bar',
                 data: {
-                    labels: ['Maint S1', 'Maint S2', 'Dispatch S1', 'Dispatch S2', 'Damage S1', 'Damage S2', 'Repair S1', 'Repair S2'],
+                    // TASK 13 PHASE 8 — 'Repair S1' / 'Repair S2' were the
+                    // last pair of bars. Removing them takes this chart from
+                    // 8 bars to 6; the labels, data and backgroundColor
+                    // arrays are all index-aligned, so all three were
+                    // trimmed by exactly two entries. The alternating
+                    // S1-blue/S2-green pattern is preserved, and the three
+                    // surviving metric pairs keep their original order.
+                    labels: ['Maint S1', 'Maint S2', 'Dispatch S1', 'Dispatch S2', 'Damage S1', 'Damage S2'],
                     datasets: [{
                         data: [
                             s1.maintenance_reports ?? 0, s2.maintenance_reports ?? 0,
                             s1.dispatches          ?? 0, s2.dispatches          ?? 0,
                             s1.damage_reports      ?? 0, s2.damage_reports      ?? 0,
-                            s1.repairs             ?? 0, s2.repairs             ?? 0,
                         ],
-                        backgroundColor: [C_S1, C_S2, C_S1, C_S2, C_S1, C_S2, C_S1, C_S2],
+                        backgroundColor: [C_S1, C_S2, C_S1, C_S2, C_S1, C_S2],
                         borderRadius: 4,
                     }],
                 },
@@ -972,7 +1291,13 @@ async function anLoadSemesterDetail() {
         }
 
         // ── Metric comparison table (reuses the color-coded icons above) ──
-        const _thS = 'font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted-text);padding-bottom:8px;border-bottom:0.5px solid var(--border);';
+        // READABILITY TASK: header text was color:var(--muted-text) (~#6b7280),
+        // legible but far lighter than the task's dark-heading requirement for
+        // table headers. Switched to --text-heading (#111827, styles.css) so
+        // "Metric / 1st Sem / 2nd Sem / Change / Trend" read as strong dark
+        // headings; the lighter date-range sub-label inside each <th> keeps
+        // var(--muted-text) on purpose (it is genuinely secondary support text).
+        const _thS = 'font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-heading,#1f2937);padding-bottom:8px;border-bottom:0.5px solid var(--border);';
         let tableHtml = '<table class="table" style="width:100%;"><thead><tr>'
             + `<th style="${_thS}">Metric</th>`
             + `<th style="${_thS}text-align:center;">1st Sem<br><span style="font-size:10px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted-text);">${anEsc(s1Range)}</span></th>`
@@ -1013,7 +1338,10 @@ async function anLoadSemesterDetail() {
             document.getElementById('an-sem-dept').innerHTML =
                 '<div class="ui-empty-state"><strong>No department data for the configured semesters.</strong></div>';
         } else {
-            const _thD = 'font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted-text);padding-bottom:8px;border-bottom:0.5px solid var(--border);';
+            // READABILITY TASK: same header-darkening fix as _thS above, applied
+            // to "Department / S1 Damage / S2 Damage / S1 Dispatches / S2
+            // Dispatches / Total Activity".
+            const _thD = 'font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-heading,#1f2937);padding-bottom:8px;border-bottom:0.5px solid var(--border);';
             let deptHtml = '<table class="table" style="width:100%;"><thead><tr>'
                 + `<th style="${_thD}">Department</th>`
                 + `<th style="${_thD}text-align:center;">S1 Damage</th>`
@@ -1057,7 +1385,8 @@ async function anLoadSemesterDetail() {
 }
 
 // ---------------------------------------------------------------------------
-// TAB 4: Dispatch & Repair Reports
+// TAB 4: Dispatch Reports
+// (TASK 13 PHASE 8 — was "Dispatch & Repair Reports".)
 // ---------------------------------------------------------------------------
 
 async function anLoadMonthlyChart() {
@@ -1094,9 +1423,13 @@ async function anLoadMonthlyChart() {
                 }],
             },
             options: {
+                // READABILITY TASK: same '#b8aacc' near-invisible tick fix as
+                // the Most Damaged Items chart above — these ticks are the
+                // month labels and dispatch counts on the Dispatch Reports
+                // tab's monthly chart.
                 scales: {
-                    y: { grid:  { color: 'rgba(168,139,250,0.1)' }, ticks: { color: '#b8aacc' } },
-                    x: { ticks: { color: '#b8aacc' } },
+                    y: { grid:  { color: 'rgba(168,139,250,0.1)' }, ticks: { color: '#4b5563' } },
+                    x: { ticks: { color: '#4b5563' } },
                 },
             },
         });
@@ -1106,9 +1439,10 @@ async function anLoadMonthlyChart() {
 }
 
 function anLoadTab4Data() {
+    // TASK 13 PHASE 8 — the anLoadRepairReport() call was removed here with
+    // the function itself. The tab's other two loaders are unaffected.
     anLoadMonthlyChart();
     anLoadDispatchReport();
-    anLoadRepairReport();
 }
 
 async function anLoadDispatchReport() {
@@ -1127,6 +1461,15 @@ async function anLoadDispatchReport() {
         );
         if (!response.ok || !payload.success) throw new Error(payload.message || 'Failed');
         const rows = Array.isArray(payload.data?.dispatches) ? payload.data.dispatches : [];
+
+        // Dispatch Summary cards — pure client-side aggregation of the same
+        // `rows` rendered into the table below; no additional fetch.
+        const sumCount = document.getElementById('an-rpt-sum-count');
+        const sumItems = document.getElementById('an-rpt-sum-items');
+        const sumQty   = document.getElementById('an-rpt-sum-qty');
+        if (sumCount) sumCount.textContent = rows.length;
+        if (sumItems) sumItems.textContent = rows.reduce((t, r) => t + (Number(r.items_count) || 0), 0);
+        if (sumQty)   sumQty.textContent   = rows.reduce((t, r) => t + (Number(r.total_quantity) || 0), 0);
 
         if (rows.length === 0) {
             container.innerHTML = '<div class="ui-empty-state"><strong>No dispatch records found.</strong></div>';
@@ -1150,44 +1493,10 @@ async function anLoadDispatchReport() {
     }
 }
 
-async function anLoadRepairReport() {
-    const container = document.getElementById('an-repair-container');
-    container.innerHTML = '<div class="ui-empty-state"><strong>Loading...</strong></div>';
-    try {
-        const params = new URLSearchParams();
-        const from = document.getElementById('an-rpt-from').value;
-        const to   = document.getElementById('an-rpt-to').value;
-        if (from) params.set('date_from', from);
-        if (to)   params.set('date_to', to);
-
-        const { response, data: payload } = await anFetch(
-            `${AN_API}/repair-report?${params.toString()}`,
-            { credentials: 'same-origin', headers: { 'Accept': 'application/json' } }
-        );
-        if (!response.ok || !payload.success) throw new Error(payload.message || 'Failed');
-        const rows = Array.isArray(payload.data?.repairs) ? payload.data.repairs : [];
-
-        if (rows.length === 0) {
-            container.innerHTML = '<div class="ui-empty-state"><strong>No repair records found.</strong></div>';
-            return;
-        }
-
-        let html = '<table class="table"><thead><tr>'
-            + '<th>Repair Code</th><th>Status</th><th>Count</th>'
-            + '</tr></thead><tbody>';
-        rows.forEach((row) => {
-            html += '<tr>';
-            html += `<td><strong>${anEsc(row.repair_code)}</strong></td>`;
-            html += `<td>${anRepairBadge(row.repair_status)}</td>`;
-            html += `<td>${anEsc(row.count)}</td>`;
-            html += '</tr>';
-        });
-        html += '</tbody></table>';
-        container.innerHTML = html;
-    } catch (err) {
-        container.innerHTML = '<div class="ui-empty-state"><strong>Failed to load repair report.</strong></div>';
-    }
-}
+// TASK 13 PHASE 8 — anLoadRepairReport() was removed here. It was the only
+// caller of GET /api/analytics/repair-report, which this task retires, and it
+// rendered into the #an-repair-container table that went with it.
+// anLoadDispatchReport() above is the Dispatch equivalent and is untouched.
 
 // ---------------------------------------------------------------------------
 // Init

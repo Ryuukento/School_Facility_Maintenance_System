@@ -5,14 +5,36 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Services\ActivityLogService;
+use App\Services\RoleNormalizerService;
 use App\Support\ApiResponder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rule;
 
 class UserController extends Controller
 {
     use ApiResponder;
+
+    /**
+     * TASK 37 — roles whose accounts are meaningless without a department.
+     *
+     * Both of these are department-scoped roles: report visibility, assignment
+     * and the users-page role label are all resolved through the account's
+     * department. A Head with no department renders as a bare "Head" in
+     * users.php::getRoleLabel() and matches no department-scoped query, so
+     * creating one produces an account that looks valid and works nowhere.
+     * super_admin is deliberately absent — an Administrator is system-wide and
+     * has no department by design (the live Administrator account carries
+     * department_id = NULL).
+     *
+     * Stored in canonical form. The submitted role is normalized through
+     * RoleNormalizerService before being compared against this list, so the
+     * legacy aliases that Rule::in() accepts below ('admin_maintenance',
+     * 'eelab_staff', 'maintenance_personnel') cannot be used to slip past the
+     * requirement.
+     */
+    private const DEPARTMENT_REQUIRED_ROLES = ['maintenance_admin', 'maintenance_staff'];
 
     public function __construct(
         private readonly ActivityLogService $activityLogService
@@ -26,9 +48,26 @@ class UserController extends Controller
             'username'      => ['required', 'string', 'min:3', 'max:50', 'unique:users,username'],
             'email'         => ['nullable', 'email', 'max:255', 'unique:users,email'],
             'password'      => ['required', 'string', 'min:8'],
-            'role'          => ['required', 'string'],
-            'department_id' => ['nullable', 'integer', 'exists:departments,department_id'],
+            // The create-user modal only ever offers these three roles;
+            // without a whitelist a typo'd/malicious role string could be
+            // persisted and silently fail every role check in the app.
+            'role'          => ['required', 'string', Rule::in(RoleNormalizerService::rawValuesFor([
+                'super_admin', 'maintenance_admin', 'maintenance_staff',
+            ]))],
+            // TASK 37 — department is conditional on the role, enforced here
+            // rather than only in the modal: hiding the field in JavaScript
+            // says nothing about what a direct POST to this endpoint can do.
+            'department_id' => [
+                Rule::requiredIf(fn (): bool => $this->roleRequiresDepartment($request->input('role'))),
+                'nullable',
+                'integer',
+                'exists:departments,department_id',
+            ],
             'designation'   => ['nullable', 'string', 'max:255'],
+        ], [
+            // Without this the API returns "The department id field is
+            // required", which is what the register modal renders verbatim.
+            'department_id.required' => 'Department is required for this role.',
         ]);
 
         $userId = DB::table('users')->insertGetId([
@@ -59,6 +98,18 @@ class UserController extends Controller
             'force_profile_update' => 1,
         ]);
 
+        // Resolve any pending "Password Reset Request" notification(s) for
+        // this user now that an Administrator has actually reset the
+        // password — otherwise index()'s has_pending_password_reset_request
+        // flag (and the "Reset Password" quick action it drives) stays
+        // stuck on forever, since nothing else ever marks it read.
+        DB::table('notifications')
+            ->where('entity_type', 'user')
+            ->where('entity_id', $user->user_id)
+            ->where('title', 'Password Reset Request')
+            ->where('is_read', 0)
+            ->update(['is_read' => 1]);
+
         return $this->ok('Password reset successfully');
     }
 
@@ -70,6 +121,22 @@ class UserController extends Controller
                 'u.status', 'u.avatar', 'u.created_at',
                 'd.name as department_name',
             ])
+            // TASK 17 wired forgotPasswordRequest() to notify Administrators
+            // via a 'Password Reset Request' notification linked with
+            // entity_type='user' / entity_id=<requesting user>, and
+            // users.php's renderUserCard() already reads this flag to show a
+            // "Reset Password" quick action — but this query never selected
+            // it, so that button could never appear.
+            ->selectRaw(
+                'EXISTS (
+                    SELECT 1 FROM notifications n
+                    WHERE n.entity_type = ?
+                      AND n.entity_id = u.user_id
+                      AND n.title = ?
+                      AND n.is_read = 0
+                ) as has_pending_password_reset_request',
+                ['user', 'Password Reset Request']
+            )
             ->leftJoin('departments as d', 'd.department_id', '=', 'u.department_id')
             ->whereRaw('LOWER(u.role) <> ?', ['super_admin'])
             ->orderByDesc('u.created_at')
@@ -109,6 +176,21 @@ class UserController extends Controller
             return $this->ok('User is already active');
         }
 
+        // TASK 54 — activate() is the role-PRESERVING reactivation path (see
+        // approve()'s comment below), so it must only ever run on a user
+        // approve() has already assigned a real role to. A never-approved
+        // self-signup is role='user'/status='pending' (AuthController::
+        // register()); preserving that role while flipping status to
+        // 'active' would produce role='user' + status='active' — a state the
+        // approval workflow is built to make unreachable, and one that
+        // EnsureApiAuthenticated (which gates on status only, never role)
+        // admits to every route that carries no EnsureRole. Pending users
+        // must go through approve(), which is where a role gets assigned.
+        // Mirrors reject()'s and approve()'s existing pending checks.
+        if (strtolower((string)$user->status) === 'pending') {
+            return $this->fail('Pending users must be approved, not activated', 400);
+        }
+
         $user->update(['status' => 'active']);
         $this->logStatusChange($request, 'ACTIVATE_USER', (int)$user->user_id, 'Set user #' . $user->user_id . ' to active');
 
@@ -121,8 +203,22 @@ class UserController extends Controller
             'role' => ['required', 'string', 'in:maintenance_admin,maintenance_staff'],
         ]);
 
-        if (strtolower((string)$user->status) === 'active') {
-            return $this->fail('User is already approved', 400);
+        // Mirrors the same guard deactivate()/activate()/reject() already
+        // enforce ("Administrator accounts cannot be changed here") — this
+        // was the one status-mutating action in this controller missing it.
+        if (strtolower((string)$user->role) === 'super_admin') {
+            return $this->fail('Administrator accounts cannot be changed here', 400);
+        }
+
+        // approve() is reject()'s twin in the pending-user workflow, which
+        // already restricts itself to status==='pending' ("Only pending
+        // users can be rejected"). approve() only checked status !== 'active',
+        // so it could silently reactivate + reassign the role of an
+        // already-inactive user — a path the UI never takes (renderUserCard()
+        // only offers Approve for status==='pending' cards; Set Active/
+        // activate() is the dedicated, role-preserving reactivation path).
+        if (strtolower((string)$user->status) !== 'pending') {
+            return $this->fail('Only pending users can be approved', 400);
         }
 
         $user->update([
@@ -192,7 +288,16 @@ class UserController extends Controller
         $username        = strtolower(trim((string)$request->input('username', '')));
         $email           = trim((string)$request->input('email_address', $currentUser->email ?? ''));
         $currentPassword = (string)$request->input('current_password', '');
-        $newPassword     = trim((string)$request->input('new_password', ''));
+        // Deliberately NOT trimmed: every other password-set path in this
+        // codebase (register(), UserController::store(), resetPassword(),
+        // forgotPasswordReset()) hashes the raw input, and AuthController::
+        // login() compares the raw input via Hash::check() without trimming.
+        // Trimming only here silently stored a different string than what
+        // the user actually typed, so a new password containing a leading/
+        // trailing space would hash correctly on save but never match again
+        // at login. Keeping this consistent with the rest of the app fixes
+        // that mismatch.
+        $newPassword     = (string)$request->input('new_password', '');
         $isForcedSetup   = !empty($currentUser->force_profile_update);
 
         if ($fullName === '') {
@@ -298,6 +403,31 @@ class UserController extends Controller
                 'force_profile_update' => 0,
             ],
         ]);
+    }
+
+    /**
+     * TASK 37 — does this submitted role oblige the account to carry a
+     * department?
+     *
+     * Normalizes through the project's existing RoleNormalizerService rather
+     * than string-comparing the raw input. That matters: Rule::in() above
+     * accepts every alias rawValuesFor() expands to, so a POST carrying
+     * role='admin_maintenance' is a legitimate Head. Comparing the raw string
+     * against 'maintenance_admin' would treat it as a role with no department
+     * obligation and let a department-less Head through the one check meant to
+     * stop it.
+     */
+    private function roleRequiresDepartment(mixed $role): bool
+    {
+        if (!is_string($role)) {
+            return false;
+        }
+
+        return in_array(
+            RoleNormalizerService::normalize($role),
+            self::DEPARTMENT_REQUIRED_ROLES,
+            true
+        );
     }
 
     private function logStatusChange(Request $request, string $action, int $targetUserId, string $details): void

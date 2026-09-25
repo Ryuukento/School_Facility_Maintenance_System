@@ -60,12 +60,39 @@ const API = {
      * Update the current user's profile, including optional avatar upload
      */
     async updateProfile(formData) {
+        // TASK 41B: this endpoint is registered as Route::patch('profile',
+        // ...) and this call always sends multipart/form-data (required for
+        // the optional profile_picture file field). On PHP < 8.4, PHP's
+        // SAPI (and Symfony's Request::createFromGlobals() fallback used
+        // for any non-urlencoded content type) only auto-parses
+        // multipart/form-data bodies into $_POST/$_FILES for genuine HTTP
+        // POST requests -- never for PUT/PATCH/DELETE, even with an
+        // identical body. A real PATCH here (this app runs PHP 8.2) meant
+        // the entire body -- full_name, username, email, current_password,
+        // new_password, the file -- silently arrived empty at the server.
+        // UserController::updateProfile() falls back to each field's
+        // existing stored value when absent, and its password-update block
+        // is skipped entirely by an `if ($newPassword !== '')` guard, so
+        // the endpoint still returned HTTP 200 "Profile updated
+        // successfully" -- while nothing was actually persisted. That is
+        // why Account Settings reported success but the new password could
+        // never log in afterward.
+        //
+        // Fix: send a genuine POST (so PHP/Symfony parse the multipart body
+        // correctly) and append Laravel's method-spoofing field
+        // (_method=PATCH) so the router still matches
+        // Route::patch('profile', ...). Laravel enables
+        // enableHttpMethodParameterOverride() by default, so this requires
+        // no backend or route changes and leaves every other request path
+        // (which are all POST or JSON already) untouched.
+        formData.append('_method', 'PATCH');
+
         const response = await fetch(
             window.SFMS_PUBLIC_URL
                 ? window.SFMS_PUBLIC_URL('/api/users/profile')
                 : '/api/users/profile',
             {
-                method: 'PATCH',
+                method: 'POST',
                 credentials: 'include',
                 body: formData
             }

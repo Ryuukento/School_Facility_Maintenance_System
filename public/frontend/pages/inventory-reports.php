@@ -459,7 +459,7 @@ include __DIR__ . '/../includes/header.php';
 /* Per-card accent — flat tint on the icon tile only. The value stays full
    contrast so four cards don't compete; only the warning card tints its number,
    because that one is meant to pull the eye. */
-.ir-stat-accent-bodega  .ir-stat-icon { color: #a78bfa; background: rgba(139,  92, 246, .12); border-color: rgba(139,  92, 246, .24); }
+.ir-stat-accent-inventory  .ir-stat-icon { color: #a78bfa; background: rgba(139,  92, 246, .12); border-color: rgba(139,  92, 246, .24); }
 .ir-stat-accent-rooms   .ir-stat-icon { color: #60a5fa; background: rgba( 59, 130, 246, .12); border-color: rgba( 59, 130, 246, .24); }
 .ir-stat-accent-total   .ir-stat-icon { color: #34d399; background: rgba( 16, 185, 129, .12); border-color: rgba( 16, 185, 129, .24); }
 .ir-stat-accent-warning .ir-stat-icon { color: #fbbf24; background: rgba(245, 158,  11, .13); border-color: rgba(245, 158,  11, .26); }
@@ -800,8 +800,11 @@ include __DIR__ . '/../includes/header.php';
 }
 
 /* ── 6. Room list + search ───────────────────────────────────────────────── */
+/* 300px rather than the previous 260px: the rail now nests a per-building
+   search field inside a padded panel, and at 260px that input had ~230px of
+   usable width and clipped its own placeholder. */
 .ir-rooms {
-    width: 260px;
+    width: 300px;
     display: flex;
     flex-direction: column;
     border-right: 1px solid var(--ir-border);
@@ -884,16 +887,10 @@ include __DIR__ . '/../includes/header.php';
     border-radius: 999px;
 }
 
-.ir-group-label {
-    padding: 14px 10px 6px;
-    font-size: 10.5px;
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: .07em;
-    color: var(--ir-dim);
-}
-
-.ir-group-label:first-child { padding-top: 6px; }
+/* .ir-group-label was removed with the flat room list. It styled the inline
+   building captions that separated groups of rooms in the old single-level
+   rail; buildings are now real expandable rows (.ir-bld-btn), so nothing
+   rendered it any more. */
 
 .ir-room-btn {
     display: flex;
@@ -954,13 +951,163 @@ include __DIR__ . '/../includes/header.php';
 .ir-room-btn .ir-room-count:empty { display: none; }
 .ir-room-btn.ir-active .ir-room-count { color: var(--ir-muted); }
 
+/* ── 6b. Building → rooms accordion ──────────────────────────────────────── */
+/* The rail used to render every room (~163) as one flat list, so finding a room
+   meant scrolling past all the others. It now lists BUILDINGS only; a building's
+   rooms are built into its panel the first time it is expanded, so the initial
+   DOM holds one row per building instead of one row per room.
+
+   Room rows inside a panel deliberately reuse .ir-room-btn — same hover, same
+   focus ring, same .ir-active selected state — so selecting a room looks and
+   behaves exactly as it did before this change. */
+
+.ir-bld {
+    margin-bottom: 6px;
+    background: var(--ir-panel);
+    border: 1px solid var(--ir-border);
+    border-radius: var(--ir-radius-md);
+    box-shadow: var(--ir-shadow-1);
+    overflow: hidden;
+}
+
+.ir-bld.ir-open { border-color: rgba(139, 92, 246, .30); }
+
+.ir-bld-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 9px 10px;
+    text-align: left;
+    font-family: inherit;
+    font-size: 12.5px;
+    font-weight: 600;
+    line-height: 1.35;
+    letter-spacing: -.005em;
+    color: var(--ir-text);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    transition: background var(--ir-t);
+}
+
+.ir-bld-btn:hover { background: var(--ir-hover); }
+
+.ir-bld-btn:focus-visible {
+    outline: none;
+    box-shadow: inset 0 0 0 2px rgba(139, 92, 246, .45);
+}
+
+/* ▸ collapsed / ▼ expanded. One chevron rotated 90deg rather than two glyphs,
+   so the state change reads as a single element moving. */
+.ir-bld-caret {
+    flex-shrink: 0;
+    width: 13px;
+    height: 13px;
+    color: var(--ir-dim);
+    transition: transform var(--ir-t), color var(--ir-t);
+}
+
+.ir-bld.ir-open .ir-bld-caret {
+    transform: rotate(90deg);
+    color: var(--ir-accent-text);
+}
+
+/* Long building names truncate rather than wrapping the row to two lines; the
+   button carries a title attribute so the full name stays reachable. */
+.ir-bld-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ir-bld-count {
+    flex-shrink: 0;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--ir-dim);
+    font-variant-numeric: tabular-nums;
+}
+
+/* display:none, not max-height:0 — a collapsed building must cost nothing in
+   height AND nothing in the tab order. */
+.ir-bld-panel {
+    display: none;
+    padding: 8px;
+    border-top: 1px solid var(--ir-border-soft);
+    background: var(--ir-well);
+}
+
+.ir-bld.ir-open > .ir-bld-panel { display: block; }
+
+.ir-bld-search { position: relative; display: block; margin-bottom: 6px; }
+
+.ir-bld-search .ir-search-icon { width: 13px; height: 13px; left: 9px; }
+
+.ir-bld-search-input {
+    width: 100%;
+    padding: 6px 10px 6px 29px;
+    font-family: inherit;
+    font-size: 12px;
+    color: var(--ir-text);
+    background: var(--ir-panel);
+    border: 1px solid var(--ir-border-strong);
+    border-radius: var(--ir-radius-sm);
+    box-shadow: var(--ir-inset-field);
+    transition: border-color var(--ir-t), box-shadow var(--ir-t);
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.ir-bld-search-input::placeholder { color: var(--ir-dim); }
+.ir-bld-search-input::-webkit-search-cancel-button { filter: grayscale(1) opacity(.6); }
+.ir-bld-search-input:hover { border-color: rgba(148, 163, 184, .28); }
+
+.ir-bld-search-input:focus {
+    outline: none;
+    border-color: var(--ir-accent);
+    box-shadow: 0 0 0 3px rgba(139, 92, 246, .16);
+}
+
+/* Each building's room list scrolls on its own, so opening several buildings
+   at once can never push the rail to an unusable height. */
+.ir-bld-rooms {
+    max-height: 264px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(148, 163, 184, .26) transparent;
+}
+
+.ir-bld-rooms::-webkit-scrollbar       { width: 8px; }
+.ir-bld-rooms::-webkit-scrollbar-track { background: transparent; }
+.ir-bld-rooms::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, .22);
+    border: 2px solid transparent;
+    background-clip: content-box;
+    border-radius: 999px;
+}
+
+/* Compact in-panel message — the full .ir-empty block is far too tall for a
+   260px rail. */
+.ir-bld-note {
+    padding: 10px 8px;
+    font-size: 11.5px;
+    line-height: 1.45;
+    color: var(--ir-dim);
+    text-align: center;
+}
+
+.ir-hidden { display: none !important; }
+
 /* ── Content panes, section headings, report blocks ──────────────────────── */
 .ir-pane   { padding: 28px; }
 .ir-detail { padding: 28px; min-width: 0; }
 
 .ir-section-inner {
     display: grid;
-    grid-template-columns: 260px minmax(0, 1fr);
+    grid-template-columns: 300px minmax(0, 1fr);
     align-items: stretch;
     min-height: 560px;
 }
@@ -1077,8 +1224,8 @@ include __DIR__ . '/../includes/header.php';
 /* ── Responsive ──────────────────────────────────────────────────────────── */
 @media (max-width: 1024px) {
     .ir-nav   { width: 194px; }
-    .ir-rooms { width: 226px; }
-    .ir-section-inner { grid-template-columns: 226px minmax(0, 1fr); }
+    .ir-rooms { width: 260px; }
+    .ir-section-inner { grid-template-columns: 260px minmax(0, 1fr); }
 }
 
 @media (max-width: 900px) {
@@ -1102,12 +1249,17 @@ include __DIR__ . '/../includes/header.php';
     .ir-menu-btn.ir-active::before { left: 12px; right: 12px; top: auto; bottom: 2px; width: auto; height: 2px; transform: none; border-radius: 2px; }
 
     .ir-section-inner { grid-template-columns: 1fr; min-height: 0; }
+    /* Raised from 300px: the rail is now an accordion, and at 300px an expanded
+       building left barely one room visible under its own search field. */
     .ir-rooms {
         width: auto;
-        max-height: 300px;
+        max-height: 440px;
         border-right: none;
         border-bottom: 1px solid var(--ir-border);
     }
+    /* Shorter inner scroller here so the rail's scrollbar stays the primary one
+       and the two don't fight on touch. */
+    .ir-bld-rooms { max-height: 216px; }
     .ir-pane, .ir-detail { padding: 20px; }
     .ir-stat-grid  { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
     .ir-stat-value { font-size: 26px; }
@@ -1191,12 +1343,16 @@ include __DIR__ . '/../includes/header.php';
                     <div class="ir-section-inner">
 
                         <!-- Room list (left sub-panel) -->
-                        <aside id="ir-room-list" class="ir-rooms" aria-label="Rooms">
+                        <aside id="ir-room-list" class="ir-rooms" aria-label="Buildings and rooms">
                             <div id="ir-room-search-wrap">
                                 <div class="ir-search">
                                     <svg class="ir-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/></svg>
-                                    <input type="search" id="ir-room-search" placeholder="Search room…"
-                                           autocomplete="off" aria-label="Search room">
+                                    <!-- The id is kept as ir-room-search even though this now searches
+                                         BUILDINGS: it is referenced by the print stylesheet wrapper and by
+                                         the field styling above, and renaming it would be churn with no
+                                         user-visible gain. Only the label the user actually reads changed. -->
+                                    <input type="search" id="ir-room-search" placeholder="Search building…"
+                                           autocomplete="off" aria-label="Search building">
                                 </div>
                                 <div id="ir-room-search-count" class="ir-search-count"></div>
                             </div>
@@ -1266,12 +1422,12 @@ include __DIR__ . '/../includes/header.php';
 
                     <!-- Summary cards (Part 2): icon + title + large value + description -->
                     <div class="ir-stat-grid">
-                        <div class="ir-stat ir-stat-accent-bodega">
+                        <div class="ir-stat ir-stat-accent-inventory">
                             <div class="ir-stat-icon" aria-hidden="true"><svg class="ir-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m21 8-9-5-9 5 9 5 9-5Z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg></div>
                             <div class="ir-stat-body">
-                                <div class="ir-stat-title">Items in Bodega</div>
-                                <div class="ir-stat-value" id="ir-gen-bodega">—</div>
-                                <div class="ir-stat-desc" id="ir-gen-bodega-desc">Total items stored in bodega</div>
+                                <div class="ir-stat-title">Items in Inventory</div>
+                                <div class="ir-stat-value" id="ir-gen-inventory">—</div>
+                                <div class="ir-stat-desc" id="ir-gen-inventory-desc">Total units held in inventory</div>
                             </div>
                         </div>
                         <div class="ir-stat ir-stat-accent-rooms">
@@ -1300,10 +1456,19 @@ include __DIR__ . '/../includes/header.php';
                         </div>
                     </div>
 
+                    <!-- TASK 6B PHASE 2 — this toolbar used to head a
+                         "Bodega / Stockrooms" table that broke Inventory down
+                         per stockroom. Inventory is now a single centralized
+                         pool, so that breakdown no longer exists; the toolbar
+                         stays because it carries the Export / Print actions
+                         for the whole section. Nothing was lost: the table's
+                         two figures (item count and total quantity) are the
+                         "Items in Inventory" card above and the "Total Items"
+                         / "Total Quantity" cards below. -->
                     <div id="ir-gen-toolbar" class="ir-toolbar">
                         <div>
-                            <p class="ir-section-title">Bodega / Stockrooms</p>
-                            <p class="ir-section-sub">Central stock locations and their on-hand quantities.</p>
+                            <p class="ir-section-title">General Inventory Report</p>
+                            <p class="ir-section-sub">Stock on hand and room assignments for the current period.</p>
                         </div>
                         <div class="ir-toolbar-actions" id="ir-gen-toolbar-actions">
                             <button type="button" id="ir-export-csv-btn" class="btn btn-secondary">
@@ -1316,10 +1481,6 @@ include __DIR__ . '/../includes/header.php';
                             </button>
                         </div>
                     </div>
-                    <div id="ir-gen-bodega-table" class="ir-table-wrap"></div>
-
-                    <hr class="ir-divider">
-
                     <div class="ir-toolbar">
                         <div>
                             <p class="ir-section-title">All Rooms</p>
@@ -1330,22 +1491,22 @@ include __DIR__ . '/../includes/header.php';
 
                     <hr class="ir-divider">
 
-                    <!-- Bottom summary. Every figure is re-used from the two requests
-                         this section already makes (/api/inventory-rooms and
-                         /api/analytics/inventory-summary) — no extra API call. -->
+                    <!-- Bottom summary. Every figure is re-used from the single
+                         /api/analytics/inventory-summary request this section
+                         already makes — no extra API call. -->
                     <div class="ir-toolbar">
                         <div>
                             <p class="ir-section-title">Inventory Summary</p>
-                            <p class="ir-section-sub">Roll-up across every stockroom and room for the current period.</p>
+                            <p class="ir-section-sub">Roll-up across inventory and rooms for the current period.</p>
                         </div>
                     </div>
                     <div class="ir-stat-grid" id="ir-gen-summary-cards">
-                        <div class="ir-stat ir-stat-accent-bodega">
+                        <div class="ir-stat ir-stat-accent-inventory">
                             <div class="ir-stat-icon" aria-hidden="true"><svg class="ir-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21V9l9-6 9 6v12"/><path d="M3 21h18"/><path d="M9 21v-8h6v8"/></svg></div>
                             <div class="ir-stat-body">
-                                <div class="ir-stat-title">Stockrooms</div>
-                                <div class="ir-stat-value" id="ir-sum-stockrooms">&mdash;</div>
-                                <div class="ir-stat-desc" id="ir-sum-stockrooms-desc">Bodega locations on record</div>
+                                <div class="ir-stat-title">Units in Inventory</div>
+                                <div class="ir-stat-value" id="ir-sum-inventory-qty">&mdash;</div>
+                                <div class="ir-stat-desc" id="ir-sum-inventory-qty-desc">Held centrally, not yet deployed</div>
                             </div>
                         </div>
                         <div class="ir-stat ir-stat-accent-rooms">
@@ -1462,7 +1623,7 @@ include __DIR__ . '/../includes/header.php';
                                         <div class="ir-stat-desc">Units currently in stock</div>
                                     </div>
                                 </div>
-                                <div class="ir-stat ir-stat-accent-bodega">
+                                <div class="ir-stat ir-stat-accent-inventory">
                                     <div class="ir-stat-icon" aria-hidden="true"><svg class="ir-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m21 8-9-5-9 5 9 5 9-5Z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg></div>
                                     <div class="ir-stat-body">
                                         <div class="ir-stat-title">Distinct Items</div>
@@ -1501,15 +1662,15 @@ include __DIR__ . '/../includes/header.php';
 // previously used bare root-absolute paths ('/api/rooms', '/api/inventory-rooms'),
 // which resolved to http://localhost/api/... and returned Apache's 404 HTML page.
 // irFetch() then called .json() on that HTML, threw, and the catch blocks rendered
-// "Failed to load rooms.", "Failed to load rooms data." and "Failed to load bodega
-// data." — the routes were fine all along; only the URLs were wrong.
+// "Failed to load rooms." and "Failed to load rooms data." — the routes were fine
+// all along; only the URLs were wrong.
 const IR_ROOMS_API    = window.SFMS_PUBLIC_URL
     ? window.SFMS_PUBLIC_URL('/api/rooms')
     : '/api/rooms';
 
-const IR_INV_ROOMS_API = window.SFMS_PUBLIC_URL
-    ? window.SFMS_PUBLIC_URL('/api/inventory-rooms')
-    : '/api/inventory-rooms';
+// TASK 6B PHASE 2 — IR_INV_ROOMS_API (/api/inventory-rooms) was removed along
+// with the per-stockroom table it fed. The route itself is untouched and still
+// live; this page simply no longer calls it.
 
 const IR_ITEMS_API    = window.SFMS_PUBLIC_URL
     ? window.SFMS_PUBLIC_URL('/api/items')
@@ -1517,8 +1678,8 @@ const IR_ITEMS_API    = window.SFMS_PUBLIC_URL
 
 // IR_HEALTH_API (/api/analytics/inventory-health) was removed: the General
 // Inventory cards now read every figure from /api/analytics/inventory-summary,
-// which supplies the same low-stock count plus the bodega/room placement split
-// in a single request.
+// which supplies the same low-stock count plus the inventory/room placement
+// split in a single request.
 
 const IR_SUMMARY_API  = window.SFMS_PUBLIC_URL
     ? window.SFMS_PUBLIC_URL('/api/analytics/inventory-summary')
@@ -1593,7 +1754,7 @@ function irGetRooms() {
     return irGetCached('rooms', `${IR_ROOMS_API}?per_page=200&with_item_counts=1`);
 }
 
-/** Inventory summary (totals + bodega/room placement split). */
+/** Inventory summary (totals + inventory/room placement split). */
 function irGetSummary() {
     return irGetCached('summary', IR_SUMMARY_API);
 }
@@ -1751,7 +1912,8 @@ function irSwitchSection(sectionId) {
 let irActiveRoomId   = null;
 let irActiveRoomName = null;
 
-let irAllRooms = [];   // full room list, reused by the search filter
+let irAllRooms  = [];   // full room list, as returned by /api/rooms
+let irBuildings = [];   // [{ key, name, rooms: [...] }] derived from irAllRooms
 
 /**
  * Loads the room list and the Per Room summary cards from ONE shared request
@@ -1764,12 +1926,13 @@ async function irLoadRoomList() {
         irAllRooms  = Array.isArray(data?.rooms) ? data.rooms : [];
 
         irRenderRoomSummary(irAllRooms);
-        irRenderRoomList(irAllRooms, '');
+        irRenderBuildingList(irAllRooms);
         irMarkUpdated();
 
-        // Auto-select the first room
-        const firstBtn = inner.querySelector('.ir-room-btn');
-        if (firstBtn) firstBtn.click();
+        // No room is auto-selected any more. Every building must start collapsed,
+        // and auto-selecting a room would have forced one of them open just to
+        // have somewhere to paint the highlight. The detail pane keeps its
+        // "Select a room from the list…" placeholder until the user picks one.
 
     } catch (err) {
         inner.innerHTML = irErrorHTML('Failed to load rooms.', err.message);
@@ -1798,77 +1961,225 @@ function irRenderRoomSummary(rooms) {
         : 'No inventory assigned';
 }
 
-/** Renders the (optionally filtered) room list, grouped by building. */
-function irRenderRoomList(rooms, term) {
+/**
+ * Groups the flat /api/rooms payload into buildings.
+ *
+ * ONE SOURCE OF TRUTH: buildings and their room counts are derived from the
+ * same room payload the summary cards and Section 2 already use, so a building
+ * name or count here can never drift from the room data it describes. No extra
+ * request is issued.
+ *
+ * Grouped on building_id, not building_name — two buildings may legitimately
+ * share a display name, and collapsing them into one row would silently hide
+ * rooms. Rooms with no building fall into a single "Unassigned" group rather
+ * than being dropped.
+ */
+function irGroupRoomsByBuilding(rooms) {
+    const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+    const map = new Map();
+
+    rooms.forEach((r) => {
+        const hasBuilding = r.building_id !== null && r.building_id !== undefined && r.building_id !== '';
+        const key = hasBuilding ? `b${r.building_id}` : 'unassigned';
+        if (!map.has(key)) {
+            map.set(key, { key, name: r.building_name || 'Unassigned', rooms: [] });
+        }
+        map.get(key).rooms.push(r);
+    });
+
+    const groups = Array.from(map.values());
+    // numeric:true so "Room 2" sorts before "Room 10", not after it.
+    groups.forEach((g) => g.rooms.sort((a, b) => collator.compare(a.name || '', b.name || '')));
+    groups.sort((a, b) => collator.compare(a.name, b.name));
+    return groups;
+}
+
+/**
+ * Renders the BUILDING list. Rooms are not rendered here — each building's rows
+ * are built on first expand (irBuildBuildingPanel), which is what keeps ~163
+ * room elements out of the initial DOM.
+ */
+function irRenderBuildingList(rooms) {
     const inner   = document.getElementById('ir-room-list-inner');
     const counter = document.getElementById('ir-room-search-count');
-    const needle  = String(term || '').trim().toLowerCase();
 
-    const matches = needle === ''
-        ? rooms
-        : rooms.filter((r) =>
-            String(r.name || '').toLowerCase().includes(needle) ||
-            String(r.building_name || '').toLowerCase().includes(needle) ||
-            String(r.floor_name || '').toLowerCase().includes(needle));
+    irBuildings = irGroupRoomsByBuilding(rooms);
 
-    counter.textContent = needle === ''
-        ? `${irPlural(rooms.length, 'room')}`
-        : `${irNum(matches.length)} of ${irNum(rooms.length)} rooms match`;
-
-    if (rooms.length === 0) {
-        inner.innerHTML = irEmptyHTML(IR_ICON.rooms, 'No rooms found.',
-            'Add a room under Buildings to start tracking its inventory.');
+    if (irBuildings.length === 0) {
+        counter.textContent = '';
+        inner.innerHTML = irEmptyHTML(IR_ICON.rooms, 'No buildings found.',
+            'Add a building and its rooms under Buildings to start tracking inventory.');
         return;
     }
 
-    if (matches.length === 0) {
-        inner.innerHTML = irEmptyHTML(IR_ICON.search, 'No matching rooms.',
-            `Nothing matches “${term}”. Try a different search.`);
-        return;
-    }
-
-    // Group rooms by building for readability
-    const byBuilding = {};
-    matches.forEach((r) => {
-        const bName = r.building_name || 'No Building';
-        (byBuilding[bName] = byBuilding[bName] || []).push(r);
-    });
+    const caret = '<svg class="ir-bld-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor"'
+        + ' stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+        + '<path d="m9 18 6-6-6-6"/></svg>';
 
     let html = '';
-    Object.keys(byBuilding).sort().forEach((bName) => {
-        html += `<div class="ir-group-label">${irEsc(bName)}</div>`;
-        byBuilding[bName].forEach((r) => {
-            const count = Number(r.item_count || 0);
-            // Name and count are separate elements so the button can lay them out
-            // with flexbox (truncating long names) instead of the old float.
-            html += `<button type="button" class="ir-room-btn"
-                             data-room-id="${irEsc(r.id)}"
-                             data-room-name="${irEsc(r.name)}"
-                             title="${irEsc(r.name)}">
-                        <span class="ir-room-name">${irEsc(r.name)}</span>
-                        <span class="ir-room-count">${count > 0 ? irNum(count) : ''}</span>
-                     </button>`;
-        });
+    irBuildings.forEach((b) => {
+        const btnId   = `ir-bld-btn-${irEsc(b.key)}`;
+        const panelId = `ir-bld-panel-${irEsc(b.key)}`;
+        html += `<div class="ir-bld" data-bld-key="${irEsc(b.key)}" data-bld-name="${irEsc(b.name)}">
+                    <button type="button" class="ir-bld-btn" id="${btnId}"
+                            aria-expanded="false" aria-controls="${panelId}"
+                            title="${irEsc(b.name)}">
+                        ${caret}
+                        <span class="ir-bld-name">${irEsc(b.name)}</span>
+                        <span class="ir-bld-count">${irPlural(b.rooms.length, 'room')}</span>
+                    </button>
+                    <div class="ir-bld-panel" id="${panelId}" role="region" aria-labelledby="${btnId}"></div>
+                 </div>`;
     });
+    // Container for the "no buildings match" state; kept as a sibling so the
+    // building rows themselves are only hidden, never destroyed (which would
+    // throw away expanded state and any in-progress room search).
+    html += '<div id="ir-bld-no-match" class="ir-hidden"></div>';
+
     inner.innerHTML = html;
+    counter.textContent = irPlural(irBuildings.length, 'building');
 
-    // Bind room button clicks — active state via class, not inline colours
-    inner.querySelectorAll('.ir-room-btn').forEach((btn) => {
-        btn.addEventListener('click', () => {
-            irActiveRoomId   = btn.dataset.roomId;
-            irActiveRoomName = btn.dataset.roomName;
+    inner.querySelectorAll('.ir-bld-btn').forEach((btn) => {
+        btn.addEventListener('click', () => irToggleBuilding(btn.closest('.ir-bld')));
+    });
+}
 
-            inner.querySelectorAll('.ir-room-btn').forEach((b) => b.classList.remove('ir-active'));
-            btn.classList.add('ir-active');
+/** Expand/collapse one building. Rooms are built lazily, once. */
+function irToggleBuilding(card) {
+    if (!card) return;
 
-            irLoadRoomItems(irActiveRoomId, irActiveRoomName);
-        });
+    const btn   = card.querySelector('.ir-bld-btn');
+    const panel = card.querySelector('.ir-bld-panel');
+    const open  = card.classList.toggle('ir-open');
+
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+
+    if (open && !panel.dataset.built) {
+        irBuildBuildingPanel(card, panel);
+        panel.dataset.built = '1';
+    }
+}
+
+/** Builds one building's room rows + its scoped room search. */
+function irBuildBuildingPanel(card, panel) {
+    const group = irBuildings.find((b) => b.key === card.dataset.bldKey);
+    const rooms = group ? group.rooms : [];
+
+    if (rooms.length === 0) {
+        panel.innerHTML = '<p class="ir-bld-note">No rooms are currently registered in this building.</p>';
+        return;
+    }
+
+    let html = `<label class="ir-bld-search">
+                    <svg class="ir-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/></svg>
+                    <input type="search" class="ir-bld-search-input" autocomplete="off"
+                           placeholder="Search rooms in this building…"
+                           aria-label="Search rooms in ${irEsc(group.name)}">
+                </label>
+                <div class="ir-bld-rooms">`;
+
+    rooms.forEach((r) => {
+        const count = Number(r.item_count || 0);
+        // Same markup/classes as before this change, so a selected room looks
+        // and behaves identically — only its container moved.
+        html += `<button type="button" class="ir-room-btn"
+                         data-room-id="${irEsc(r.id)}"
+                         data-room-name="${irEsc(r.name)}"
+                         data-room-search="${irEsc(String(r.name || '').toLowerCase())}"
+                         title="${irEsc(r.name)}">
+                    <span class="ir-room-name">${irEsc(r.name)}</span>
+                    <span class="ir-room-count">${count > 0 ? irNum(count) : ''}</span>
+                 </button>`;
     });
 
-    // Keep the current selection highlighted across re-renders (e.g. searching)
+    html += '</div><p class="ir-bld-note ir-hidden" data-room-no-match>No rooms match your search.</p>';
+    panel.innerHTML = html;
+
+    panel.querySelectorAll('.ir-room-btn').forEach((btn) => {
+        btn.addEventListener('click', () => irSelectRoom(btn));
+    });
+
+    // Scoped room search: only ever touches rows inside THIS panel, so typing
+    // here never searches the other buildings' rooms.
+    const input = panel.querySelector('.ir-bld-search-input');
+    let timer = null;
+    const run = () => irFilterRoomsInPanel(panel, input.value);
+    input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(run, 100); });
+    input.addEventListener('search', run);
+
+    // If the selected room lives in this building, restore its highlight.
     if (irActiveRoomId !== null) {
-        const active = inner.querySelector(`.ir-room-btn[data-room-id="${irActiveRoomId}"]`);
-        if (active) active.classList.add('ir-active');
+        panel.querySelectorAll('.ir-room-btn').forEach((btn) => {
+            if (String(btn.dataset.roomId) === String(irActiveRoomId)) btn.classList.add('ir-active');
+        });
+    }
+}
+
+/**
+ * Selects a room. Unchanged behaviour: same active class, same call into
+ * irLoadRoomItems(), which still renders the existing Per Room Inventory Report.
+ * The only difference is that the previous selection may now live in a
+ * different building's panel, so the clear is scoped to the whole rail.
+ */
+function irSelectRoom(btn) {
+    irActiveRoomId   = btn.dataset.roomId;
+    irActiveRoomName = btn.dataset.roomName;
+
+    document.querySelectorAll('#ir-room-list-inner .ir-room-btn.ir-active')
+        .forEach((b) => b.classList.remove('ir-active'));
+    btn.classList.add('ir-active');
+
+    irLoadRoomItems(irActiveRoomId, irActiveRoomName);
+}
+
+/** Filters rooms WITHIN one expanded building. */
+function irFilterRoomsInPanel(panel, term) {
+    const needle = String(term || '').trim().toLowerCase();
+    const note   = panel.querySelector('[data-room-no-match]');
+    let shown = 0;
+
+    panel.querySelectorAll('.ir-room-btn').forEach((btn) => {
+        const hit = needle === '' || (btn.dataset.roomSearch || '').includes(needle);
+        btn.classList.toggle('ir-hidden', !hit);
+        if (hit) shown++;
+    });
+
+    if (note) note.classList.toggle('ir-hidden', shown > 0);
+}
+
+/**
+ * Filters the BUILDING list by name. Rows are hidden rather than re-rendered so
+ * that an expanded building stays expanded, its room search keeps its text, and
+ * the focused input keeps focus while the user types.
+ */
+function irFilterBuildings(term) {
+    const inner   = document.getElementById('ir-room-list-inner');
+    const counter = document.getElementById('ir-room-search-count');
+    const noMatch = document.getElementById('ir-bld-no-match');
+
+    // Absent when the list rendered an error or the "no buildings" state.
+    if (!inner || !noMatch) return;
+
+    const needle = String(term || '').trim().toLowerCase();
+    const cards  = inner.querySelectorAll('.ir-bld');
+    let shown = 0;
+
+    cards.forEach((card) => {
+        const hit = needle === '' || (card.dataset.bldName || '').toLowerCase().includes(needle);
+        card.classList.toggle('ir-hidden', !hit);
+        if (hit) shown++;
+    });
+
+    counter.textContent = needle === ''
+        ? irPlural(cards.length, 'building')
+        : `${irNum(shown)} of ${irNum(cards.length)} buildings match`;
+
+    if (shown === 0) {
+        noMatch.innerHTML = irEmptyHTML(IR_ICON.search, 'No buildings match your search.',
+            `Nothing matches “${term}”. Try a different search.`);
+        noMatch.classList.remove('ir-hidden');
+    } else {
+        noMatch.classList.add('ir-hidden');
     }
 }
 
@@ -1945,7 +2256,6 @@ async function irLoadRoomItems(roomId, roomName) {
 
 async function irLoadGeneralReport() {
     irLoadGeneralCards();
-    irLoadBodegaTable();
     irLoadRoomsTable();
 }
 
@@ -1954,30 +2264,30 @@ async function irLoadGeneralReport() {
  *
  * Previously this made THREE requests: /api/analytics/inventory-health plus two
  * throwaway /api/items?per_page=1 calls whose only purpose was to read the
- * pagination `total`. Worse, the bodega/room split was keyed on
- * item_type=inventory_stock vs item_type=room_asset — but every row in this
- * database is 'inventory_stock', so "Items in Rooms" was structurally pinned to 0
- * and "Items in Bodega" actually reported the grand total of all items.
+ * pagination `total`. Worse, the placement split was computed client-side from
+ * two paginated totals that did not actually distinguish placement at all, so
+ * "Items in Rooms" was structurally pinned to 0 and the first card reported the
+ * grand total of all items.
  *
  * It is now ONE request to /api/analytics/inventory-summary, which returns the
- * real placement split (bodega = inventory_room_id set, rooms = room_id set)
- * computed server-side from a single query. All figures are live DB values;
- * nothing is hardcoded.
+ * real placement split (inventory = item_type 'inventory_stock', rooms =
+ * item_type 'room_asset') computed server-side from a single query. All figures
+ * are live DB values; nothing is hardcoded.
  */
 async function irLoadGeneralCards() {
-    const ids = ['ir-gen-bodega', 'ir-gen-rooms', 'ir-gen-total', 'ir-gen-lowstock'];
+    const ids = ['ir-gen-inventory', 'ir-gen-rooms', 'ir-gen-total', 'ir-gen-lowstock'];
     try {
         const d = await irGetSummary();
 
-        document.getElementById('ir-gen-bodega').textContent   = irNum(d.bodega_quantity);
+        document.getElementById('ir-gen-inventory').textContent = irNum(d.inventory_quantity);
         document.getElementById('ir-gen-rooms').textContent    = irNum(d.room_quantity);
         document.getElementById('ir-gen-total').textContent    = irNum(d.total_quantity);
         document.getElementById('ir-gen-lowstock').textContent = irNum(d.low_stock_count);
 
         // Descriptions carry the distinct-item counts so both figures are visible
         // without inventing a second row of cards.
-        document.getElementById('ir-gen-bodega-desc').textContent =
-            `${irPlural(d.bodega_items, 'item')} across ${irPlural(d.bodega_room_count, 'bodega')}`;
+        document.getElementById('ir-gen-inventory-desc').textContent =
+            `${irPlural(d.inventory_items, 'item')} held in inventory`;
         document.getElementById('ir-gen-rooms-desc').textContent =
             Number(d.room_items) > 0
                 ? `${irPlural(d.room_items, 'item')} in ${irPlural(d.room_count_with_items, 'room')}`
@@ -1993,22 +2303,26 @@ async function irLoadGeneralCards() {
                 : 'Items at or below threshold';
 
         // Bottom summary — same payload, no second request.
+        document.getElementById('ir-sum-inventory-qty').textContent = irNum(d.inventory_quantity);
         document.getElementById('ir-sum-items').textContent    = irNum(d.distinct_items);
         document.getElementById('ir-sum-qty').textContent      = irNum(d.total_quantity);
         document.getElementById('ir-sum-lowstock').textContent = irNum(d.low_stock_count);
+        document.getElementById('ir-sum-inventory-qty-desc').textContent =
+            `${irPlural(d.inventory_items, 'item')} not yet deployed`;
         document.getElementById('ir-sum-qty-desc').textContent =
-            `${irNum(d.bodega_quantity)} in bodega · ${irNum(d.room_quantity)} in rooms`;
+            `${irNum(d.inventory_quantity)} in inventory · ${irNum(d.room_quantity)} in rooms`;
         document.getElementById('ir-sum-lowstock-desc').textContent =
             Number(d.low_stock_count) > 0 ? 'Needs restocking' : 'All items above threshold';
 
         irMarkUpdated();
     } catch (err) {
         // Surface the failure instead of silently leaving four em dashes behind.
-        ids.concat(['ir-sum-items', 'ir-sum-qty', 'ir-sum-lowstock'])
+        ids.concat(['ir-sum-inventory-qty', 'ir-sum-items', 'ir-sum-qty', 'ir-sum-lowstock'])
            .forEach((id) => { document.getElementById(id).textContent = '—'; });
         // Descriptions revert to their neutral static captions for the same
-        // reason: a stale "N in bodega · N in rooms" under an em dash is worse
-        // than no number at all.
+        // reason: a stale "N in inventory · N in rooms" under an em dash is
+        // worse than no number at all.
+        document.getElementById('ir-sum-inventory-qty-desc').textContent = 'Held centrally, not yet deployed';
         document.getElementById('ir-sum-qty-desc').textContent      = 'Units across all locations';
         document.getElementById('ir-sum-lowstock-desc').textContent = 'At or below threshold';
         const desc = document.getElementById('ir-gen-total-desc');
@@ -2016,61 +2330,13 @@ async function irLoadGeneralCards() {
     }
 }
 
-async function irLoadBodegaTable() {
-    const container = document.getElementById('ir-gen-bodega-table');
-    container.innerHTML = irLoadingHTML(3);
-    try {
-        const data  = await irGet(`${IR_INV_ROOMS_API}?per_page=100`);
-        const rooms = Array.isArray(data?.rooms) ? data.rooms : [];
-
-        const totalItems = rooms.reduce((s, r) => s + Number(r.item_count || 0), 0);
-        const totalQty   = rooms.reduce((s, r) => s + Number(r.total_quantity || 0), 0);
-
-        // Bottom-summary stockroom count reuses this same response. Set before the
-        // empty-state return below so "0 stockrooms" still reports as 0, not "—".
-        document.getElementById('ir-sum-stockrooms').textContent = irNum(rooms.length);
-        document.getElementById('ir-sum-stockrooms-desc').textContent = rooms.length
-            ? `${irPlural(totalItems, 'item')} · ${irNum(totalQty)} units held`
-            : 'No bodega locations yet';
-
-        if (rooms.length === 0) {
-            container.innerHTML = irEmptyHTML(IR_ICON.warehouse, 'No bodega / stockrooms found.',
-                'Create a stockroom under Inventory Rooms to begin tracking stock.');
-            return;
-        }
-
-        let html = '<table class="ir-table"><thead><tr>'
-            + '<th>Bodega Name</th><th>Code</th>'
-            + '<th class="ir-num">Item Count</th><th class="ir-num">Total Qty</th><th>Status</th>'
-            + '</tr></thead><tbody>';
-        rooms.forEach((r) => {
-            html += '<tr>';
-            html += `<td class="ir-name">${irEsc(r.name)}`
-                 +  (r.description ? `<span class="ir-sub">${irEsc(r.description)}</span>` : '')
-                 +  '</td>';
-            html += `<td>${irEsc(r.code || '—')}</td>`;
-            html += `<td class="ir-num">${irNum(r.item_count)}</td>`;
-            html += `<td class="ir-num">${irNum(r.total_quantity)}</td>`;
-            html += `<td>${Number(r.is_active) ? irPill('success', 'Active') : irPill('neutral', 'Inactive')}</td>`;
-            html += '</tr>';
-        });
-        // Proper totals row (Part 3)
-        html += '</tbody><tfoot><tr>'
-            + `<td class="ir-total-label" colspan="2">Total — ${irPlural(rooms.length, 'bodega')}</td>`
-            + `<td class="ir-num">${irNum(totalItems)}</td>`
-            + `<td class="ir-num">${irNum(totalQty)}</td>`
-            + '<td></td>'
-            + '</tr></tfoot></table>';
-        container.innerHTML = html;
-    } catch (err) {
-        // Reset the description too, not just the number — otherwise a failed
-        // refresh leaves a stale "N items · N units held" caption sitting next
-        // to an em dash, which reads as real data.
-        document.getElementById('ir-sum-stockrooms').textContent = '—';
-        document.getElementById('ir-sum-stockrooms-desc').textContent = 'Bodega locations on record';
-        container.innerHTML = irErrorHTML('Failed to load bodega data.', err.message);
-    }
-}
+// TASK 6B PHASE 2 — irLoadBodegaTable() was removed. It rendered one row per
+// inventory_rooms record ("Bodega Name / Code / Item Count / Total Qty /
+// Status") and drove the bottom-summary "Stockrooms" card. Inventory is now a
+// single centralized pool, so a per-stockroom breakdown is exactly the concept
+// being retired. Its two aggregate figures are still on screen — total item
+// count and total quantity are the "Items in Inventory" and "Total Quantity"
+// cards — and the /api/inventory-rooms route it called is untouched.
 
 async function irLoadRoomsTable() {
     const container = document.getElementById('ir-gen-rooms-table');
@@ -2324,7 +2590,7 @@ async function irLoadSemStockSummary() {
  * is a pill rather than the raw value). Otherwise, cells that pair a primary
  * label with an .ir-sub secondary line are joined with an em dash — without
  * this, textContent concatenates them into one unreadable run
- * ("Maritime Inventory RoomStockroom for maritime equipment...").
+ * ("Room 12Main Building · Floor 2").
  */
 function irCellCsv(td) {
     if (td.hasAttribute('data-csv')) {
@@ -2346,15 +2612,22 @@ function irCellCsv(td) {
 function exportInventoryCSV() {
     const rows = [];
 
-    // Section A — Bodega / Stockrooms. `tbody tr` deliberately excludes the new
-    // <tfoot> totals row so the export keeps one record per bodega.
-    rows.push(['Bodega / Stockrooms']);
-    rows.push(['Bodega Name', 'Code', 'Item Count', 'Total Quantity', 'Status']);
-    document.querySelectorAll('#ir-gen-bodega-table tbody tr').forEach((row) => {
-        const cells = row.querySelectorAll('td');
-        if (cells.length > 0) {
-            rows.push([...cells].map(irCellCsv));
-        }
+    // TASK 6B PHASE 2 — Section A used to be the per-stockroom "Bodega /
+    // Stockrooms" table. That table is gone, so the export now leads with the
+    // Inventory Summary cards instead: the same aggregate figures, read
+    // straight off the rendered cards so the CSV still matches what is on
+    // screen.
+    rows.push(['Inventory Summary']);
+    rows.push(['Metric', 'Value']);
+    [
+        ['Items in Inventory (units)', 'ir-gen-inventory'],
+        ['Items in Rooms (units)',     'ir-gen-rooms'],
+        ['Total Items Overall (units)', 'ir-gen-total'],
+        ['Distinct Item Records',      'ir-sum-items'],
+        ['Low Stock Count',            'ir-gen-lowstock'],
+    ].forEach(([label, id]) => {
+        const el = document.getElementById(id);
+        rows.push([label, el ? el.textContent.trim() : '—']);
     });
 
     // Section B — All Rooms, so the CSV matches what is on screen.
@@ -2396,15 +2669,16 @@ document.addEventListener('DOMContentLoaded', () => {
     // Section 1 print button
     document.getElementById('ir-print-room-btn').addEventListener('click', () => window.print());
 
-    // Section 1 room search (Part 4) — filters the already-loaded list client-side,
-    // so typing costs zero extra API requests (Part 6).
+    // Section 1 BUILDING search — filters the already-loaded list client-side,
+    // so typing costs zero extra API requests (Part 6). Rooms have their own
+    // search inside each expanded building.
     const searchInput = document.getElementById('ir-room-search');
     let searchTimer = null;
     searchInput.addEventListener('input', () => {
         clearTimeout(searchTimer);
-        searchTimer = setTimeout(() => irRenderRoomList(irAllRooms, searchInput.value), 120);
+        searchTimer = setTimeout(() => irFilterBuildings(searchInput.value), 120);
     });
-    searchInput.addEventListener('search', () => irRenderRoomList(irAllRooms, searchInput.value));
+    searchInput.addEventListener('search', () => irFilterBuildings(searchInput.value));
 
     // Section 2 export + print buttons
     document.getElementById('ir-export-csv-btn').addEventListener('click', exportInventoryCSV);

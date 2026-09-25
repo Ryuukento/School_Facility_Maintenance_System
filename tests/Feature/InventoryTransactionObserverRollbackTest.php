@@ -131,6 +131,65 @@ class InventoryTransactionObserverRollbackTest extends TestCase
         $this->assertSame(10, (int) $item->quantity);
     }
 
+    /**
+     * Task 77 (Inventory audit) Part 7 — regression guard for a confirmed,
+     * reproduced defect: created() mutated quantity/reserved_quantity but
+     * never re-derived status, so Item.status silently went stale after any
+     * flow that creates an InventoryTransaction directly (Dispatch release,
+     * Need Change approval, Damage replacement) and relies on this Observer
+     * as the sole writer, per ARCHITECTURE.md Section 5.2's "status is
+     * always derived, never set" invariant. Fixed by deriving status from
+     * the new quantity right before save() in both created() and deleted().
+     */
+    public function test_deploy_transaction_rederives_status_when_it_crosses_the_reorder_level(): void
+    {
+        $userId = $this->seedUser();
+        $itemId = $this->seedItem([
+            'name' => 'Projector Lamp',
+            'quantity' => 10,
+            'reserved_quantity' => 0,
+            'reorder_level' => 7,
+            'status' => 'available',
+        ]);
+
+        InventoryTransaction::query()->create([
+            'item_id' => $itemId,
+            'transaction_type' => 'deploy',
+            'quantity' => 4,
+            'performed_by' => $userId,
+        ]);
+
+        $item = DB::table('items')->where('id', $itemId)->first();
+        $this->assertSame(6, (int) $item->quantity);
+        $this->assertSame('low_stock', $item->status);
+    }
+
+    public function test_deleting_deploy_transaction_rederives_status_back_above_the_reorder_level(): void
+    {
+        $userId = $this->seedUser();
+        $itemId = $this->seedItem([
+            'name' => 'Projector Lamp',
+            'quantity' => 10,
+            'reserved_quantity' => 0,
+            'reorder_level' => 7,
+            'status' => 'available',
+        ]);
+
+        $deploy = InventoryTransaction::query()->create([
+            'item_id' => $itemId,
+            'transaction_type' => 'deploy',
+            'quantity' => 4,
+            'performed_by' => $userId,
+        ]);
+        $this->assertSame('low_stock', DB::table('items')->where('id', $itemId)->value('status'));
+
+        $deploy->delete();
+
+        $item = DB::table('items')->where('id', $itemId)->first();
+        $this->assertSame(10, (int) $item->quantity);
+        $this->assertSame('available', $item->status);
+    }
+
     private function createTestSchema(): void
     {
         Schema::disableForeignKeyConstraints();

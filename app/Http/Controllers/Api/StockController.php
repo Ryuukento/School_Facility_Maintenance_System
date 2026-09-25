@@ -28,19 +28,20 @@ class StockController extends Controller
             ->where('created_at', '>=', now()->subDays(30))
             ->sum('quantity');
 
-        // Low stock count: items where quantity <= effective threshold
+        // TASK 78 — standardized on the canonical i.status column (see
+        // AnalyticsService::inventorySummary() for the full rationale). This
+        // endpoint has no current frontend consumer, but is fixed for
+        // consistency rather than left as a 3rd copy of the old
+        // override/category-default logic.
         $lowStockItems = collect();
-        $items = Item::query()->get();
+        $items = Item::query()->where('status', 'low_stock')->get();
         foreach ($items as $item) {
-            $threshold = $item->low_stock_threshold_override;
-            if ($threshold === null) {
-                $catDefault = DB::table('inventory_categories')->where('id', $item->category_id)->value('default_low_stock_threshold');
-                $threshold = $catDefault ?? 0;
-            }
-
-            if ($threshold !== null && (int)$item->quantity <= (int)$threshold) {
-                $lowStockItems->push(['id' => $item->id, 'name' => $item->name, 'quantity' => $item->quantity, 'threshold' => $threshold]);
-            }
+            $lowStockItems->push([
+                'id' => $item->id,
+                'name' => $item->name,
+                'quantity' => $item->quantity,
+                'threshold' => $item->reorder_level,
+            ]);
         }
 
         return $this->ok('Stock summary retrieved', [

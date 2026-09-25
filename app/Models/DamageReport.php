@@ -6,7 +6,6 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class DamageReport extends Model
 {
@@ -16,6 +15,7 @@ class DamageReport extends Model
 
     protected $fillable = [
         'damage_report_code',
+        'report_id',
         'item_id',
         'room_id',
         'department_id',
@@ -72,8 +72,24 @@ class DamageReport extends Model
         return $this->hasMany(DamageReportHistory::class, 'damage_report_id', 'id');
     }
 
-    public function repairRequest(): HasOne
+    // TASK 13 (Repair retirement) — repairRequest() was removed here. It
+    // returned an App\Models\RepairRequest, which this task deletes. Its
+    // readers were all inside RepairService (duplicate-request guard and the
+    // "eligible damage reports" search), which goes with it.
+    //
+    // NOTE this removes the RELATION only. Damage Report's own repair
+    // vocabulary — the repair_notes column, the 'repairing'/'repaired'
+    // statuses, and replacement_item_id / replacement_quantity /
+    // replacement_transaction_id / replaced_by / replaced_at above — is
+    // Damage Report data, not Repair Request data, and is untouched.
+
+    // SPRINT 4 — new, parallel relationship per SPRINT_4_WORKFLOW_MIGRATION.md.
+    // Populated going forward by DamageReportService::createReport(), which
+    // now also creates a linked maintenance_reports row. Legacy rows (and
+    // any created via a path that predates this sprint) simply have
+    // report_id = null, same as every other nullable relationship column.
+    public function report(): BelongsTo
     {
-        return $this->hasOne(RepairRequest::class, 'damage_report_id', 'id');
+        return $this->belongsTo(MaintenanceReport::class, 'report_id', 'report_id');
     }
 }

@@ -31,9 +31,9 @@ include __DIR__ . '/../includes/header.php';
 ?>
 
 <link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/maintenance-dashboard.css">
-<link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/maintenance-dashboard.inline.css">
-<link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/inventory.inline.css?v=20260413-1">
-<link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/inventory-redesign.css?v=20260714-1">
+<link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/maintenance-dashboard.inline.css?v=20260921-2">
+<link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/inventory.inline.css?v=20260921-2">
+<link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/inventory-redesign.css?v=20260921-3">
 
 <main class="container maintenance-admin-dashboard-page inventory-page">
     <div class="card inventory-page-header-card">
@@ -41,18 +41,28 @@ include __DIR__ . '/../includes/header.php';
             <div class="page-header inventory-header-row inventory-page-header-row">
                 <div>
                     <h1 class="inventory-title">Inventory</h1>
-                    <p class="text-muted inventory-subtitle">Inventory room stock and reserve equipment only.<?php if ($isMaintenanceStaff): ?> <strong>(Read-only view)</strong><?php endif; ?></p>
+                    <p class="text-muted inventory-subtitle">Centralized stock and reserve equipment only.<?php if ($isMaintenanceStaff): ?> <strong>(Read-only view)</strong><?php endif; ?></p>
                 </div>
+                <?php /* The three actions are one group. Each keeps its ORIGINAL
+                         classes, id, href and label — `btn btn-secondary` on the
+                         anchor, `btn btn-primary` on Inventory Entry, the two
+                         two "open..." button ids and the $canCreateInventoryEntries /
+                         $canAdjustStock role gates are all untouched, so every
+                         existing JS binding and permission check still matches.
+                         The added `inv-action*` classes are presentation-only
+                         modifiers: they carry the visual hierarchy (strong /
+                         soft / neutral) without redefining what a .btn is.
+                         Icons come from the existing registry via ui_icon()
+                         (icons.php is already required by header.php); no new
+                         icon system, and each is aria-hidden so the button's
+                         accessible name stays exactly its visible text. */ ?>
                 <div class="inventory-header-actions">
-                    <a href="/School_Facility_Maintenance_System/frontend/pages/replacement-tracking.php" class="btn btn-secondary">Replacement Tracking</a>
+                    <a href="/School_Facility_Maintenance_System/frontend/pages/replacement-tracking.php" class="btn btn-secondary inv-action inv-action-strong"><?php echo ui_icon('rotate-ccw', ['size' => 16, 'class' => 'inv-action-icon']); ?><span class="inv-action-label">Replacement Tracking</span></a>
                     <?php if ($canCreateInventoryEntries): ?>
-                    <button type="button" class="btn btn-primary" id="openInventoryEntryButton">Inventory Entry</button>
+                    <button type="button" class="btn btn-primary inv-action inv-action-soft" id="openInventoryEntryButton"><?php echo ui_icon('plus', ['size' => 16, 'class' => 'inv-action-icon']); ?><span class="inv-action-label">Inventory Entry</span></button>
                     <?php endif; ?>
                     <?php if ($canAdjustStock): ?>
-                    <button type="button" class="btn btn-secondary" id="openAdjustStockButton">Adjust Stock</button>
-                    <?php endif; ?>
-                    <?php if ($canManageCategories): ?>
-                    <button type="button" class="btn btn-secondary" id="manageCategoriesButton">Manage Categories</button>
+                    <button type="button" class="btn btn-secondary inv-action inv-action-neutral" id="openAdjustStockButton"><?php echo ui_icon('edit', ['size' => 16, 'class' => 'inv-action-icon']); ?><span class="inv-action-label">Adjust Stock</span></button>
                     <?php endif; ?>
                 </div>
             </div>
@@ -70,22 +80,11 @@ include __DIR__ . '/../includes/header.php';
                            placeholder="Search items by name, category, or location..."
                            autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
                 </div>
-                <?php if ($canAddItems): ?>
-                <button type="button" class="btn btn-secondary inventory-room-add-btn inventory-toolbar-action" id="addInventoryRoomButton" hidden>Add Inventory Room</button>
-                <?php endif; ?>
+                <!-- TASK 6B PHASE 2 — the "Add Inventory Room" button was
+                     removed along with the inventory-room browse mode that was
+                     its only trigger. Inventory is one centralized pool, so
+                     there are no stock locations for a user to manage. -->
             </div>
-        </div>
-    </div>
-
-    <div class="card inventory-category-browser-card">
-        <div class="card-body inventory-category-browser-body">
-            <div class="inventory-category-panel-header">
-                <div>
-                    <h3 id="inventory-browser-heading" class="inventory-category-heading">Browse by Category</h3>
-                    <p class="inventory-panel-subtitle">Quickly filter inventory items by category.</p>
-                </div>
-            </div>
-            <div id="inventory-category-cards" class="inventory-category-cards"></div>
         </div>
     </div>
 
@@ -93,27 +92,25 @@ include __DIR__ . '/../includes/header.php';
         <div class="card-header d-flex justify-between align-center inventory-items-header">
             <div>
                 <h3 class="inventory-section-title inventory-items-title">Inventory Items</h3>
-                <p class="inventory-items-subtitle">Manage stock levels, locations, conditions, and item availability.</p>
+                <p class="inventory-items-subtitle">Manage stock levels, locations, and item availability.</p>
             </div>
             <div class="inventory-items-actions">
+                <?php if ($canManageCategories): ?>
+                <button type="button" class="btn btn-secondary" id="manageCategoriesButton">Manage Categories</button>
+                <?php endif; ?>
                 <span id="inventory-count" class="inventory-count-badge">0 items</span>
             </div>
         </div>
         <div class="card-body inventory-items-body">
             <div class="inventory-items-filter-grid">
+                <select id="inventory-items-category-filter" class="form-control">
+                    <option value="">All Categories</option>
+                </select>
                 <select id="inventory-items-status-filter" class="form-control">
                     <option value="">All Statuses</option>
                     <option value="available">In Stock</option>
                     <option value="low_stock">Low Stock</option>
                     <option value="out_of_stock">Out of Stock</option>
-                </select>
-                <select id="inventory-items-condition-filter" class="form-control">
-                    <option value="">All Conditions</option>
-                    <option value="new">New</option>
-                    <option value="good">Good</option>
-                    <option value="fair">Fair</option>
-                    <option value="damaged">Damaged</option>
-                    <option value="for_repair">For Repair</option>
                 </select>
                 <button type="button" class="btn btn-secondary inventory-items-clear-btn" id="inventory-items-clear-filters">Clear Filters</button>
             </div>
@@ -127,6 +124,10 @@ include __DIR__ . '/../includes/header.php';
                     </div>
                 </div>
             </div>
+            <!-- TASK 31 — mirrors reports.php's #pagination-container: same
+                 canonical .pagination classes, populated by
+                 renderInventoryItemsPagination(). -->
+            <nav id="inventory-pagination-container" class="inventory-pagination pagination" aria-label="Inventory items pagination"></nav>
         </div>
     </div>
 
@@ -134,7 +135,7 @@ include __DIR__ . '/../includes/header.php';
         <div class="card-header d-flex justify-between align-center inventory-entry-history-header">
             <div>
                 <h3 class="inventory-section-title">Inventory Entry History</h3>
-                <p class="text-muted inventory-entry-subtitle">Track receipts, receivers, suppliers, and stock entries added to warehouse inventory.</p>
+                <p class="text-muted inventory-entry-subtitle">Track receipts, receivers, suppliers, and stock entries added to inventory.</p>
             </div>
             <span id="inventory-entry-count" class="text-muted">0 entries</span>
         </div>
@@ -175,12 +176,10 @@ include __DIR__ . '/../includes/header.php';
             <form id="addItemsForm">
                 <input type="hidden" id="inventoryItemIdInput" value="">
                 <div class="inventory-form-grid">
-                    <div class="form-group inventory-form-group">
-                        <label for="inventoryRoomSelect">Inventory Room *</label>
-                        <select id="inventoryRoomSelect" class="form-control" required>
-                            <option value="">Loading inventory rooms...</option>
-                        </select>
-                    </div>
+                    <!-- TASK 6B PHASE 2 — the "Inventory Room *" selector was
+                         removed. Edit Item no longer sends inventory_room_id at
+                         all, and InventoryStockController::update() keeps the
+                         stored value untouched when the key is absent. -->
                     <div class="form-group inventory-form-group">
                         <label for="inventoryItemNameInput">Item Name *</label>
                         <input type="text" id="inventoryItemNameInput" class="form-control" placeholder="e.g., Whiteboard Marker" required>
@@ -319,12 +318,9 @@ include __DIR__ . '/../includes/header.php';
                             <option value="">Select laboratory / room</option>
                         </select>
                     </div>
-                    <div class="form-group inventory-form-group">
-                        <label for="inventoryEntryInventoryRoom">Warehouse / Main Inventory *</label>
-                        <select id="inventoryEntryInventoryRoom" class="form-control" required>
-                            <option value="">Select warehouse inventory</option>
-                        </select>
-                    </div>
+                    <!-- TASK 6B PHASE 2 — the "Warehouse / Main Inventory *"
+                         selector was removed; stock is received into the one
+                         centralized Inventory. -->
                     <div class="form-group inventory-form-group">
                         <label for="inventoryEntryCondition">Condition *</label>
                         <select id="inventoryEntryCondition" class="form-control" required>
@@ -403,45 +399,18 @@ include __DIR__ . '/../includes/header.php';
 </div>
 <?php endif; ?>
 
-<?php if ($canAddItems): ?>
-<div id="addInventoryRoomModal" class="inventory-modal" aria-hidden="true">
-    <div class="inventory-modal-content" style="width:min(560px, 100%);">
-        <div class="inventory-modal-header">
-            <h2>Add Inventory Room</h2>
-            <button type="button" class="inventory-modal-close" id="closeAddInventoryRoomModalButton" aria-label="Close">&times;</button>
-        </div>
-        <div class="inventory-modal-body">
-            <div id="addInventoryRoomMessage" class="inventory-modal-message" hidden></div>
-            <form id="addInventoryRoomForm">
-                <div class="inventory-form-grid">
-                    <div class="form-group inventory-form-group">
-                        <label for="inventoryRoomNameInput">Room Name *</label>
-                        <input type="text" id="inventoryRoomNameInput" class="form-control" placeholder="e.g., Maritime Inventory Room" required>
-                    </div>
-                    <div class="form-group inventory-form-group">
-                        <label for="inventoryRoomCodeInput">Code</label>
-                        <input type="text" id="inventoryRoomCodeInput" class="form-control" placeholder="e.g., maritime">
-                    </div>
-                </div>
-                <div class="form-group inventory-form-group inventory-full-width">
-                    <label for="inventoryRoomDescriptionInput">Description</label>
-                    <textarea id="inventoryRoomDescriptionInput" class="form-control" rows="3" placeholder="Optional notes about this inventory room"></textarea>
-                </div>
-            </form>
-        </div>
-        <div class="inventory-modal-footer">
-            <button type="button" class="btn btn-secondary" id="cancelAddInventoryRoomButton">Cancel</button>
-            <button type="button" class="btn btn-primary" id="saveInventoryRoomButton">Save Inventory Room</button>
-        </div>
-    </div>
-</div>
-<?php endif; ?>
+<!-- TASK 6B PHASE 2 — the "Add Inventory Room" modal was removed. It was only
+     ever opened by the Add Inventory Room toolbar button, which in turn only
+     appeared in the inventory-room browse mode; both are gone. -->
 
 <?php if ($canManageCategories): ?>
 <div id="manageCategoriesModal" class="inventory-modal" aria-hidden="true">
     <div class="inventory-modal-content">
         <div class="inventory-modal-header">
-            <h2>Manage Categories</h2>
+            <div>
+                <h2>Category Management</h2>
+                <p class="inventory-modal-subtitle">Create, edit, and organize the categories used across inventory items.</p>
+            </div>
             <button type="button" class="inventory-modal-close" id="closeManageCategoriesModalButton" aria-label="Close">&times;</button>
         </div>
         <div class="inventory-modal-body">
@@ -508,31 +477,46 @@ include __DIR__ . '/../includes/header.php';
 <script>
 const ITEMS_API_BASE = window.SFMS_PUBLIC_URL('/api/items');
 const INVENTORY_STOCK_API_BASE = window.SFMS_PUBLIC_URL('/api/inventory-stock');
-const INVENTORY_ROOMS_API_BASE = window.SFMS_PUBLIC_URL('/api/inventory-rooms');
-const ROOMS_API_BASE = '/api/rooms';
+// TASK 6B PHASE 2 — INVENTORY_ROOMS_API_BASE (/api/inventory-rooms) was
+// removed. The route is untouched and still live; this page no longer calls it.
+// TASK 34 — the app is served from a SUBDIRECTORY (/School_Facility_Maintenance_System),
+// so every API path must go through window.SFMS_PUBLIC_URL(). These two previously used
+// bare root-absolute paths, which resolved to http://localhost/api/... (outside the app's
+// base path) and returned Apache's 404 HTML page instead of JSON — the routes were fine
+// all along; only the URLs were wrong. Same bug/fix already applied in inventory-reports.php.
+const ROOMS_API_BASE = window.SFMS_PUBLIC_URL('/api/rooms');
+const BUILDINGS_API_BASE = window.SFMS_PUBLIC_URL('/api/buildings');
 const CATEGORIES_API_BASE = window.SFMS_PUBLIC_URL('/api/inventory-categories');
-const DEPARTMENTS_API_BASE = '/api/departments';
+const DEPARTMENTS_API_BASE = window.SFMS_PUBLIC_URL('/api/departments');
 const CAN_MANAGE_CATEGORIES = <?php echo $canManageCategories ? 'true' : 'false'; ?>;
 const CAN_ADD_ITEMS = <?php echo $canAddItems ? 'true' : 'false'; ?>;
 const CAN_CREATE_INVENTORY_ENTRIES = <?php echo $canCreateInventoryEntries ? 'true' : 'false'; ?>;
 const CAN_ADJUST_STOCK = <?php echo $canAdjustStock ? 'true' : 'false'; ?>;
 const HIDDEN_CATEGORY_NAMES = new Set(['janitorial', 'medical']);
 
-let inventoryRoomsCache = [];
 let inventoryCategoriesCache = [];
 let inventoryDepartmentsCache = [];
 let inventoryEntryRoomsCache = [];
 let inventoryAllItems = [];
 let inventoryEntryHistory = [];
 let inventorySelectedCategoryId = null;
-let inventorySelectedInventoryRoomId = null;
 let inventorySearchTerm = '';
 let inventoryItemsStatusFilter = '';
-let inventoryItemsConditionFilter = '';
+let inventoryItemsCategoryFilter = null;
 let categoryAdminSearchTerm = '';
 let categoryAdminStatusFilter = 'all';
 let inventoryStatusFilter = (new URLSearchParams(window.location.search).get('status_filter') || '').toLowerCase();
-let inventoryBrowseMode = 'category';
+// TASK 6B PHASE 2 — `inventoryBrowseMode` (which toggled between 'category'
+// and 'inventory_room') was removed. The inventory-room mode had no entry
+// point in the rendered markup, so it was already unreachable.
+
+// TASK 31/33 — Inventory Items pagination. Mirrors reports.php's All Reports
+// client-side pagination pattern (currentPage / rowsPerPage), since the
+// backend /api/inventory-stock endpoint (InventoryStockController::index)
+// has no page/per_page/limit/offset support and already returns the full
+// filtered dataset in one response — identical to how allReports works.
+let inventoryCurrentPage = 1;
+let inventoryRowsPerPage = 20;
 
 if (inventoryStatusFilter !== 'low_stock' && inventoryStatusFilter !== 'out_of_stock' && inventoryStatusFilter !== 'available') {
     inventoryStatusFilter = '';
@@ -589,22 +573,6 @@ function setManageCategoriesMessage(message, type = 'info') {
     box.className = `inventory-modal-message inventory-modal-message-${type}`;
 }
 
-function setAddInventoryRoomMessage(message, type = 'info') {
-    const box = document.getElementById('addInventoryRoomMessage');
-    if (!box) return;
-
-    if (!message) {
-        box.hidden = true;
-        box.textContent = '';
-        box.className = 'inventory-modal-message';
-        return;
-    }
-
-    box.hidden = false;
-    box.textContent = message;
-    box.className = `inventory-modal-message inventory-modal-message-${type}`;
-}
-
 function setInventoryEntryMessage(message, type = 'info') {
     const box = document.getElementById('inventoryEntryModalMessage');
     if (!box) return;
@@ -644,7 +612,7 @@ function populateAdjustStockItemOptions(selectedItemId = null) {
     const sortedItems = [...inventoryAllItems].sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
 
     select.innerHTML = '<option value="">Select an item...</option>' + sortedItems.map((item) => {
-        const label = `${item.name || 'Unnamed Item'} — ${Number(item.quantity ?? 0)} on hand (${item.inventory_room_name || 'Inventory Room'})`;
+        const label = `${item.name || 'Unnamed Item'} — ${Number(item.quantity ?? 0)} on hand`;
         return `<option value="${Number(item.id)}">${inventoryEscapeHtml(label)}</option>`;
     }).join('');
 
@@ -895,48 +863,15 @@ function getCategoryToneClass(categoryName) {
     return 'tone-default';
 }
 
-function getInventoryRoomById(id) {
-    return inventoryRoomsCache.find((room) => Number(room.id) === Number(id)) || null;
-}
-
-async function fetchInventoryRooms() {
-    const response = await fetch(`${INVENTORY_ROOMS_API_BASE}`, { credentials: 'same-origin' });
-    const payload = await response.json();
-
-    if (!response.ok || !payload.success) {
-        throw new Error(payload.message || 'Failed to load inventory rooms');
-    }
-
-    inventoryRoomsCache = Array.isArray(payload.data?.rooms) ? payload.data.rooms : [];
-}
-
-async function loadInventoryRoomsForSelect() {
-    const select = document.getElementById('inventoryRoomSelect');
-    if (!select) return;
-
-    select.innerHTML = '<option value="">Choose inventory room</option>';
-
-    inventoryRoomsCache.forEach((room) => {
-        const option = document.createElement('option');
-        option.value = String(room.id);
-        option.textContent = room.name || 'Unnamed Inventory Room';
-        select.appendChild(option);
-    });
-
-    if (inventoryRoomsCache.length === 0) {
-        select.innerHTML = '<option value="">No inventory rooms available</option>';
-        select.disabled = true;
-        setAddItemsMessage('Add an inventory room first before saving stock items.', 'warning');
-    } else {
-        select.disabled = false;
-    }
-}
+// TASK 6B PHASE 2 — getInventoryRoomById(), fetchInventoryRooms() and
+// loadInventoryRoomsForSelect() were removed along with the inventory-room
+// selectors they populated. Inventory is now a single centralized pool, so
+// there is no room to look up, cache, or choose.
 
 function getVisibleInventoryItems() {
     const term = inventorySearchTerm;
 
     return inventoryAllItems.filter((item) => {
-        const inventoryRoomId = item.inventory_room_id === null || item.inventory_room_id === undefined ? null : Number(item.inventory_room_id);
         const categoryId = item.category_id === null || item.category_id === undefined ? null : Number(item.category_id);
         const category = categoryId === null ? null : getCategoryById(categoryId);
         if (category && isHiddenCategoryName(category.name)) {
@@ -951,16 +886,13 @@ function getVisibleInventoryItems() {
             return false;
         }
 
-        if (inventorySelectedInventoryRoomId !== null && inventoryRoomId !== inventorySelectedInventoryRoomId) {
-            return false;
-        }
-
         if (inventoryItemsStatusFilter && normalizeInventoryStatus(item.status) !== inventoryItemsStatusFilter) {
             return false;
         }
 
-        if (inventoryItemsConditionFilter && String(item.item_condition || '').toLowerCase() !== inventoryItemsConditionFilter) {
-            return false;
+        if (inventoryItemsCategoryFilter !== null) {
+            const itemCatId = item.category_id === null || item.category_id === undefined ? null : Number(item.category_id);
+            if (itemCatId !== inventoryItemsCategoryFilter) return false;
         }
 
         if (!term) {
@@ -970,7 +902,6 @@ function getVisibleInventoryItems() {
         const haystack = [
             item.name,
             item.description,
-            item.inventory_room_name,
             item.category_name,
             item.brand,
             item.model,
@@ -986,14 +917,9 @@ function getItemsForCategoryCards() {
     const term = inventorySearchTerm;
 
     return inventoryAllItems.filter((item) => {
-        const inventoryRoomId = item.inventory_room_id === null || item.inventory_room_id === undefined ? null : Number(item.inventory_room_id);
         const categoryId = item.category_id === null || item.category_id === undefined ? null : Number(item.category_id);
         const category = categoryId === null ? null : getCategoryById(categoryId);
         if (category && isHiddenCategoryName(category.name)) {
-            return false;
-        }
-
-        if (inventorySelectedInventoryRoomId !== null && inventoryRoomId !== inventorySelectedInventoryRoomId) {
             return false;
         }
 
@@ -1012,34 +938,8 @@ function getItemsForCategoryCards() {
     });
 }
 
-function getItemsForInventoryRoomCards() {
-    const term = inventorySearchTerm;
-
-    return inventoryAllItems.filter((item) => {
-        const categoryId = item.category_id === null || item.category_id === undefined ? null : Number(item.category_id);
-        const category = categoryId === null ? null : getCategoryById(categoryId);
-        if (category && isHiddenCategoryName(category.name)) {
-            return false;
-        }
-
-        if (inventoryStatusFilter && normalizeInventoryStatus(item.status) !== inventoryStatusFilter) {
-            return false;
-        }
-
-        if (!term) {
-            return true;
-        }
-
-        const haystack = [
-            item.name,
-            item.description,
-            item.inventory_room_name,
-            item.category_name,
-        ].map((value) => String(value || '').toLowerCase()).join(' ');
-
-        return haystack.includes(term);
-    });
-}
+// TASK 6B PHASE 2 — getItemsForInventoryRoomCards() was removed together with
+// the inventory-room browse mode it fed.
 
 function getItemsForStatusCards() {
     const scopedItems = getItemsForCategoryCards();
@@ -1067,6 +967,7 @@ function setInventoryStatusFilter(nextStatus) {
     }
 
     window.history.replaceState({}, '', currentUrl.toString());
+    inventoryCurrentPage = 1; // TASK 31 — status filter changed, start back at page 1
     renderInventoryOverview();
 }
 
@@ -1134,11 +1035,6 @@ function renderInventoryCategoryCards() {
     const container = document.getElementById('inventory-category-cards');
     if (!container) return;
 
-    if (inventoryBrowseMode === 'inventory_room') {
-        renderInventoryRoomCards(container);
-        return;
-    }
-
     const categories = inventoryCategoriesCache.filter((category) => Number(category.is_active || 0) === 1 && !isHiddenCategoryName(category.name));
     const cardItems = getItemsForCategoryCards();
 
@@ -1205,109 +1101,59 @@ function renderInventoryCategoryCards() {
         });
     });
 
-    container.querySelectorAll('[data-inventory-room="true"]').forEach((card) => {
-        card.addEventListener('click', async () => {
-            inventoryBrowseMode = 'inventory_room';
-            inventorySelectedCategoryId = null;
-            inventorySelectedInventoryRoomId = null;
-            updateInventoryBrowserHeading();
-            toggleInventoryRoomActionButton();
-            if (inventoryRoomsCache.length === 0) {
-                await fetchInventoryRooms();
-            }
-            renderInventoryOverview();
-        });
-    });
+    // TASK 6B PHASE 2 — the '[data-inventory-room="true"]' listener that
+    // switched the browser into inventory-room mode was removed. No card
+    // markup ever rendered that attribute, so the branch was already
+    // unreachable; removing it cannot change behaviour.
 }
 
-function renderInventoryRoomCards(container) {
-    const rooms = Array.isArray(inventoryRoomsCache) ? inventoryRoomsCache : [];
-    const roomItems = getItemsForInventoryRoomCards();
-
-    const backBtnMarkup = `
-        <div class="inventory-room-back-wrap">
-            <button type="button" class="btn btn-secondary inventory-room-back-btn" data-room-view="back">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
-                Back to Categories
-            </button>
-        </div>
-    `;
-
-    if (rooms.length === 0) {
-        container.innerHTML = backBtnMarkup + `
-            <div class="ui-empty-state ui-fade-in inventory-room-empty-state">
-                <strong>No inventory rooms yet.</strong>
-                <span>Add an inventory room to start grouping stockroom equipment.</span>
-            </div>
-        `;
-    } else {
-        const cards = [backBtnMarkup];
-
-        rooms.forEach((room) => {
-            const roomId = Number(room.id);
-            const matchingItems = roomItems.filter((item) => Number(item.inventory_room_id || 0) === roomId);
-            const lowCount = matchingItems.filter((item) => normalizeInventoryStatus(item.status) === 'low_stock').length;
-            const outCount = matchingItems.filter((item) => normalizeInventoryStatus(item.status) === 'out_of_stock').length;
-            const okCount = matchingItems.filter((item) => normalizeInventoryStatus(item.status) === 'available').length;
-            const activeClass = inventorySelectedInventoryRoomId === roomId ? 'is-active' : '';
-            const countClass = matchingItems.length === 0 ? 'is-empty' : '';
-
-            cards.push(`
-                <button type="button" class="inventory-category-card tone-classroom ${activeClass} ${countClass}" data-inventory-room-card="${roomId}" aria-pressed="${inventorySelectedInventoryRoomId === roomId ? 'true' : 'false'}">
-                    <span class="inventory-category-card-icon">${getCategoryIconMarkup('classroom')}</span>
-                    <span class="inventory-category-card-content">
-                        <span class="inventory-category-card-name">${room.name || 'Unnamed Inventory Room'}</span>
-                        <span class="inventory-category-card-meta">
-                            ${okCount > 0 ? `<span class="inventory-category-chip is-ok">${okCount} ok</span>` : ''}
-                            ${lowCount > 0 ? `<span class="inventory-category-chip is-low">${lowCount} low</span>` : ''}
-                            ${outCount > 0 ? `<span class="inventory-category-chip is-out">${outCount} out</span>` : ''}
-                            ${matchingItems.length === 0 ? `<span class="inventory-category-chip">No items</span>` : ''}
-                        </span>
-                    </span>
-                    <span class="inventory-category-card-count-badge">${matchingItems.length}</span>
-                </button>
-            `);
-        });
-
-        container.innerHTML = cards.join('');
-    }
-
-    container.querySelectorAll('[data-room-view="back"]').forEach((btn) => {
-        btn.addEventListener('click', () => {
-            inventoryBrowseMode = 'category';
-            inventorySelectedInventoryRoomId = null;
-            updateInventoryBrowserHeading();
-            toggleInventoryRoomActionButton();
-            renderInventoryOverview();
-        });
-    });
-
-    container.querySelectorAll('[data-inventory-room-card]').forEach((card) => {
-        card.addEventListener('click', () => {
-            inventorySelectedInventoryRoomId = Number(card.getAttribute('data-inventory-room-card') || 0) || null;
-            renderInventoryOverview();
-        });
-    });
-}
+// TASK 6B PHASE 2 — renderInventoryRoomCards() and
+// toggleInventoryRoomActionButton() were removed. Both were only reachable
+// from the inventory-room browse mode, which nothing could enter.
 
 function updateInventoryBrowserHeading() {
     const heading = document.getElementById('inventory-browser-heading');
     if (!heading) return;
-    heading.textContent = inventoryBrowseMode === 'inventory_room' ? 'Inventory Rooms' : 'Browse by Category';
+    heading.textContent = 'Browse by Category';
 }
 
-function toggleInventoryRoomActionButton() {
-    const button = document.getElementById('addInventoryRoomButton');
-    if (!button) return;
-    button.hidden = inventoryBrowseMode !== 'inventory_room';
+function populateItemsCategoryFilter() {
+    const select = document.getElementById('inventory-items-category-filter');
+    if (!select) return;
+    const active = inventoryCategoriesCache.filter((c) => Number(c.is_active || 0) === 1);
+    select.innerHTML = '<option value="">All Categories</option>';
+    active.forEach((c) => {
+        const opt = document.createElement('option');
+        opt.value = String(c.id);
+        opt.textContent = c.name || 'Unnamed Category';
+        select.appendChild(opt);
+    });
 }
 
 function renderInventoryOverview() {
     const visibleItems = getVisibleInventoryItems();
-    updateInventoryBrowserHeading();
-    toggleInventoryRoomActionButton();
-    renderInventoryCategoryCards();
-    renderItems(visibleItems);
+
+    // TASK 31 — paginate the filtered result set the same way reports.php
+    // paginates allReports: clamp the current page (so a CRUD refresh that
+    // empties the last page — e.g. deleting the last item on it — moves
+    // back automatically), slice, render only the current page's rows, and
+    // keep the count badge tied to the *total filtered* count, not the
+    // per-page count.
+    const totalItems = visibleItems.length;
+    const totalPages = Math.max(1, Math.ceil(totalItems / inventoryRowsPerPage));
+
+    if (inventoryCurrentPage > totalPages) {
+        inventoryCurrentPage = totalPages;
+    }
+    if (inventoryCurrentPage < 1) {
+        inventoryCurrentPage = 1;
+    }
+
+    const startIndex = (inventoryCurrentPage - 1) * inventoryRowsPerPage;
+    const pagedItems = visibleItems.slice(startIndex, startIndex + inventoryRowsPerPage);
+
+    renderItems(pagedItems, totalItems);
+    renderInventoryItemsPagination(totalItems, totalPages, startIndex);
 }
 
 function resetCategoryForm() {
@@ -1454,7 +1300,11 @@ function applySelectedCategoryRules() {
 }
 
 async function fetchInventoryCategories() {
-    const response = await fetch(window.SFMS_PUBLIC_URL('/api/inventory-categories'), { credentials: 'same-origin' });
+    // include_inactive=1 so the "Manage Categories" admin list can see/reactivate inactive
+    // categories too. Every other consumer of inventoryCategoriesCache (Browse-by-Category
+    // cards, item-entry dropdowns) already filters to is_active === 1 client-side, so this
+    // is safe for the whole page.
+    const response = await fetch(window.SFMS_PUBLIC_URL('/api/inventory-categories?include_inactive=1'), { credentials: 'same-origin' });
     const payload = await response.json();
 
     if (!response.ok || !payload.success) {
@@ -1476,6 +1326,7 @@ async function refreshCategoriesUI() {
         await fetchInventoryCategories();
         await loadInventoryCategoriesForSelect();
         await loadInventoryEntryCategoryOptions();
+        populateItemsCategoryFilter();
         renderCategoriesList();
         applySelectedCategoryRules();
     } catch (error) {
@@ -1588,23 +1439,8 @@ async function loadInventoryEntryRoomOptions() {
     }
 }
 
-async function loadInventoryEntryInventoryRoomOptions() {
-    const select = document.getElementById('inventoryEntryInventoryRoom');
-    if (!select) return;
-
-    select.innerHTML = '<option value="">Select warehouse inventory</option>';
-
-    inventoryRoomsCache.forEach((room) => {
-        const option = document.createElement('option');
-        option.value = String(room.id);
-        option.textContent = room.name || 'Unnamed Inventory Room';
-        select.appendChild(option);
-    });
-
-    if (inventoryRoomsCache.length === 1) {
-        select.value = String(inventoryRoomsCache[0].id);
-    }
-}
+// TASK 6B PHASE 2 — loadInventoryEntryInventoryRoomOptions() was removed
+// together with the "Warehouse / Main Inventory" selector it populated.
 
 function formatInventoryEntryCondition(condition) {
     return String(condition || '')
@@ -1624,7 +1460,7 @@ function renderInventoryEntryHistory(entries) {
 
     let html = '<div class="inventory-entry-table-wrap"><table class="table inventory-entry-table">';
     html += '<thead><tr>';
-    html += '<th>Stock Entry ID</th><th>Date Received</th><th>Item</th><th>Supplier</th><th>OR / Receipt</th><th>Category</th><th>Department</th><th>Laboratory / Room</th><th>Warehouse</th><th>Receiver</th><th>Condition</th><th>Description</th>';
+    html += '<th>Stock Entry ID</th><th>Date Received</th><th>Item</th><th>Supplier</th><th>OR / Receipt</th><th>Category</th><th>Department</th><th>Laboratory / Room</th><th>Receiver</th><th>Condition</th><th>Description</th>';
     html += '</tr></thead><tbody>';
 
     entries.forEach((entry) => {
@@ -1642,7 +1478,6 @@ function renderInventoryEntryHistory(entries) {
         html += `<td>${inventoryEscapeHtml(entry.category_name || 'Uncategorized')}</td>`;
         html += `<td>${inventoryEscapeHtml(entry.department_name || '-')}</td>`;
         html += `<td>${inventoryEscapeHtml(entry.room_name || '-')}</td>`;
-        html += `<td>${inventoryEscapeHtml(entry.inventory_room_name || 'Warehouse')}</td>`;
         html += `<td>${inventoryEscapeHtml(entry.receiver_name || '-')}</td>`;
         html += `<td>${inventoryEscapeHtml(formatInventoryEntryCondition(entry.item_condition || '-'))}</td>`;
         html += `<td>${inventoryEscapeHtml(entry.description || '-')}</td>`;
@@ -1708,7 +1543,6 @@ function openInventoryEntryModal() {
     if (dateInput) {
         dateInput.value = new Date().toISOString().slice(0, 10);
     }
-    loadInventoryEntryInventoryRoomOptions();
     document.getElementById('inventoryEntryIdPreview').textContent = 'Auto-generated when saved';
     document.getElementById('inventoryEntryOrNumber')?.focus();
 }
@@ -1735,12 +1569,11 @@ async function saveInventoryEntry() {
         unit_type: (document.getElementById('inventoryEntryUnitType')?.value || '').trim(),
         department_id: document.getElementById('inventoryEntryDepartment')?.value || '',
         room_id: document.getElementById('inventoryEntryRoom')?.value || '',
-        inventory_room_id: document.getElementById('inventoryEntryInventoryRoom')?.value || '',
         description: (document.getElementById('inventoryEntryDescription')?.value || '').trim(),
         item_condition: document.getElementById('inventoryEntryCondition')?.value || '',
     };
 
-    if (!payload.or_number || !payload.supplier_name || !payload.date_received || !payload.category_id || !payload.item_name || payload.quantity <= 0 || !payload.unit_type || !payload.department_id || !payload.inventory_room_id || !payload.item_condition) {
+    if (!payload.or_number || !payload.supplier_name || !payload.date_received || !payload.category_id || !payload.item_name || payload.quantity <= 0 || !payload.unit_type || !payload.department_id || !payload.item_condition) {
         setInventoryEntryMessage('Please complete all required inventory entry fields before saving.', 'danger');
         return;
     }
@@ -1752,7 +1585,7 @@ async function saveInventoryEntry() {
         saveButton.textContent = 'Saving...';
     }
 
-    setInventoryEntryMessage('Saving inventory entry and updating warehouse stock...', 'info');
+    setInventoryEntryMessage('Saving inventory entry and updating inventory stock...', 'info');
 
     try {
         const response = await fetch(`${INVENTORY_STOCK_API_BASE}/entries`, {
@@ -1787,26 +1620,8 @@ async function saveInventoryEntry() {
     }
 }
 
-function openAddInventoryRoomModal() {
-    const modal = document.getElementById('addInventoryRoomModal');
-    if (!modal) return;
-
-    modal.classList.add('show');
-    modal.setAttribute('aria-hidden', 'false');
-    setAddInventoryRoomMessage('');
-    document.getElementById('addInventoryRoomForm')?.reset();
-    document.getElementById('inventoryRoomNameInput')?.focus();
-}
-
-function closeAddInventoryRoomModal() {
-    const modal = document.getElementById('addInventoryRoomModal');
-    if (!modal) return;
-
-    modal.classList.remove('show');
-    modal.setAttribute('aria-hidden', 'true');
-    document.getElementById('addInventoryRoomForm')?.reset();
-    setAddInventoryRoomMessage('');
-}
+// TASK 6B PHASE 2 — openAddInventoryRoomModal() / closeAddInventoryRoomModal()
+// were removed along with the Add Inventory Room modal itself.
 
 function openAddItemsModal() {
     const modal = document.getElementById('addItemsModal');
@@ -1829,18 +1644,19 @@ function openAddItemsModal() {
         thresholdInput.disabled = false;
     }
 
-    Promise.all([refreshCategoriesUI(), fetchInventoryRooms()])
+    refreshCategoriesUI()
         .then(() => {
-            loadInventoryRoomsForSelect();
             updateInventoryStatusPreview();
-            const firstEditable = document.getElementById('inventoryRoomSelect');
+            // TASK 6B PHASE 2 — the inventory-room selector used to be the
+            // first editable control; focus now starts on the item name.
+            const firstEditable = document.getElementById('inventoryItemNameInput');
             if (firstEditable && !firstEditable.disabled) {
                 firstEditable.focus();
             }
         })
         .catch((error) => {
             console.error('Add item modal bootstrap error:', error);
-            setAddItemsMessage(error.message || 'Could not load inventory room options.', 'danger');
+            setAddItemsMessage(error.message || 'Could not load category options.', 'danger');
         });
 }
 
@@ -1868,7 +1684,6 @@ function closeAddItemsModal() {
 
 function fillInventoryItemForm(item) {
     document.getElementById('inventoryItemIdInput').value = String(item.id || '');
-    document.getElementById('inventoryRoomSelect').value = String(item.inventory_room_id || '');
     document.getElementById('inventoryItemNameInput').value = item.name || '';
     document.getElementById('inventoryQuantityInput').value = String(Number(item.quantity || 0));
     document.getElementById('inventoryQuantityInput').setAttribute('min', '0');
@@ -1892,9 +1707,8 @@ function startEditInventoryItem(itemId) {
     document.getElementById('addItemsModalTitle').textContent = 'Edit Item';
     document.getElementById('saveAddItemsButton').textContent = 'Save Changes';
 
-    Promise.all([refreshCategoriesUI(), fetchInventoryRooms()])
+    refreshCategoriesUI()
         .then(() => {
-            loadInventoryRoomsForSelect();
             fillInventoryItemForm(item);
             // Quantity can only be changed via Manual Stock Adjustment, so it's
             // read-only here — Edit Item only ever touches metadata fields.
@@ -2133,6 +1947,10 @@ async function deleteCategory(id) {
         const result = await response.json();
 
         if (!response.ok || !result.success) {
+            if (response.status === 409) {
+                showCategoryDeleteBlockedMessage(category);
+                return;
+            }
             throw new Error(result.message || 'Failed to delete category');
         }
 
@@ -2145,9 +1963,37 @@ async function deleteCategory(id) {
     }
 }
 
+function showCategoryDeleteBlockedMessage(category) {
+    const box = document.getElementById('manageCategoriesMessage');
+    if (!box) return;
+
+    const count = category ? Number(category.total_items || 0) : 0;
+    const itemNoun = count === 1 ? 'inventory item' : 'inventory items';
+    const itemPronoun = count === 1 ? 'that item' : 'those items';
+
+    box.hidden = false;
+    box.className = 'inventory-modal-message inventory-modal-message-danger';
+    box.innerHTML = `
+        <div><strong>Category cannot be deleted</strong></div>
+        <div style="margin-top:4px;">This category is currently assigned to ${count} ${itemNoun}. Reassign ${itemPronoun} to another category before deleting it.</div>
+        <div style="display:flex;gap:8px;margin-top:10px;">
+            <button id="catDelViewItems" type="button" class="btn btn-secondary btn-sm">View Items</button>
+            <button id="catDelCancel" type="button" class="btn btn-secondary btn-sm">Cancel</button>
+        </div>
+    `;
+    box.querySelector('#catDelViewItems').onclick = () => {
+        setManageCategoriesMessage('');
+        closeManageCategoriesModal();
+        inventorySelectedCategoryId = category ? Number(category.id) : null;
+        inventoryCurrentPage = 1;
+        renderInventoryOverview();
+        document.getElementById('inventory-browser-heading')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+    };
+    box.querySelector('#catDelCancel').onclick = () => setManageCategoriesMessage('');
+}
+
 async function saveAddItems() {
     const itemId = Number(document.getElementById('inventoryItemIdInput')?.value || 0);
-    const inventoryRoomId = Number(document.getElementById('inventoryRoomSelect')?.value || 0);
     const categoryIdRaw = document.getElementById('inventoryCategorySelect')?.value || '';
     const name = document.getElementById('inventoryItemNameInput').value.trim();
     const brand = document.getElementById('inventoryBrandInput').value.trim();
@@ -2157,11 +2003,6 @@ async function saveAddItems() {
     const quantity = Number(document.getElementById('inventoryQuantityInput').value || 0);
     const reorderLevelRaw = document.getElementById('inventoryThresholdOverrideInput')?.value || '';
     const description = document.getElementById('inventoryDescriptionInput').value.trim();
-
-    if (!inventoryRoomId) {
-        setAddItemsMessage('Please choose an inventory room.', 'danger');
-        return;
-    }
 
     if (!name) {
         setAddItemsMessage('Please enter an item name.', 'danger');
@@ -2193,8 +2034,10 @@ async function saveAddItems() {
         return;
     }
 
+    // TASK 6B PHASE 2 — inventory_room_id is deliberately omitted. This is the
+    // live PUT /api/inventory-stock/{id} path, and the controller preserves the
+    // stored inventory_room_id whenever the key is absent from the payload.
     const payload = {
-        inventory_room_id: inventoryRoomId,
         name,
         brand,
         model,
@@ -2247,68 +2090,30 @@ async function saveAddItems() {
     }
 }
 
-async function saveInventoryRoom() {
-    const name = (document.getElementById('inventoryRoomNameInput')?.value || '').trim();
-    const code = (document.getElementById('inventoryRoomCodeInput')?.value || '').trim().toLowerCase();
-    const description = (document.getElementById('inventoryRoomDescriptionInput')?.value || '').trim();
+// TASK 6B PHASE 2 — saveInventoryRoom() was removed. Inventory rooms are no
+// longer a user-facing concept, so the UI never creates one. The
+// POST /api/inventory-rooms route itself is retained untouched.
 
-    if (!name) {
-        setAddInventoryRoomMessage('Please enter an inventory room name.', 'danger');
-        return;
-    }
-
-    const saveButton = document.getElementById('saveInventoryRoomButton');
-    const originalLabel = saveButton?.textContent || 'Save Inventory Room';
-    if (saveButton) {
-        saveButton.disabled = true;
-        saveButton.textContent = 'Saving...';
-    }
-
-    try {
-        const response = await fetch(`${INVENTORY_ROOMS_API_BASE}`, {
-            method: 'POST',
-            credentials: 'same-origin',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                name,
-                code: code || null,
-                description
-            })
-        });
-        const result = await response.json();
-
-        if (!response.ok || !result.success) {
-            throw new Error(result.message || 'Failed to save inventory room');
-        }
-
-        await fetchInventoryRooms();
-        closeAddInventoryRoomModal();
-        renderInventoryOverview();
-    } catch (error) {
-        console.error('Save inventory room error:', error);
-        setAddInventoryRoomMessage(error.message || 'Failed to save inventory room.', 'danger');
-    } finally {
-        if (saveButton) {
-            saveButton.disabled = false;
-            saveButton.textContent = originalLabel;
-        }
-    }
-}
-
-function renderItems(items) {
+function renderItems(items, totalItems) {
     const container = document.getElementById('inventory-container');
     if (!container) return;
 
+    // TASK 31 — `items` is now just the current page's slice; the badge
+    // must reflect the total filtered count, not items.length. Callers
+    // that still pass a single array (none currently do) fall back to
+    // items.length so this stays backward compatible.
+    const badgeCount = typeof totalItems === 'number' ? totalItems : (Array.isArray(items) ? items.length : 0);
+
     if (!Array.isArray(items) || items.length === 0) {
         container.innerHTML = '<div class="ui-empty-state ui-fade-in"><strong>No inventory items found.</strong><span>Inventory records will appear here after items are added.</span></div>';
-        setText('inventory-count', '0 items');
+        setText('inventory-count', `${badgeCount} items`);
         return;
     }
 
     let html = '<div class="inventory-items-table-wrap">';
     html += '<table class="table inventory-items-table">';
     html += '<thead><tr>';
-    html += '<th>ID</th><th>Item</th><th>Category</th><th>Location</th><th>Quantity</th><th>Threshold</th><th>Condition</th><th>Status</th><th>Description</th><th>Updated</th><th>Actions</th>';
+    html += '<th>ID</th><th>Item</th><th>Category</th><th>Quantity</th><th>Threshold</th><th>Status</th><th>Description</th><th>Updated</th><th>Actions</th>';
     html += '</tr></thead><tbody>';
 
     items.forEach((item) => {
@@ -2320,27 +2125,24 @@ function renderItems(items) {
         const updated = item.updated_at ? new Date(String(item.updated_at).replace(' ', 'T')).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A';
         const threshold = resolveItemThreshold(item);
         const quantityValue = Number(item.quantity ?? 0);
-        const conditionLabel = String(item.item_condition || '').replace(/_/g, ' ');
-        const lowStockMarkup = Number(item.low_stock_warning || 0) === 1
-            ? '<span class="inventory-inline-chip is-low">Low stock warning</span>'
-            : '';
-
         html += `<tr data-row-item-id="${Number(item.id)}">`;
         html += `<td class="inventory-item-id">#${item.id ?? '-'}</td>`;
-        html += `<td class="inventory-item-cell"><div class="inventory-item-name">${inventoryEscapeHtml(item.name || 'Unnamed Item')}</div>${item.brand ? `<div class="inventory-item-meta">Brand: ${inventoryEscapeHtml(item.brand)}</div>` : ''}${item.model ? `<div class="inventory-item-meta">Model: ${inventoryEscapeHtml(item.model)}</div>` : ''}${item.unit_type ? `<div class="inventory-item-meta">Unit: ${inventoryEscapeHtml(item.unit_type)}</div>` : ''}${lowStockMarkup}</td>`;
+        html += `<td class="inventory-item-cell"><div class="inventory-item-name">${inventoryEscapeHtml(item.name || 'Unnamed Item')}</div>${item.brand ? `<div class="inventory-item-meta">Brand: ${inventoryEscapeHtml(item.brand)}</div>` : ''}${item.model ? `<div class="inventory-item-meta">Model: ${inventoryEscapeHtml(item.model)}</div>` : ''}${item.unit_type ? `<div class="inventory-item-meta">Unit: ${inventoryEscapeHtml(item.unit_type)}</div>` : ''}</td>`;
         html += `<td class="inventory-table-cell-muted">${item.category_name || 'Uncategorized'}</td>`;
-        html += `<td class="inventory-table-cell-muted">${item.inventory_room_name || 'Inventory Room'}</td>`;
         html += `<td class="inventory-table-cell-numeric">${quantityValue}</td>`;
         html += `<td class="inventory-table-cell-numeric">${formatThreshold(threshold)}</td>`;
-        html += `<td class="inventory-table-cell-muted">${inventoryEscapeHtml(conditionLabel || '-')}</td>`;
         html += `<td><span class="badge inventory-status-badge ${statusClass}">${status}</span></td>`;
         html += `<td class="inventory-table-cell-muted">${inventoryEscapeHtml(item.description || '-')}</td>`;
         html += `<td class="inventory-table-cell-muted">${updated}</td>`;
+        // TASK 4 — when the user has more than one action available the row
+        // actions collapse into a single ⋮ menu. Roles without CAN_ADD_ITEMS
+        // only ever had History (Edit/Delete were never rendered for them),
+        // so they keep the plain History button: wrapping a single action in
+        // a dropdown would cost a click and buy nothing. The authorization
+        // gate itself is unchanged — still exactly CAN_ADD_ITEMS.
         html += `<td class="inventory-actions-cell">
             <div class="inventory-table-actions">
-                <button type="button" class="btn btn-secondary btn-sm inventory-action-btn is-history" data-action="history" data-item-id="${Number(item.id)}">History</button>
-                ${CAN_ADD_ITEMS ? `<button type="button" class="btn btn-secondary btn-sm inventory-action-btn is-edit" data-action="edit" data-item-id="${Number(item.id)}">Edit</button>` : ''}
-                ${CAN_ADD_ITEMS ? `<button type="button" class="btn btn-danger btn-sm inventory-action-btn is-delete" data-action="delete" data-item-id="${Number(item.id)}">Delete</button>` : ''}
+                ${CAN_ADD_ITEMS ? `<button type="button" class="inventory-action-kebab" data-action="row-menu" data-item-id="${Number(item.id)}" aria-haspopup="menu" aria-expanded="false" aria-label="Actions for ${inventoryEscapeHtml(item.name || 'item')}" title="Actions">&#8942;</button>` : `<button type="button" class="btn btn-secondary btn-sm inventory-action-btn is-history" data-action="history" data-item-id="${Number(item.id)}">History</button>`}
             </div>
         </td>`;
         html += '</tr>';
@@ -2348,19 +2150,164 @@ function renderItems(items) {
 
     html += '</tbody></table></div>';
     container.innerHTML = html;
-    setText('inventory-count', `${items.length} items`);
+    setText('inventory-count', `${badgeCount} items`);
 
+    // Read-only roles still render a bare History button (no menu).
     container.querySelectorAll('[data-action="history"]').forEach((button) => {
         button.addEventListener('click', () => openInventoryItemHistory(Number(button.getAttribute('data-item-id') || 0)));
     });
     if (CAN_ADD_ITEMS) {
-        container.querySelectorAll('[data-action="edit"]').forEach((button) => {
-            button.addEventListener('click', () => startEditInventoryItem(Number(button.getAttribute('data-item-id') || 0)));
-        });
-        container.querySelectorAll('[data-action="delete"]').forEach((button) => {
-            button.addEventListener('click', () => deleteInventoryItem(Number(button.getAttribute('data-item-id') || 0)));
+        container.querySelectorAll('[data-action="row-menu"]').forEach((button) => {
+            button.addEventListener('click', (event) => {
+                event.stopPropagation();
+                toggleInventoryActionMenu(button, Number(button.getAttribute('data-item-id') || 0));
+            });
         });
     }
+}
+
+// TASK 4 — single shared row-action menu. One element is reused by every
+// row (rather than one dropdown per row) and it lives directly on <body>
+// so that #inventory-container's `overflow: auto` cannot clip it and no
+// ancestor `transform` can capture its fixed positioning. Actions dispatch
+// to the exact same functions the old inline buttons called, so behaviour
+// and authorization are unchanged.
+let inventoryActionMenuEl = null;
+let inventoryActionMenuTrigger = null;
+
+function getInventoryActionMenu() {
+    if (inventoryActionMenuEl) return inventoryActionMenuEl;
+
+    const menu = document.createElement('div');
+    menu.className = 'inventory-action-menu';
+    menu.id = 'inventoryRowActionMenu';
+    menu.setAttribute('role', 'menu');
+
+    [
+        { label: 'History', action: 'history', danger: false },
+        { label: 'Edit', action: 'edit', danger: false },
+        { label: 'Delete', action: 'delete', danger: true },
+    ].forEach((entry) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'inventory-action-menu-item' + (entry.danger ? ' is-danger' : '');
+        button.setAttribute('role', 'menuitem');
+        button.dataset.menuAction = entry.action;
+        button.textContent = entry.label;
+        button.addEventListener('click', (event) => {
+            event.stopPropagation();
+            const itemId = Number(menu.dataset.itemId || 0);
+            closeInventoryActionMenu();
+            if (entry.action === 'history') openInventoryItemHistory(itemId);
+            else if (entry.action === 'edit') startEditInventoryItem(itemId);
+            else if (entry.action === 'delete') deleteInventoryItem(itemId);
+        });
+        menu.appendChild(button);
+    });
+
+    document.body.appendChild(menu);
+    inventoryActionMenuEl = menu;
+    return menu;
+}
+
+function closeInventoryActionMenu() {
+    if (!inventoryActionMenuEl) return;
+    inventoryActionMenuEl.classList.remove('is-open');
+    if (inventoryActionMenuTrigger) {
+        inventoryActionMenuTrigger.setAttribute('aria-expanded', 'false');
+        inventoryActionMenuTrigger = null;
+    }
+}
+
+function positionInventoryActionMenu(trigger, menu) {
+    const rect = trigger.getBoundingClientRect();
+    const menuRect = menu.getBoundingClientRect();
+    const gap = 4;
+
+    // Right-align to the trigger, clamped into the viewport.
+    let left = rect.right - menuRect.width;
+    left = Math.max(8, Math.min(left, window.innerWidth - menuRect.width - 8));
+
+    // Below by default; flip above when there is not enough room.
+    let top = rect.bottom + gap;
+    if (top + menuRect.height > window.innerHeight - 8) {
+        const above = rect.top - menuRect.height - gap;
+        if (above >= 8) top = above;
+        else top = Math.max(8, window.innerHeight - menuRect.height - 8);
+    }
+
+    menu.style.left = `${Math.round(left)}px`;
+    menu.style.top = `${Math.round(top)}px`;
+}
+
+function toggleInventoryActionMenu(trigger, itemId) {
+    const menu = getInventoryActionMenu();
+    const wasOpenForThisRow = menu.classList.contains('is-open') && inventoryActionMenuTrigger === trigger;
+    closeInventoryActionMenu();
+    if (wasOpenForThisRow) return;
+
+    menu.dataset.itemId = String(itemId);
+    menu.classList.add('is-open');
+    inventoryActionMenuTrigger = trigger;
+    trigger.setAttribute('aria-expanded', 'true');
+    positionInventoryActionMenu(trigger, menu);
+}
+
+document.addEventListener('click', closeInventoryActionMenu);
+document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    const trigger = inventoryActionMenuTrigger;
+    closeInventoryActionMenu();
+    if (trigger) trigger.focus();
+});
+// The menu is fixed-positioned, so it does not travel with the table's own
+// scroll container or the page — close it instead of letting it detach.
+window.addEventListener('scroll', closeInventoryActionMenu, true);
+window.addEventListener('resize', closeInventoryActionMenu);
+
+// TASK 31/33 — Inventory Items pagination controls. Mirrors reports.php's
+// renderPagination() exactly (same summary line + first/prev/page-numbers/
+// next/last button structure + rows-per-page select, same canonical
+// .pagination-list/.pagination-link classes from design-system-components.css),
+// targeting the #inventory-pagination-container <nav> placed right after
+// #inventory-container in the static HTML.
+function renderInventoryItemsPagination(totalItems, totalPages, startIndex) {
+    const container = document.getElementById('inventory-pagination-container');
+    if (!container) return;
+
+    if (totalItems === 0) {
+        container.innerHTML = '';
+        return;
+    }
+
+    const endIndex = Math.min(startIndex + inventoryRowsPerPage, totalItems);
+    const pageButtons = [];
+    for (let page = 1; page <= totalPages; page += 1) {
+        const isActive = inventoryCurrentPage === page;
+        pageButtons.push(`
+            <li><button type="button" class="inventory-pagination-btn pagination-link ${isActive ? 'active is-active' : ''}" data-inventory-page="${page}" ${isActive ? 'aria-current="page"' : ''} aria-label="Page ${page}">${page}</button></li>
+        `);
+    }
+
+    container.innerHTML = `
+        <div class="inventory-pagination-summary">Showing <strong>${startIndex + 1}-${endIndex}</strong> of <strong>${totalItems}</strong> items</div>
+        <ul class="inventory-pagination-controls pagination-list">
+            <li><button type="button" class="inventory-pagination-btn pagination-link pagination-prev" data-inventory-page="1" ${inventoryCurrentPage === 1 ? 'disabled' : ''} aria-label="First page">&laquo;</button></li>
+            <li><button type="button" class="inventory-pagination-btn pagination-link pagination-prev" data-inventory-page="${inventoryCurrentPage - 1}" ${inventoryCurrentPage === 1 ? 'disabled' : ''} aria-label="Previous page">&lsaquo;</button></li>
+            ${pageButtons.join('')}
+            <li><button type="button" class="inventory-pagination-btn pagination-link pagination-next" data-inventory-page="${inventoryCurrentPage + 1}" ${inventoryCurrentPage === totalPages ? 'disabled' : ''} aria-label="Next page">&rsaquo;</button></li>
+            <li><button type="button" class="inventory-pagination-btn pagination-link pagination-next" data-inventory-page="${totalPages}" ${inventoryCurrentPage === totalPages ? 'disabled' : ''} aria-label="Last page">&raquo;</button></li>
+        </ul>
+        <label class="inventory-pagination-size" for="inventory-rows-per-page-select">
+            Rows per page:
+            <select id="inventory-rows-per-page-select" aria-label="Rows per page">
+                <option value="5" ${inventoryRowsPerPage === 5 ? 'selected' : ''}>5</option>
+                <option value="10" ${inventoryRowsPerPage === 10 ? 'selected' : ''}>10</option>
+                <option value="15" ${inventoryRowsPerPage === 15 ? 'selected' : ''}>15</option>
+                <option value="20" ${inventoryRowsPerPage === 20 ? 'selected' : ''}>20</option>
+            </select>
+        </label>
+    `;
 }
 
 // TASK 18 — mirrors highlightUserFromQuery() in users.php.
@@ -2406,10 +2353,8 @@ async function loadInventory() {
 document.addEventListener('DOMContentLoaded', async () => {
     try {
         await refreshCategoriesUI();
-        await fetchInventoryRooms();
-        await loadInventoryEntryInventoryRoomOptions();
     } catch (error) {
-        console.error('Inventory bootstrap error (categories / warehouse rooms):', error);
+        console.error('Inventory bootstrap error (categories):', error);
     }
 
     try {
@@ -2437,7 +2382,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const addButton = document.getElementById('addItemsButton');
     const inventoryEntryButton = document.getElementById('openInventoryEntryButton');
-    const addInventoryRoomButton = document.getElementById('addInventoryRoomButton');
     const closeButton = document.getElementById('closeAddItemsModalButton');
     const cancelButton = document.getElementById('cancelAddItemsButton');
     const saveButton = document.getElementById('saveAddItemsButton');
@@ -2456,10 +2400,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     const inventoryHistoryModal = document.getElementById('inventoryItemHistoryModal');
     const closeInventoryHistoryModalButton = document.getElementById('closeInventoryHistoryModalButton');
     const closeInventoryHistoryFooterButton = document.getElementById('closeInventoryHistoryFooterButton');
-    const addInventoryRoomModal = document.getElementById('addInventoryRoomModal');
-    const closeAddInventoryRoomButton = document.getElementById('closeAddInventoryRoomModalButton');
-    const cancelAddInventoryRoomButton = document.getElementById('cancelAddInventoryRoomButton');
-    const saveInventoryRoomButton = document.getElementById('saveInventoryRoomButton');
     const categorySelect = document.getElementById('inventoryCategorySelect');
     const inventorySearchInput = document.getElementById('inventory-category-search');
     const inventoryEntrySearchInput = document.getElementById('inventory-entry-search');
@@ -2470,7 +2410,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     const inventoryEntryFilterDateTo = document.getElementById('inventory-entry-filter-date-to');
     const inventoryEntryClearFiltersButton = document.getElementById('inventory-entry-clear-filters');
     const inventoryItemsStatusFilterInput = document.getElementById('inventory-items-status-filter');
-    const inventoryItemsConditionFilterInput = document.getElementById('inventory-items-condition-filter');
     const inventoryItemsClearFiltersButton = document.getElementById('inventory-items-clear-filters');
     const inventoryQuantityInput = document.getElementById('inventoryQuantityInput');
     const inventoryThresholdInput = document.getElementById('inventoryThresholdOverrideInput');
@@ -2486,7 +2425,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (inventoryEntryButton) inventoryEntryButton.addEventListener('click', () => {
         window.location.href = window.SFMS_PUBLIC_URL('/purchase-receipts');
     });
-    if (addInventoryRoomButton) addInventoryRoomButton.addEventListener('click', openAddInventoryRoomModal);
     if (closeButton) closeButton.addEventListener('click', closeAddItemsModal);
     if (cancelButton) cancelButton.addEventListener('click', closeAddItemsModal);
     if (saveButton) saveButton.addEventListener('click', saveAddItems);
@@ -2502,34 +2440,67 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (adjustStockItemSelect) adjustStockItemSelect.addEventListener('change', updateAdjustStockReview);
     if (adjustStockDirectionSelect) adjustStockDirectionSelect.addEventListener('change', updateAdjustStockReview);
     if (adjustStockQuantityInput) adjustStockQuantityInput.addEventListener('input', updateAdjustStockReview);
-    if (closeAddInventoryRoomButton) closeAddInventoryRoomButton.addEventListener('click', closeAddInventoryRoomModal);
-    if (cancelAddInventoryRoomButton) cancelAddInventoryRoomButton.addEventListener('click', closeAddInventoryRoomModal);
-    if (saveInventoryRoomButton) saveInventoryRoomButton.addEventListener('click', saveInventoryRoom);
     if (categorySelect) categorySelect.addEventListener('change', applySelectedCategoryRules);
     if (inventorySearchInput) {
         inventorySearchInput.addEventListener('input', () => {
             inventorySearchTerm = inventorySearchInput.value.trim().toLowerCase();
+            inventoryCurrentPage = 1; // TASK 31 — new search term, start back at page 1
             renderInventoryOverview();
         });
     }
     if (inventoryItemsStatusFilterInput) {
         inventoryItemsStatusFilterInput.addEventListener('change', () => {
             inventoryItemsStatusFilter = String(inventoryItemsStatusFilterInput.value || '').toLowerCase();
+            inventoryCurrentPage = 1; // TASK 31 — filtered set changed, start back at page 1
             renderInventoryOverview();
         });
     }
-    if (inventoryItemsConditionFilterInput) {
-        inventoryItemsConditionFilterInput.addEventListener('change', () => {
-            inventoryItemsConditionFilter = String(inventoryItemsConditionFilterInput.value || '').toLowerCase();
+    const inventoryItemsCategoryFilterInput = document.getElementById('inventory-items-category-filter');
+    if (inventoryItemsCategoryFilterInput) {
+        inventoryItemsCategoryFilterInput.addEventListener('change', () => {
+            const val = inventoryItemsCategoryFilterInput.value;
+            inventoryItemsCategoryFilter = val === '' ? null : Number(val);
+            inventoryCurrentPage = 1;
             renderInventoryOverview();
         });
     }
     if (inventoryItemsClearFiltersButton) {
         inventoryItemsClearFiltersButton.addEventListener('click', () => {
             inventoryItemsStatusFilter = '';
-            inventoryItemsConditionFilter = '';
+            inventoryItemsCategoryFilter = null;
             if (inventoryItemsStatusFilterInput) inventoryItemsStatusFilterInput.value = '';
-            if (inventoryItemsConditionFilterInput) inventoryItemsConditionFilterInput.value = '';
+            if (inventoryItemsCategoryFilterInput) inventoryItemsCategoryFilterInput.value = '';
+            inventoryCurrentPage = 1;
+            renderInventoryOverview();
+        });
+    }
+    // TASK 31 — delegated pagination click handler, mirrors reports.php's
+    // #pagination-container listener (attached once here rather than
+    // re-attached per render, since the container's innerHTML is fully
+    // replaced by renderInventoryItemsPagination() on every render anyway).
+    const inventoryPaginationContainer = document.getElementById('inventory-pagination-container');
+    if (inventoryPaginationContainer) {
+        inventoryPaginationContainer.addEventListener('click', (event) => {
+            const pageButton = event.target.closest('[data-inventory-page]');
+            if (!pageButton || pageButton.hasAttribute('disabled')) return;
+
+            const nextPage = Number(pageButton.dataset.inventoryPage);
+            if (Number.isNaN(nextPage) || nextPage < 1) return;
+
+            inventoryCurrentPage = nextPage;
+            renderInventoryOverview();
+        });
+
+        // TASK 33 — delegated rows-per-page change handler, mirrors reports.php's
+        // #pagination-container 'change' listener (same reset-to-page-1 behavior).
+        inventoryPaginationContainer.addEventListener('change', (event) => {
+            if (event.target.id !== 'inventory-rows-per-page-select') return;
+
+            const nextRows = Number(event.target.value);
+            if (Number.isNaN(nextRows) || nextRows < 1) return;
+
+            inventoryRowsPerPage = nextRows;
+            inventoryCurrentPage = 1;
             renderInventoryOverview();
         });
     }
@@ -2583,14 +2554,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         inventoryEntryModal.addEventListener('click', (event) => {
             if (event.target === inventoryEntryModal) {
                 closeInventoryEntryModal();
-            }
-        });
-    }
-
-    if (addInventoryRoomModal) {
-        addInventoryRoomModal.addEventListener('click', (event) => {
-            if (event.target === addInventoryRoomModal) {
-                closeAddInventoryRoomModal();
             }
         });
     }

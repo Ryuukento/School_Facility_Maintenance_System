@@ -71,6 +71,25 @@ class Room {
         return (bool)$stmt->fetch(PDO::FETCH_ASSOC);
     }
 
+    /**
+     * TASK 55 — mirrors the `rooms` table's SEPARATE unique(building_id,
+     * name) index (2026_03_27_000300_create_facility_tables.php), which
+     * spans every floor in the building — a different, wider constraint
+     * than existsByFloorAndName()'s floor-scoped check above. Both must be
+     * checked before insert/update; see FacilityService::createRoom() for
+     * why.
+     */
+    public function existsByBuildingAndName($buildingId, $name, $excludeId = null) {
+        if ($excludeId) {
+            $stmt = $this->pdo->prepare("SELECT id FROM rooms WHERE building_id = ? AND name = ? AND id != ? LIMIT 1");
+            $stmt->execute([$buildingId, $name, $excludeId]);
+        } else {
+            $stmt = $this->pdo->prepare("SELECT id FROM rooms WHERE building_id = ? AND name = ? LIMIT 1");
+            $stmt->execute([$buildingId, $name]);
+        }
+        return (bool)$stmt->fetch(PDO::FETCH_ASSOC);
+    }
+
     public function create($buildingId, $floorId, $name, $capacity) {
         $stmt = $this->pdo->prepare(
             "INSERT INTO rooms (building_id, floor_id, name, capacity, created_at, updated_at)

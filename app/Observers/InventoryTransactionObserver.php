@@ -2,14 +2,28 @@
 
 namespace App\Observers;
 
+use App\Exceptions\DuplicateDeploymentException;
 use App\Models\InventoryTransaction;
 use App\Models\Item;
 use App\Services\ActivityLogService;
+use App\Services\InventoryStatusService;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Cache;
 
 class InventoryTransactionObserver
 {
+    /**
+     * TASK 36 PHASE 5 — Deploy-to-Room duplicate-submission guard window, in
+     * seconds. Deliberately its own constant, not a reuse of
+     * ActivityLogService's dedupe_window_seconds (that mechanism dedupes an
+     * audit-log row after a mutation, unlocked; this one gates the mutation
+     * itself, under the lock below — see guardAgainstDuplicateDeployment()).
+     * 5s approximates "a human re-submitting after an ambiguous response" per
+     * TASK_36_PHASE_4_DEDUPE_WINDOW_DESIGN_ANALYSIS_REPORT.md Section 7.
+     * Kept as a single named constant so it is trivial to retune later.
+     */
+    private const DEPLOY_DEDUPE_WINDOW_SECONDS = 5;
+
     public function creating(InventoryTransaction $tx): void
     {
         // Validate that this transaction will not create negative stock
@@ -37,6 +51,25 @@ class InventoryTransactionObserver
                 if ($qty > (int)$item->quantity) {
                     throw new \RuntimeException('Insufficient stock to deploy/dispose');
                 }
+                // TASK 36 PHASE 5 — duplicate-deployment guard, 'deploy' only
+                // (NOT 'dispose', a distinct action). Runs here, after the
+                // Item::lockForUpdate() above, deliberately: two requests
+                // deploying the SAME item_id always serialize on that lock
+                // (it is held for the life of the caller's DB::transaction,
+                // e.g. InventoryStockController::deploy()'s
+                // DB::beginTransaction()/DB::commit()), so by the time a
+                // second request reaches this line, a first request's
+                // 'deploy' InventoryTransaction row — if any — has already
+                // committed and is visible to the plain, unlocked SELECT
+                // below. No independent lock on inventory_transactions is
+                // required for correctness; placing this check before the
+                // lock above (e.g. as a controller pre-check) would
+                // reintroduce the exact TOCTOU race this guard exists to
+                // close. See TASK_36_PHASE_4_DEDUPE_WINDOW_DESIGN_ANALYSIS_REPORT.md
+                // Section 9 for the full argument.
+                if ($tx->transaction_type === 'deploy') {
+                    $this->guardAgainstDuplicateDeployment($tx);
+                }
                 break;
             case 'release':
                 if ($qty > (int)$item->reserved_quantity) {
@@ -49,6 +82,54 @@ class InventoryTransactionObserver
                 break;
             default:
                 break;
+        }
+    }
+
+    /**
+     * TASK 36 PHASE 5 — throws when a 'deploy' transaction with the same
+     * (item_id, room_id, quantity, performed_by) signature as $tx was
+     * recorded within the last self::DEPLOY_DEDUPE_WINDOW_SECONDS seconds.
+     *
+     * Signature rationale (TASK_36_PHASE_4 report Sections 4-7):
+     *  - item_id + room_id + quantity: "what, how many, where" — the part of
+     *    the request that stays identical across an accidental replay
+     *    (refresh/retry/second tab) but legitimately differs across two
+     *    genuinely distinct deployments (different room, different
+     *    quantity, different item).
+     *  - performed_by: scopes the guard to "the same actor repeating their
+     *    own request", not "any two users who happen to deploy the same
+     *    thing" — two different admins independently deploying the same
+     *    item/room/quantity within the window is a legitimate coincidence,
+     *    not a replay, and must not be blocked.
+     *  - Deliberately excludes asset_code (assigned per-unit, after this
+     *    check, by createOrUpdateRoomAsset() — a single deployment can
+     *    mint several) and dispatch_id (always NULL for this transaction
+     *    type; Deploy-to-Room has no dispatch record by design).
+     *
+     * $tx->id is not yet set at this point (creating() fires pre-insert), so
+     * this query can never match $tx against itself.
+     */
+    private function guardAgainstDuplicateDeployment(InventoryTransaction $tx): void
+    {
+        $recent = InventoryTransaction::query()
+            ->where('item_id', $tx->item_id)
+            ->where('room_id', $tx->room_id)
+            ->where('quantity', $tx->quantity)
+            ->where('performed_by', $tx->performed_by)
+            ->where('transaction_type', 'deploy')
+            ->where('created_at', '>=', now()->subSeconds(self::DEPLOY_DEDUPE_WINDOW_SECONDS))
+            ->latest('id')
+            ->first();
+
+        if ($recent !== null) {
+            throw new DuplicateDeploymentException([
+                'inventory_transaction_id' => $recent->id,
+                'item_id'                  => $recent->item_id,
+                'room_id'                  => $recent->room_id,
+                'quantity'                 => $recent->quantity,
+                'performed_by'             => $recent->performed_by,
+                'deployed_at'              => optional($recent->created_at)->toIso8601String(),
+            ]);
         }
     }
 
@@ -91,6 +172,16 @@ class InventoryTransactionObserver
             default:
                 break;
         }
+
+        // "Status is always derived, never set" (ARCHITECTURE.md Section
+        // 5.2). This Observer is the sole writer of Item.quantity for every
+        // flow that creates an InventoryTransaction directly (Dispatch
+        // release, Need Change approval, Damage replacement, etc. — several
+        // of which document that they intentionally leave all Item mutation
+        // to this Observer), so it must also be the one to re-derive status
+        // here — otherwise Item.status silently goes stale relative to the
+        // new quantity whenever those flows run.
+        $item->status = InventoryStatusService::deriveStatus((int) $item->quantity, (int) ($item->reorder_level ?? 0));
 
         $item->save();
 
@@ -161,6 +252,13 @@ class InventoryTransactionObserver
             default:
                 break;
         }
+
+        // Same rationale as created() above — the rollback path mutates
+        // quantity too, so status must be re-derived here as well or it goes
+        // stale in the opposite direction (e.g. a deleted deploy transaction
+        // restores quantity above the reorder level but status stays
+        // 'low_stock').
+        $item->status = InventoryStatusService::deriveStatus((int) $item->quantity, (int) ($item->reorder_level ?? 0));
 
         $item->save();
 

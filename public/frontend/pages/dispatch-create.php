@@ -4,83 +4,158 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
+require_once __DIR__ . '/../../backend/config/settings.php';
+
 $_dcUser = $_SESSION['user'] ?? $_SESSION['auth_user'] ?? [];
 $_dcRole = strtolower(trim((string)($_dcUser['role'] ?? '')));
 
-if (!in_array($_dcRole, ['super_admin', 'maintenance_admin'], true)) {
+// TASK 41 — Administrator Create Dispatch Without Approval. Both Head
+// Maintenance and Administrator may create; the page gate matches the
+// EnsureRole:maintenance_admin,super_admin gate on POST /api/dispatches so
+// nobody reaches a form whose submit would 403.
+//
+// The two roles share this form but NOT the resulting workflow: a Head's
+// dispatch is created 'pending' and waits for approval, an Administrator's is
+// created 'approved' (no approval step). The copy below reflects whichever
+// applies to the current user.
+if (!in_array($_dcRole, ['maintenance_admin', 'super_admin'], true)) {
     header('Location: ' . public_url('/dispatches'));
     exit;
 }
 
+// TASK 41 — drives the two role-specific pieces of this page: the Release
+// Personnel helper text, and the workflow notice explaining what happens on
+// submit. Everything else on the form is identical for both roles.
+$_dcIsAdmin = ($_dcRole === 'super_admin');
+
 $pageTitle = 'Create Dispatch - SFMS';
+$pageStylesheets = [
+    '/School_Facility_Maintenance_System/frontend/assets/css/enterprise-reports.css?v=20260726-1',
+    '/School_Facility_Maintenance_System/frontend/assets/css/enterprise-workflow.css?v=20260726-1',
+];
 include __DIR__ . '/../includes/header.php';
 ?>
 
-<main class="container" style="margin-top:16px;">
+<main class="container dispatch-create-page" style="margin-top:16px;">
     <div class="card">
         <div class="card-header d-flex justify-between align-center">
             <div>
                 <h2>Create Dispatch Request</h2>
-                <p class="text-muted mb-0">Request items to be moved from bodega stock to a room or lab.</p>
+                <p class="text-muted mb-0">Request items to be moved from inventory stock to a room or lab.</p>
             </div>
-            <a href="<?php echo htmlspecialchars(public_url('/dispatches')); ?>" class="btn btn-secondary">← Back to Dispatches</a>
+            <a href="<?php echo htmlspecialchars(public_url('/dispatches')); ?>" class="btn btn-secondary"><?php echo ui_icon('arrow-left'); ?> Back to Dispatches</a>
         </div>
         <div class="card-body">
             <form id="dc-form" novalidate>
 
-                <!-- Auto-generated ID -->
-                <div class="form-group">
-                    <label>Dispatch ID</label>
-                    <input type="text" class="form-control" value="Auto-generated upon submit" readonly>
-                </div>
-
-                <!-- Department + Room -->
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-                    <div class="form-group">
-                        <label for="dc-dept">Department</label>
-                        <select id="dc-dept" class="form-control">
-                            <option value="">— Loading departments… —</option>
-                        </select>
+                <div class="form-section">
+                    <div class="form-section-header">
+                        <span class="form-section-index">1</span>
+                        <div>
+                            <h3 class="form-section-title">Dispatch Details</h3>
+                            <p class="form-section-subtitle">Destination department and room for this dispatch.</p>
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label for="dc-room">Room / Lab</label>
-                        <select id="dc-room" class="form-control">
-                            <option value="">— Loading rooms… —</option>
-                        </select>
+                    <div class="form-section-body">
+                        <div class="form-group">
+                            <label>Dispatch ID</label>
+                            <input type="text" class="form-control" value="Auto-generated upon submit" readonly>
+                        </div>
+
+                        <div class="form-row-2">
+                            <div class="form-group">
+                                <label for="dc-dept">Department</label>
+                                <select id="dc-dept" class="form-control">
+                                    <option value="">— Loading departments… —</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="dc-room">Room / Lab</label>
+                                <select id="dc-room" class="form-control">
+                                    <option value="">— Loading rooms… —</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- TASK 13 — Dispatch Release Assignment Workflow.
+                             Reuses the existing Components.SearchableSelect
+                             widget and the existing .form-control styling; no
+                             new component and no new styles were introduced. -->
+                        <div class="form-group">
+                            <label for="dc-release-personnel-search">Release Personnel <span style="color:#ef4444;">*</span></label>
+                            <input type="text" id="dc-release-personnel-search" class="form-control" placeholder="Search maintenance staff…" autocomplete="off">
+                            <input type="hidden" id="dc-release-personnel-id">
+                            <?php if ($_dcIsAdmin): ?>
+                            <small class="text-muted">The Maintenance Staff member who will release these items. Only active Maintenance Staff in the selected destination department can be chosen — pick the department first to narrow the list.</small>
+                            <?php else: ?>
+                            <small class="text-muted">The Maintenance Staff member who will release these items once the dispatch is approved. Only active staff in your own department can be selected.</small>
+                            <?php endif; ?>
+                        </div>
+
+                        <?php if ($_dcIsAdmin): ?>
+                        <!-- TASK 41 — Administrator dispatches skip the approval
+                             step, so the Administrator is told up front that no
+                             approval will be requested. Head Maintenance sees no
+                             such notice and keeps the unchanged pending flow. -->
+                        <div class="form-group">
+                            <div class="alert alert-info" style="margin:0;">
+                                <strong>No approval required.</strong>
+                                Dispatches you create are ready for release immediately — they are not sent to anyone for approval.
+                                The assigned Release Personnel is notified and performs the actual hand-off, which is when stock is deducted.
+                            </div>
+                        </div>
+                        <?php endif; ?>
                     </div>
                 </div>
 
-                <!-- Source OR Number -->
-                <div class="form-group">
-                    <label for="dc-or-search">Source OR Number <span class="text-muted" style="font-weight:400;">(optional)</span></label>
-                    <input type="text" id="dc-or-search" class="form-control" placeholder="Search by OR number or supplier…">
-                    <input type="hidden" id="dc-or-id">
-                    <small class="text-muted">Links this dispatch to a purchase receipt for deployment tracking.</small>
-                </div>
-
-                <!-- Notes -->
-                <div class="form-group">
-                    <label for="dc-notes">Notes <span class="text-muted" style="font-weight:400;">(optional)</span></label>
-                    <textarea id="dc-notes" class="form-control" rows="4" style="resize:vertical;" placeholder="Purpose of dispatch, special instructions, etc."></textarea>
-                </div>
-
-                <!-- Items section -->
-                <div class="form-group">
-                    <div class="d-flex justify-between align-center" style="margin-bottom:10px;">
-                        <label style="margin:0;">Items to Dispatch <span style="color:#ef4444;">*</span></label>
-                        <button type="button" id="dc-add-row" class="btn btn-secondary">+ Add Item</button>
+                <div class="form-section">
+                    <div class="form-section-header">
+                        <span class="form-section-index">2</span>
+                        <div>
+                            <h3 class="form-section-title">Source &amp; Notes <span class="form-section-optional">(Optional)</span></h3>
+                            <p class="form-section-subtitle">Link a purchase receipt and add context for this dispatch.</p>
+                        </div>
                     </div>
+                    <div class="form-section-body">
+                        <div class="form-group">
+                            <label for="dc-or-search">Source OR Number <span class="text-muted" style="font-weight:400;">(optional)</span></label>
+                            <input type="text" id="dc-or-search" class="form-control" placeholder="Search by OR number or supplier…">
+                            <input type="hidden" id="dc-or-id">
+                            <small class="text-muted">Links this dispatch to a purchase receipt for deployment tracking.</small>
+                        </div>
 
-                    <div id="dc-items-loading" class="text-muted" style="font-size:13px;margin-bottom:8px;">Loading inventory items…</div>
-                    <div id="dc-items-rows"></div>
-                    <small class="text-muted">At least one item is required. Available stock shown in parentheses.</small>
+                        <div class="form-group">
+                            <label for="dc-notes">Notes <span class="text-muted" style="font-weight:400;">(optional)</span></label>
+                            <textarea id="dc-notes" class="form-control" rows="4" style="resize:vertical;" placeholder="Purpose of dispatch, special instructions, etc."></textarea>
+                        </div>
+                    </div>
                 </div>
 
-                <!-- Error -->
-                <p id="dc-form-error" style="color:#ef4444;margin:0 0 12px;display:none;font-size:14px;"></p>
+                <div class="form-section">
+                    <div class="form-section-header">
+                        <span class="form-section-index">3</span>
+                        <div>
+                            <h3 class="form-section-title">Items to Dispatch</h3>
+                            <p class="form-section-subtitle">At least one item is required. Available stock shown in parentheses.</p>
+                        </div>
+                    </div>
+                    <div class="form-section-body">
+                        <div class="form-group">
+                            <div class="d-flex justify-between align-center" style="margin-bottom:10px;">
+                                <label style="margin:0;">Items <span style="color:#ef4444;">*</span></label>
+                                <button type="button" id="dc-add-row" class="btn btn-secondary">+ Add Item</button>
+                            </div>
+
+                            <div id="dc-items-loading" class="text-muted" style="font-size:13px;margin-bottom:8px;">Loading inventory items…</div>
+                            <div id="dc-items-rows"></div>
+                        </div>
+
+                        <p id="dc-form-error" style="color:#ef4444;margin:0;display:none;font-size:14px;"></p>
+                    </div>
+                </div>
 
                 <!-- Submit row -->
-                <div class="d-flex gap-sm">
+                <div class="d-flex gap-sm create-report-actions">
                     <button type="submit" id="dc-submit-btn" class="btn btn-primary">Submit Dispatch Request</button>
                     <a href="<?php echo htmlspecialchars(public_url('/dispatches')); ?>" class="btn btn-secondary">Cancel</a>
                 </div>
@@ -100,6 +175,12 @@ const DC_ITEMS_API = '/api/items';
 const DC_BASE      = window.SFMS_PUBLIC_URL
     ? window.SFMS_PUBLIC_URL('/dispatches')
     : '/dispatches';
+
+// TASK 41 — mirrors the PHP role gate above. Used only for presentation and
+// for scoping the Release Personnel selector; the authoritative role checks
+// (who may create, whether approval is required, who may be assigned) all run
+// server-side from the session.
+const DC_IS_ADMIN = <?php echo $_dcIsAdmin ? 'true' : 'false'; ?>;
 
 let dcItems      = [];
 let dcRowCounter = 0;
@@ -231,7 +312,6 @@ function addItemRow() {
 
     const row = document.createElement('div');
     row.className = 'dc-item-row';
-    row.style.cssText = 'display:grid;grid-template-columns:1fr 120px auto;gap:8px;margin-bottom:8px;align-items:center;';
 
     // Item select
     const sel = document.createElement('select');
@@ -277,6 +357,48 @@ function addItemRow() {
 }
 
 // ---------------------------------------------------------------------------
+// TASK 41 — Release Personnel selector
+//
+// Head Maintenance: the endpoint derives the department from the SESSION, so
+// no parameter is passed and the list is already scoped to their department.
+//
+// Administrator: they have no department of their own, so the endpoint is
+// scoped by the chosen DESTINATION department instead. SearchableSelect takes
+// its endpoint as a fixed string and already handles one containing a query
+// string, so the instance is destroyed and rebuilt when the department
+// changes rather than modifying the shared component.
+// ---------------------------------------------------------------------------
+
+let dcPersonnelSelect = null;
+
+function dcBuildPersonnelSelect() {
+    if (!(window.Components && typeof Components.SearchableSelect === 'function')) return;
+
+    if (dcPersonnelSelect && typeof dcPersonnelSelect.destroy === 'function') {
+        dcPersonnelSelect.destroy();
+        dcPersonnelSelect = null;
+    }
+
+    let endpoint = '/api/dispatches/support/release-personnel';
+    if (DC_IS_ADMIN) {
+        const deptId = parseInt(document.getElementById('dc-dept').value || '0', 10) || 0;
+        if (deptId > 0) endpoint += `?department_id=${deptId}`;
+    }
+
+    // TASK 75 — SearchableSelect's default hidden-value fallback chain checks
+    // it.id then it.department_id before it.user_id; a personnel row has no
+    // `id` but DOES have `department_id`, so without this override the hidden
+    // field would hold a department id instead of the selected user's id.
+    dcPersonnelSelect = new Components.SearchableSelect({
+        inputId:    'dc-release-personnel-search',
+        hiddenId:   'dc-release-personnel-id',
+        endpoint:   endpoint,
+        displayKey: 'full_name',
+        onSelect: (it) => { document.getElementById('dc-release-personnel-id').value = it.user_id || ''; },
+    });
+}
+
+// ---------------------------------------------------------------------------
 // Form submit
 // ---------------------------------------------------------------------------
 
@@ -301,7 +423,32 @@ document.getElementById('dc-form').addEventListener('submit', async (e) => {
         return;
     }
 
+    // TASK 47 — Dispatch Create & Assignment Workflow: the same item chosen
+    // in two rows is rejected server-side (see DispatchController::store()'s
+    // 'distinct' rule on items.*.item_id), so surface that as an immediate,
+    // actionable message here rather than letting the user hit a generic
+    // validation failure after submitting.
+    const seenItemIds = new Set();
+    const hasDuplicateItem = items.some((it) => {
+        if (seenItemIds.has(it.item_id)) return true;
+        seenItemIds.add(it.item_id);
+        return false;
+    });
+    if (hasDuplicateItem) {
+        dcShowError('Each item can only appear once. Combine duplicate rows into a single quantity.');
+        return;
+    }
+
     const orId = parseInt(document.getElementById('dc-or-id').value || '0', 10) || null;
+
+    // TASK 13 — Release Personnel is required. This is a UX guard only; the
+    // authoritative role/department check runs server-side in
+    // DispatchAuthorizationService::assertAssignableReleasePersonnel().
+    const releaseAssignedTo = parseInt(document.getElementById('dc-release-personnel-id').value || '0', 10) || null;
+    if (!releaseAssignedTo) {
+        dcShowError('Please select the Release Personnel for this dispatch.');
+        return;
+    }
 
     const submitBtn  = document.getElementById('dc-submit-btn');
     const origText   = submitBtn.textContent;
@@ -323,6 +470,7 @@ document.getElementById('dc-form').addEventListener('submit', async (e) => {
                     room_id:             roomId ? parseInt(roomId, 10) : null,
                     purchase_receipt_id: orId,
                     notes:               notes  || null,
+                    release_assigned_to: releaseAssignedTo,
                     items,
                 }),
             }
@@ -358,6 +506,26 @@ document.addEventListener('DOMContentLoaded', async () => {
             endpoint:   '/api/purchase-receipts/search',
             displayKey: 'name',   // name = or_number, code = supplier_name (shown as "OR — Supplier")
         });
+
+        // TASK 13 / TASK 41 — Release Personnel selector. Built by
+        // dcBuildPersonnelSelect() above, which handles the two scoping rules
+        // (Head = session department, Administrator = destination department).
+        dcBuildPersonnelSelect();
+
+        // TASK 41 — an Administrator is scoped by the dispatch's DESTINATION
+        // department rather than their own (they have none), so the selector is
+        // rebuilt whenever that department changes. Any staff member already
+        // chosen is cleared at the same time, because they may no longer be
+        // valid for the new department and the server would reject them on
+        // submit. Head Maintenance keeps the session-scoped list and never
+        // rebuilds.
+        if (DC_IS_ADMIN) {
+            document.getElementById('dc-dept').addEventListener('change', () => {
+                document.getElementById('dc-release-personnel-search').value = '';
+                document.getElementById('dc-release-personnel-id').value = '';
+                dcBuildPersonnelSelect();
+            });
+        }
     }
 
     // Items must load before the first row is added so the select is populated

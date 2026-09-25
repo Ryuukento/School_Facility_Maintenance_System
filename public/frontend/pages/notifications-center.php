@@ -54,9 +54,9 @@ async function loadNotifications() {
             html += `<div class="card" style="border:1px solid var(--border); ${unread ? 'box-shadow: inset 0 0 0 1px rgba(99,102,241,.35);' : ''}">`;
             html += `<div class="card-body" style="padding:12px;">`;
             html += `<div style="display:flex; justify-content:space-between; gap:10px; align-items:start;">`;
-            html += `<div><div style="font-weight:700;">${n.title || 'Notification'}</div>`;
-            html += `<div class="text-muted" style="margin-top:4px;">${n.message || ''}</div>`;
-            html += `<div class="text-muted" style="margin-top:6px; font-size:12px;">${n.created_at || ''}</div></div>`;
+            html += `<div><div style="font-weight:700;">${UI.escapeHtml(n.title) || 'Notification'}</div>`;
+            html += `<div class="text-muted" style="margin-top:4px;">${UI.escapeHtml(n.message)}</div>`;
+            html += `<div class="text-muted" style="margin-top:6px; font-size:12px;">${UI.escapeHtml(n.created_at)}</div></div>`;
             html += `<div style="display:flex; gap:6px; flex-wrap:wrap;">`;
             if (unread) {
                 html += `<button class="btn btn-sm btn-secondary" onclick="markNotificationRead(${Number(n.notification_id)})">Mark Read</button>`;

@@ -318,8 +318,35 @@
     font-size: calc(12px * var(--settings-font-scale));
 }
 
+/* Custom-styled file upload control (keeps native <input type="file">
+   behavior/functionality/ids intact — only the browser chrome is
+   restyled via the standard ::file-selector-button pseudo-element). */
+.settings-card input[type='file'].settings-input {
+    display: flex;
+    align-items: center;
+    padding: 6px 10px;
+    cursor: pointer;
+}
+
+.settings-card input[type='file'].settings-input::file-selector-button {
+    margin-right: 14px;
+    padding: 9px 16px;
+    border: none;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #2563eb, #1d4ed8);
+    color: #ffffff;
+    font-weight: 600;
+    font-size: calc(13px * var(--settings-font-scale));
+    cursor: pointer;
+    transition: background 0.2s ease;
+}
+
+.settings-card input[type='file'].settings-input::file-selector-button:hover {
+    background: linear-gradient(135deg, #1d4ed8, #1e40af);
+}
+
 .settings-primary-btn {
-    margin-top: 8px;
+    margin-top: 22px;
     border-radius: 10px;
     min-height: 42px;
     padding: 10px 18px;
@@ -602,9 +629,10 @@
 }
 
 /* ── Light mode ─────────────────────────────────────────────────────────── */
+/* Modal shell — purple frame, white surface. */
 :root[data-theme-resolved='light'] .force-setup-popup-card {
     background: #ffffff;
-    border-color: rgba(100, 116, 139, 0.25);
+    border-color: var(--purple-border, rgba(100, 116, 139, 0.25));
     box-shadow: 0 24px 50px rgba(15, 23, 42, 0.12);
 }
 :root[data-theme-resolved='light'] .force-setup-popup-card h2 { color: #111827; }
@@ -612,10 +640,11 @@
 
 :root[data-theme-resolved='light'] .settings-subtitle { color: #4b5563; }
 
+/* Account/Settings sections — container tier. */
 :root[data-theme-resolved='light'] .settings-nav-card,
 :root[data-theme-resolved='light'] .settings-card {
     background: #ffffff;
-    border-color: rgba(100, 116, 139, 0.2);
+    border-color: var(--purple-border, rgba(100, 116, 139, 0.2));
     box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06);
 }
 :root[data-theme-resolved='light'] .settings-nav-heading,
@@ -636,7 +665,7 @@
 :root[data-theme-resolved='light'] .settings-card .form-control,
 :root[data-theme-resolved='light'] .settings-card select {
     background: #ffffff;
-    border-color: rgba(100, 116, 139, 0.35);
+    border-color: var(--purple-control, rgba(100, 116, 139, 0.35));
     color: #1f2937;
 }
 :root[data-theme-resolved='light'] .settings-toggle-row {

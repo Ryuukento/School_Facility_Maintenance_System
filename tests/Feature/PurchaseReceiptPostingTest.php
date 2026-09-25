@@ -23,9 +23,9 @@ class PurchaseReceiptPostingTest extends TestCase
     {
         parent::setUp();
 
-        $this->withoutMiddleware();
         $this->useInMemoryDatabase('purchase_receipt_testing');
         $this->createTestSchema();
+        $this->forceLocalTestUrl();
     }
 
     public function test_posting_draft_receipt_updates_existing_item_exactly_once(): void
@@ -236,6 +236,300 @@ class PurchaseReceiptPostingTest extends TestCase
 
         $this->assertSame(8, (int) DB::table('items')->where('id', $itemId)->value('quantity'));
         $this->assertSame(1, DB::table('inventory_transactions')->where('item_id', $itemId)->count());
+    }
+
+    // -----------------------------------------------------------------------
+    // TASK H — bulk line-item entry.
+    //
+    // These live beside the posting tests on purpose: the point of bulk entry
+    // is that it must produce line rows indistinguishable from ones added one
+    // at a time, so every case below ends by posting the receipt and checking
+    // the inventory result against the behaviour the tests above already pin.
+    // -----------------------------------------------------------------------
+
+    public function test_bulk_add_creates_one_line_per_item_and_posts_each_once(): void
+    {
+        $userId = $this->seedUser();
+        $roomId = $this->seedInventoryRoom();
+        $receiptId = $this->seedReceipt(['received_by' => $userId]);
+
+        $response = $this
+            ->actingAsSessionUser($userId, 'maintenance_admin')
+            ->postJson("/api/purchase-receipts/{$receiptId}/items/bulk", [
+                'items' => [
+                    ['item_name' => 'Keyboard', 'quantity_received' => 3, 'unit' => 'pc'],
+                    ['item_name' => 'Mouse', 'quantity_received' => 2, 'unit' => 'pc'],
+                    ['item_name' => 'Monitor Stand', 'quantity_received' => 1, 'unit' => 'set'],
+                ],
+            ]);
+
+        $response->assertCreated();
+        $this->assertSame(3, $response->json('data.count'));
+        $this->assertSame(0, $response->json('data.combined'));
+
+        $lines = DB::table('purchase_receipt_items')->where('purchase_receipt_id', $receiptId)->get();
+        $this->assertCount(3, $lines);
+        // inventory_room_id is resolved server-side, exactly as addItem() does.
+        $this->assertSame([$roomId, $roomId, $roomId], $lines->pluck('inventory_room_id')->map('intval')->all());
+
+        $this->actingAsSessionUser($userId, 'maintenance_admin')
+            ->postJson("/api/purchase-receipts/{$receiptId}/post")
+            ->assertOk();
+
+        $this->assertSame(3, (int) DB::table('items')->where('name', 'Keyboard')->value('quantity'));
+        $this->assertSame(2, (int) DB::table('items')->where('name', 'Mouse')->value('quantity'));
+        $this->assertSame(1, (int) DB::table('items')->where('name', 'Monitor Stand')->value('quantity'));
+        $this->assertSame(3, DB::table('inventory_transactions')->count());
+    }
+
+    public function test_bulk_add_combines_duplicate_rows_into_one_line(): void
+    {
+        $userId = $this->seedUser();
+        $roomId = $this->seedInventoryRoom();
+        $itemId = $this->seedItem([
+            'inventory_room_id' => $roomId,
+            'name' => 'Extension Cord',
+            'quantity' => 10,
+            'reserved_quantity' => 0,
+            'reorder_level' => 2,
+        ]);
+        $receiptId = $this->seedReceipt(['received_by' => $userId]);
+
+        $response = $this
+            ->actingAsSessionUser($userId, 'maintenance_admin')
+            ->postJson("/api/purchase-receipts/{$receiptId}/items/bulk", [
+                'items' => [
+                    ['item_name' => 'Extension Cord', 'item_id' => $itemId, 'quantity_received' => 4, 'unit' => 'pc'],
+                    ['item_name' => 'Extension Cord', 'item_id' => $itemId, 'quantity_received' => 6, 'unit' => 'pc'],
+                ],
+            ]);
+
+        $response->assertCreated();
+        $this->assertSame(1, $response->json('data.count'));
+        $this->assertSame(1, $response->json('data.combined'));
+
+        $lines = DB::table('purchase_receipt_items')->where('purchase_receipt_id', $receiptId)->get();
+        $this->assertCount(1, $lines);
+        $this->assertSame(10, (int) $lines->first()->quantity_received);
+
+        // Combining must be invisible to inventory: 4+6 on one line has to land
+        // the same 10 units as two separate lines would have.
+        $this->actingAsSessionUser($userId, 'maintenance_admin')
+            ->postJson("/api/purchase-receipts/{$receiptId}/post")
+            ->assertOk();
+
+        $this->assertSame(20, (int) DB::table('items')->where('id', $itemId)->value('quantity'));
+    }
+
+    public function test_bulk_add_combines_duplicates_matched_by_name_case_insensitively(): void
+    {
+        $userId = $this->seedUser();
+        $this->seedInventoryRoom();
+        $receiptId = $this->seedReceipt(['received_by' => $userId]);
+
+        $response = $this
+            ->actingAsSessionUser($userId, 'maintenance_admin')
+            ->postJson("/api/purchase-receipts/{$receiptId}/items/bulk", [
+                'items' => [
+                    ['item_name' => 'Bond Paper', 'quantity_received' => 5, 'unit' => 'box'],
+                    ['item_name' => 'bond paper', 'quantity_received' => 7, 'unit' => 'box'],
+                ],
+            ]);
+
+        $response->assertCreated();
+        $this->assertSame(1, $response->json('data.count'));
+        $this->assertSame(12, (int) DB::table('purchase_receipt_items')
+            ->where('purchase_receipt_id', $receiptId)->value('quantity_received'));
+    }
+
+    public function test_bulk_add_combines_a_picked_item_with_a_typed_row_of_the_same_name(): void
+    {
+        // The search box supplies an item_id; typing the same name by hand does
+        // not. Posting resolves both to the same stock row, so bulk entry must
+        // recognise them as one item rather than leaving two lines behind.
+        $userId = $this->seedUser();
+        $roomId = $this->seedInventoryRoom();
+        $itemId = $this->seedItem([
+            'inventory_room_id' => $roomId,
+            'name' => 'Extension Cord',
+            'quantity' => 1,
+            'reserved_quantity' => 0,
+            'reorder_level' => 0,
+        ]);
+        $receiptId = $this->seedReceipt(['received_by' => $userId]);
+
+        $response = $this
+            ->actingAsSessionUser($userId, 'maintenance_admin')
+            ->postJson("/api/purchase-receipts/{$receiptId}/items/bulk", [
+                'items' => [
+                    ['item_name' => 'Extension Cord', 'item_id' => $itemId, 'quantity_received' => 4, 'unit' => 'pc'],
+                    ['item_name' => 'extension cord', 'quantity_received' => 6, 'unit' => 'pc'],
+                ],
+            ]);
+
+        $response->assertCreated();
+        $this->assertSame(1, $response->json('data.count'));
+
+        $line = DB::table('purchase_receipt_items')->where('purchase_receipt_id', $receiptId)->first();
+        $this->assertSame(10, (int) $line->quantity_received);
+        // The merged line keeps the id the picked row supplied.
+        $this->assertSame($itemId, (int) $line->item_id);
+    }
+
+    public function test_bulk_add_keeps_distinct_stock_rows_that_share_a_name_separate(): void
+    {
+        $userId = $this->seedUser();
+        $roomId = $this->seedInventoryRoom();
+        $firstId = $this->seedItem([
+            'inventory_room_id' => $roomId, 'name' => 'Cable', 'quantity' => 0,
+            'reserved_quantity' => 0, 'reorder_level' => 0,
+        ]);
+        $secondId = $this->seedItem([
+            'inventory_room_id' => $roomId, 'name' => 'Cable', 'quantity' => 0,
+            'reserved_quantity' => 0, 'reorder_level' => 0,
+        ]);
+        $receiptId = $this->seedReceipt(['received_by' => $userId]);
+
+        $this->actingAsSessionUser($userId, 'maintenance_admin')
+            ->postJson("/api/purchase-receipts/{$receiptId}/items/bulk", [
+                'items' => [
+                    ['item_name' => 'Cable', 'item_id' => $firstId, 'quantity_received' => 2, 'unit' => 'pc'],
+                    ['item_name' => 'Cable', 'item_id' => $secondId, 'quantity_received' => 3, 'unit' => 'pc'],
+                ],
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.count', 2);
+
+        $this->assertSame(2, DB::table('purchase_receipt_items')->where('purchase_receipt_id', $receiptId)->count());
+    }
+
+    public function test_bulk_add_rejects_conflicting_units_for_the_same_item(): void
+    {
+        $userId = $this->seedUser();
+        $this->seedInventoryRoom();
+        $receiptId = $this->seedReceipt(['received_by' => $userId]);
+
+        $this->actingAsSessionUser($userId, 'maintenance_admin')
+            ->postJson("/api/purchase-receipts/{$receiptId}/items/bulk", [
+                'items' => [
+                    ['item_name' => 'Bond Paper', 'quantity_received' => 5, 'unit' => 'box'],
+                    ['item_name' => 'Bond Paper', 'quantity_received' => 7, 'unit' => 'pc'],
+                ],
+            ])
+            ->assertStatus(422);
+
+        $this->assertSame(0, DB::table('purchase_receipt_items')->where('purchase_receipt_id', $receiptId)->count());
+    }
+
+    public function test_bulk_add_writes_nothing_when_any_row_is_invalid(): void
+    {
+        $userId = $this->seedUser();
+        $this->seedInventoryRoom();
+        $receiptId = $this->seedReceipt(['received_by' => $userId]);
+
+        $response = $this
+            ->actingAsSessionUser($userId, 'maintenance_admin')
+            ->postJson("/api/purchase-receipts/{$receiptId}/items/bulk", [
+                'items' => [
+                    ['item_name' => 'Keyboard', 'quantity_received' => 3, 'unit' => 'pc'],
+                    ['item_name' => '', 'quantity_received' => 2, 'unit' => 'pc'],
+                    ['item_name' => 'Mouse', 'quantity_received' => 0, 'unit' => 'pc'],
+                ],
+            ]);
+
+        $response->assertStatus(422);
+        $this->assertCount(2, $response->json('data.errors'));
+        $this->assertSame(1, $response->json('data.errors.0.index'));
+
+        // §10 — atomic: the valid first row must not have been written either.
+        $this->assertSame(0, DB::table('purchase_receipt_items')->where('purchase_receipt_id', $receiptId)->count());
+    }
+
+    public function test_bulk_add_rejects_unknown_item_id_without_writing_anything(): void
+    {
+        $userId = $this->seedUser();
+        $this->seedInventoryRoom();
+        $receiptId = $this->seedReceipt(['received_by' => $userId]);
+
+        $this->actingAsSessionUser($userId, 'maintenance_admin')
+            ->postJson("/api/purchase-receipts/{$receiptId}/items/bulk", [
+                'items' => [
+                    ['item_name' => 'Keyboard', 'quantity_received' => 3, 'unit' => 'pc'],
+                    ['item_name' => 'Ghost', 'item_id' => 999999, 'quantity_received' => 1, 'unit' => 'pc'],
+                ],
+            ])
+            ->assertStatus(422);
+
+        $this->assertSame(0, DB::table('purchase_receipt_items')->where('purchase_receipt_id', $receiptId)->count());
+    }
+
+    public function test_bulk_add_is_rejected_on_a_posted_receipt(): void
+    {
+        $userId = $this->seedUser();
+        $roomId = $this->seedInventoryRoom();
+        $receiptId = $this->seedReceipt(['received_by' => $userId, 'status' => 'posted']);
+
+        $this->actingAsSessionUser($userId, 'maintenance_admin')
+            ->postJson("/api/purchase-receipts/{$receiptId}/items/bulk", [
+                'items' => [
+                    ['item_name' => 'Keyboard', 'quantity_received' => 3, 'unit' => 'pc', 'inventory_room_id' => $roomId],
+                ],
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Cannot add items to a posted receipt');
+
+        $this->assertSame(0, DB::table('purchase_receipt_items')->where('purchase_receipt_id', $receiptId)->count());
+    }
+
+    public function test_bulk_add_appends_to_a_draft_that_already_has_lines(): void
+    {
+        $userId = $this->seedUser();
+        $roomId = $this->seedInventoryRoom();
+        $receiptId = $this->seedReceipt(['received_by' => $userId]);
+        $this->seedReceiptItem($receiptId, [
+            'item_name' => 'Existing Line',
+            'inventory_room_id' => $roomId,
+            'quantity_received' => 2,
+        ]);
+
+        $this->actingAsSessionUser($userId, 'maintenance_admin')
+            ->postJson("/api/purchase-receipts/{$receiptId}/items/bulk", [
+                'items' => [
+                    ['item_name' => 'Keyboard', 'quantity_received' => 3, 'unit' => 'pc'],
+                ],
+            ])
+            ->assertCreated();
+
+        $this->assertSame(2, DB::table('purchase_receipt_items')->where('purchase_receipt_id', $receiptId)->count());
+    }
+
+    public function test_single_item_endpoint_still_behaves_identically(): void
+    {
+        $userId = $this->seedUser();
+        $roomId = $this->seedInventoryRoom();
+        $receiptId = $this->seedReceipt(['received_by' => $userId]);
+
+        $this->actingAsSessionUser($userId, 'maintenance_admin')
+            ->postJson("/api/purchase-receipts/{$receiptId}/items", [
+                'item_name' => 'Solo Item',
+                'quantity_received' => 4,
+                'unit' => 'pc',
+            ])
+            ->assertCreated()
+            ->assertJsonPath('message', 'Item added to receipt');
+
+        $line = DB::table('purchase_receipt_items')->where('purchase_receipt_id', $receiptId)->first();
+        $this->assertSame('Solo Item', $line->item_name);
+        $this->assertSame(4, (int) $line->quantity_received);
+        $this->assertSame($roomId, (int) $line->inventory_room_id);
+
+        $this->actingAsSessionUser($userId, 'maintenance_admin')
+            ->postJson("/api/purchase-receipts/{$receiptId}/items", [
+                'item_name' => '',
+                'quantity_received' => 4,
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'item_name and quantity_received (> 0) are required');
     }
 
     private function createTestSchema(): void

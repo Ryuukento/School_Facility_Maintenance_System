@@ -20,6 +20,24 @@ if ($currentRole === 'super admin' || $currentRole === 'superadmin') {
     $currentRole = 'super_admin';
 }
 $isSuperAdmin = ($currentRole === 'super_admin');
+// TASK 9 — Role + Department Based Authorization. report.department_id is
+// only known once the report loads (client-side fetch), so the actual
+// hide/disable decision happens in JS (see CURRENT_USER_DEPARTMENT_ID /
+// applyDepartmentAuthorizationUI() below), mirroring the backend's
+// canModifyReport() rule: Administrator is exempt, everyone else needs
+// user.department_id === report.department_id.
+$currentUserDepartmentId = $user['department_id'] ?? null;
+
+// Problem Type — only the value -> icon mapping is needed here, since this
+// page displays a saved category rather than offering the choice. Read from
+// the same config file the Create/Edit grids and the backend's `in:` rule use,
+// so a category can never render with the wrong icon or be missing one.
+$problemTypeConfig = require __DIR__ . '/../../../config/maintenance_reports.php';
+$problemTypeIcons = [];
+foreach (($problemTypeConfig['problem_types'] ?? []) as $problemType) {
+    $problemTypeIcons[(string) ($problemType['value'] ?? '')] = (string) ($problemType['icon'] ?? '');
+}
+$problemTypeOtherValue = $problemTypeConfig['problem_type_other_value'] ?? 'Other';
 
 $allowedStatusOptions = [];
 if ($currentRole === 'super_admin') {
@@ -51,74 +69,65 @@ $defaultAssignmentRoleFilter = 'maintenance_staff';
 $backContext = strtolower(trim((string)($_GET['back'] ?? '')));
 $backToReportsUrl = in_array($currentRole, ['super_admin', 'maintenance_admin'], true)
     ? '/School_Facility_Maintenance_System/frontend/pages/reports.php'
-    : '/School_Facility_Maintenance_System/frontend/pages/maintenance-reports-list.php';
+    : '/School_Facility_Maintenance_System/frontend/pages/reports.php';
 
 if ($backContext === 'all_reports') {
     $backToReportsUrl = '/School_Facility_Maintenance_System/frontend/pages/reports.php';
 }
 
 if ($canAssignUser) {
+    // TASK 44 (Cross-Department Assignment Warning) — these are the same
+    // personnel queries that already ran to build the assignment picker; the
+    // only change is that each row now also carries the personnel's own
+    // department id and name, so the confirmation dialog below can tell the
+    // user which department the selected personnel belongs to. No additional
+    // query is issued, and no filtering is applied: personnel from every
+    // department remain selectable exactly as before.
+    $assignmentTargetSelect = "SELECT u.user_id, u.username, u.full_name, u.email, u.designation,"
+        . " COALESCE(NULLIF(u.full_name, ''), u.username, u.designation) as display_name,"
+        . " u.department_id, d.name AS department_name"
+        . " FROM users u"
+        . " LEFT JOIN departments d ON d.department_id = u.department_id";
+    $assignmentTargetOrder = " AND u.status = 'active' ORDER BY u.full_name, u.username";
+
     if ($currentRole === 'maintenance_admin') {
         $assignmentLabel = 'Assign To (Maintenance Staff)';
         $assignmentPlaceholder = 'Select maintenance staff...';
-        $stmt = $pdo->query("SELECT user_id, username, full_name, email, designation, COALESCE(NULLIF(full_name, ''), username, designation) as display_name FROM users WHERE role IN ('maintenance_staff') AND status = 'active' ORDER BY full_name, username");
+        $stmt = $pdo->query($assignmentTargetSelect . " WHERE u.role IN ('maintenance_staff')" . $assignmentTargetOrder);
         $assignmentTargetsByRole['maintenance_staff'] = $stmt->fetchAll();
     } else {
         $assignmentLabel = 'Assign To (Maintenance Team)';
-        $stmt = $pdo->query("SELECT user_id, username, full_name, email, designation, COALESCE(NULLIF(full_name, ''), username, designation) as display_name FROM users WHERE role IN ('maintenance_admin') AND status = 'active' ORDER BY full_name, username");
+        $stmt = $pdo->query($assignmentTargetSelect . " WHERE u.role IN ('maintenance_admin')" . $assignmentTargetOrder);
         $assignmentTargetsByRole['maintenance_admin'] = $stmt->fetchAll();
-        $stmt = $pdo->query("SELECT user_id, username, full_name, email, designation, COALESCE(NULLIF(full_name, ''), username, designation) as display_name FROM users WHERE role IN ('maintenance_staff') AND status = 'active' ORDER BY full_name, username");
+        $stmt = $pdo->query($assignmentTargetSelect . " WHERE u.role IN ('maintenance_staff')" . $assignmentTargetOrder);
         $assignmentTargetsByRole['maintenance_staff'] = $stmt->fetchAll();
     }
 }
+$pageTitle = 'Report Details - School Facility Maintenance System';
+// Theme is applied by the inline script in header.php's own <head>; this page no longer
+// carries its own duplicate copy now that it shares a single document shell. header.php's
+// own <body> tag also already sets data-user-role from the same $user['role'] value.
+$pageStylesheets = [
+    '/School_Facility_Maintenance_System/frontend/assets/css/maintenance-dashboard.css',
+    '/School_Facility_Maintenance_System/frontend/assets/css/light-mode-polish.css?v=20260921-2',
+    '/School_Facility_Maintenance_System/frontend/assets/css/enterprise-reports.css?v=20260726-1',
+    '/School_Facility_Maintenance_System/frontend/assets/css/enterprise-workflow.css?v=20260726-1',
+];
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Report Details - School Facility Maintenance System</title>
-    <script>
-        (function () {
-            try {
-                var storedTheme = localStorage.getItem('sfms_settings_theme') || localStorage.getItem('sfms_theme_mode') || 'dark';
-                var mode = (storedTheme === 'light' || storedTheme === 'dark') ? storedTheme : 'dark';
-                var fontSizeMode = localStorage.getItem('sfms_settings_font_size') || 'medium';
-                var resolved = mode;
-                var root = document.documentElement;
-                var sizeScaleMap = { small: 0.92, medium: 1, large: 1.12 };
-                var safeFontSizeMode = Object.prototype.hasOwnProperty.call(sizeScaleMap, fontSizeMode) ? fontSizeMode : 'medium';
-                var safeScale = sizeScaleMap[safeFontSizeMode];
-
-                root.setAttribute('data-theme-mode', mode);
-                root.setAttribute('data-theme-resolved', resolved);
-                root.setAttribute('data-font-size-mode', safeFontSizeMode);
-                root.style.colorScheme = resolved === 'dark' ? 'dark' : 'light';
-                root.style.setProperty('--ui-font-scale', String(safeScale));
-                root.style.setProperty('--ui-zoom', '1');
-            } catch (error) {
-                // Keep defaults if localStorage is unavailable.
-            }
-        })();
-    </script>
-    <link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/styles.css">
-    <link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/color-scheme.css">
-    <link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/maintenance-dashboard.css">
-    <link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/light-mode-polish.css">
-</head>
-<body data-user-role="<?php echo htmlspecialchars($user['role'] ?? ''); ?>">
-
 <?php include __DIR__ . '/../includes/header.php'; ?>
 
-<main class="container assigned-report-page">
+<main class="container assigned-report-page maintenance-workflow-page">
     <div class="card">
         <div class="card-header d-flex justify-between align-center">
             <div>
-                <h2 id="report-title">Loading...</h2>
+                <div class="report-title-row">
+                    <span id="report-id-badge" class="report-id-badge"></span>
+                    <h2 id="report-title" class="report-detail-title">Loading...</h2>
+                </div>
                 <p class="text-muted mb-0">Report Details</p>
             </div>
             <a href="<?php echo htmlspecialchars($backToReportsUrl, ENT_QUOTES, 'UTF-8'); ?>" class="btn btn-secondary">
-                ← Back to Reports
+                <?php echo ui_icon('arrow-left'); ?> Back to Reports
             </a>
         </div>
         
@@ -128,11 +137,16 @@ if ($canAssignUser) {
     </div>
 
     <!-- Status Update Card -->
-    <div class="card mt-lg">
+    <div class="card mt-lg" id="update-status-card">
         <div class="card-header">
+            <span class="report-actions-kicker">Report Actions</span>
             <h2>Update Status</h2>
+            <p class="text-muted mb-0" style="font-size:13px;margin-top:2px;">Change the status, assign staff, or attach completion proof for this report.</p>
         </div>
         <div class="card-body">
+            <div id="department-restricted-notice" class="alert alert-info" style="display:none;">
+                This report belongs to a different department. You have view-only access and cannot modify it.
+            </div>
             <div id="status-alert"></div>
             <form id="status-update-form">
                 <div class="form-group">
@@ -149,11 +163,11 @@ if ($canAssignUser) {
                 <div class="form-group" id="assigned-to-group" style="display:none;">
                     <label for="assigned-to"><?php echo htmlspecialchars($assignmentLabel); ?></label>
 
-                    <div style="position:relative;">
+                    <div class="assignment-search-wrap">
                         <input type="text" id="assigned-to-search" class="form-control" placeholder="Type name to search..." autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
                         <input type="hidden" id="assigned-to" value="">
-                        <div id="assigned-to-selected" style="display:none;margin-top:6px;padding:8px 12px;border-radius:8px;background:rgba(59,130,246,0.12);border:1px solid rgba(96,165,250,0.3);font-size:13px;color:#93c5fd;"></div>
-                        <div id="assigned-to-results" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:200;background:#0f1b31;border:1px solid rgba(148,163,184,0.24);border-radius:10px;box-shadow:0 12px 28px rgba(2,6,23,0.4);max-height:220px;overflow-y:auto;margin-top:4px;"></div>
+                        <div id="assigned-to-selected" class="assignment-selected"></div>
+                        <div id="assigned-to-results" class="assignment-results"></div>
                     </div>
                 </div>
                 <?php endif; ?>
@@ -183,7 +197,7 @@ if ($canAssignUser) {
         </div>
         <div class="card-body">
             <div id="reopen-alert"></div>
-            <button type="button" class="btn btn-warning" id="reopen-report-btn">↩ Reopen Report</button>
+            <button type="button" class="btn btn-warning" id="reopen-report-btn"><?php echo ui_icon('rotate-ccw'); ?> Reopen Report</button>
         </div>
     </div>
     <?php endif; ?>
@@ -197,70 +211,21 @@ if ($canAssignUser) {
             <div id="need-change-approval-meta" class="need-change-approval-meta"></div>
             <div id="need-change-approval-alert"></div>
             <div class="d-flex gap-sm">
-                <button type="button" class="btn btn-success" id="approve-need-change-btn">✓ Approve Request</button>
-                <button type="button" class="btn btn-danger" id="reject-need-change-btn">✕ Reject Request</button>
+                <button type="button" class="btn btn-success" id="approve-need-change-btn"><?php echo ui_icon('check'); ?> Approve Request</button>
+                <button type="button" class="btn btn-danger" id="reject-need-change-btn"><?php echo ui_icon('x'); ?> Reject Request</button>
             </div>
         </div>
     </div>
 
 </main>
 
-<div id="system-confirm-modal" class="system-confirm-modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="system-confirm-title" style="display:none;">
-    <div class="system-confirm-backdrop" data-close="1"></div>
-    <div class="system-confirm-panel">
-        <h3 id="system-confirm-title">Confirm Action</h3>
-        <p id="system-confirm-message"></p>
-        <div class="system-confirm-actions">
-            <button type="button" class="btn btn-secondary" id="system-confirm-cancel">Cancel</button>
-            <button type="button" class="btn btn-primary" id="system-confirm-ok">OK</button>
-        </div>
-    </div>
-</div>
+<!-- UI_BROWSER_DIALOG_REPLACEMENT — the page-local confirm modal markup/CSS
+     that used to live here (duplicate #system-confirm-modal, colliding with
+     the shared component's dynamically-created element) has been removed.
+     Confirmations on this page now go through the single shared
+     UI.systemConfirm() modal via the showSystemConfirm() wrapper below. -->
 
 <style>
-.system-confirm-modal {
-    position: fixed;
-    inset: 0;
-    z-index: 1200;
-}
-
-.system-confirm-backdrop {
-    position: absolute;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.62);
-}
-
-.system-confirm-panel {
-    position: relative;
-    width: min(92vw, 500px);
-    margin: 14vh auto 0;
-    background: var(--card-color, #111827);
-    border: 1px solid var(--border, #2a3342);
-    border-radius: 14px;
-    box-shadow: 0 22px 60px rgba(0, 0, 0, 0.5);
-    padding: 18px;
-}
-
-.system-confirm-panel h3 {
-    margin: 0 0 10px;
-    color: var(--text-light, #f3f4f6);
-    font-size: 20px;
-}
-
-.system-confirm-panel p {
-    margin: 0;
-    color: var(--text-muted, #c8cfda);
-    line-height: 1.55;
-    white-space: pre-line;
-}
-
-.system-confirm-actions {
-    margin-top: 18px;
-    display: flex;
-    justify-content: flex-end;
-    gap: 10px;
-}
-
 .assignment-role-switcher {
     display: flex;
     gap: 10px;
@@ -301,27 +266,122 @@ if ($canAssignUser) {
     box-shadow: 0 6px 18px rgba(124, 58, 237, 0.4);
 }
 
+/* TASK 7 — was content: ' ✓', a font glyph that rendered at a different weight
+   on every platform. A ::after pseudo-element cannot hold an <svg>, so the same
+   check icon is applied as a mask instead: the box is painted with
+   currentColor and the mask cuts the glyph out of it. That keeps the mark
+   inheriting the button's text colour, so Light and Dark theme both work with
+   no second rule, and it no longer depends on an OS font. Sized in em and kept
+   inline so the button's metrics are unchanged — no layout shift. */
 .assignment-role-btn.is-active::after {
-    content: ' ✓';
+    content: '';
+    display: inline-block;
+    width: 0.9em;
+    height: 0.9em;
+    margin-left: 0.3em;
+    vertical-align: -0.12em;
+    background-color: currentColor;
+    -webkit-mask: var(--assignment-check-mask) no-repeat center / contain;
+    mask: var(--assignment-check-mask) no-repeat center / contain;
+}
+
+.assignment-role-btn.is-active {
+    --assignment-check-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E");
 }
 </style>
 
-<link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/maintenance-report-detail.inline.css">
+<link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/maintenance-report-detail.inline.css?v=20260921-2">
+<!-- Problem Type. This page only uses the read-only .problem-type-chip rule at
+     the end of the file; the card/grid rules above it match nothing here. It is
+     still the same stylesheet rather than a copied chip rule, so the chip and
+     the selected card cannot drift apart in colour. -->
+<link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/problem-type-selector.css?v=20260920-2">
 
 <?php include __DIR__ . '/../includes/footer.php'; ?>
 
-<script src="/School_Facility_Maintenance_System/frontend/assets/js/utils.js"></script>
-<script src="/School_Facility_Maintenance_System/frontend/assets/js/api.js"></script>
+<!-- utils.js and api.js loaded by footer.php — do not load again here -->
 
 <script>
 const reportId = <?php echo intval($reportId); ?>;
 const currentUserRole = <?php echo json_encode($currentRole); ?>;
 const isSuperAdminUser = <?php echo $isSuperAdmin ? 'true' : 'false'; ?>;
+// TASK 9 — Role + Department Based Authorization (frontend enforcement).
+// Administrator is exempt; every other role must match departments with the
+// report before being allowed to submit a modification (Assign, Status,
+// Priority, Need Change, Cancel, Close). The backend
+// (ReportAuthorizationService::canModifyReport(), enforced in
+// ReportController::update()) is the real authority — this is defense in
+// depth only, never relied on alone.
+const CURRENT_USER_DEPARTMENT_ID = <?php echo json_encode($currentUserDepartmentId); ?>;
+
+// Problem Type display. The map is emitted from config/maintenance_reports.php
+// (see the top of this file) rather than written out here, so adding a
+// category there is all that is ever needed to make it render correctly.
+const PROBLEM_TYPE_ICONS = <?php echo json_encode($problemTypeIcons); ?>;
+const PROBLEM_TYPE_OTHER = <?php echo json_encode($problemTypeOtherValue); ?>;
+
+// Renders the saved category as the read-only .problem-type-chip.
+//
+// Three cases, all of which occur in real data:
+//   - no category  -> legacy row created before this field existed. Shown as
+//                     "Not specified" in the same muted style every other
+//                     unset field on this page already uses, NOT as an error;
+//                     those reports are still perfectly valid.
+//   - "Other"      -> the user's own words are what maintenance personnel
+//                     actually need, so they lead, with the category kept in
+//                     parentheses so the row is still recognisably a category.
+//   - anything else-> icon + label, matching the card the reporter picked.
+function renderProblemType(report) {
+    const value = report.problem_type || '';
+    if (!value) {
+        return '<span class="report-unassigned">Not specified</span>';
+    }
+
+    const icon = (window.UIIcons && PROBLEM_TYPE_ICONS[value])
+        ? window.UIIcons.svg(PROBLEM_TYPE_ICONS[value], { size: 14 })
+        : '';
+
+    let label = UI.escapeHtml(value);
+    if (value === PROBLEM_TYPE_OTHER && report.problem_type_other) {
+        label = `${UI.escapeHtml(report.problem_type_other)} <span class="text-muted">(${UI.escapeHtml(value)})</span>`;
+    }
+
+    return `<span class="problem-type-chip">${icon}${label}</span>`;
+}
+
+function canModifyReportClientSide(report) {
+    if (isSuperAdminUser) return true;
+    const userDept = CURRENT_USER_DEPARTMENT_ID === null || CURRENT_USER_DEPARTMENT_ID === undefined ? null : Number(CURRENT_USER_DEPARTMENT_ID);
+    const reportDept = (report && (report.department_id === null || report.department_id === undefined)) ? null : Number(report.department_id);
+    return userDept === reportDept;
+}
+
+function applyDepartmentAuthorizationUI(report) {
+    const allowed = canModifyReportClientSide(report);
+    const notice = document.getElementById('department-restricted-notice');
+    if (notice) notice.style.display = allowed ? 'none' : 'block';
+
+    const statusForm = document.getElementById('status-update-form');
+    if (statusForm) {
+        statusForm.querySelectorAll('select, input, textarea, button').forEach((el) => {
+            el.disabled = !allowed;
+        });
+    }
+
+    const reopenBtn = document.getElementById('reopen-report-btn');
+    if (reopenBtn) reopenBtn.disabled = !allowed;
+
+    return allowed;
+}
 const assignmentTargetsByRole = <?php echo json_encode($assignmentTargetsByRole, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
 const defaultAssignmentRoleFilter = <?php echo json_encode($defaultAssignmentRoleFilter); ?>;
 const assignmentPlaceholder = <?php echo json_encode($assignmentPlaceholder, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
 let currentReport = null;
 let activeAssignmentRole = defaultAssignmentRoleFilter;
+// TASK 44 — set for the whole duration of a status/assignment submit,
+// including while the cross-department confirmation dialog is open, so a
+// second submit can never race the first one into a duplicate request.
+let isStatusUpdateInFlight = false;
 
 window.UI = window.UI || {
     getPriorityBadge(priority) {
@@ -494,7 +554,7 @@ function filterAssignmentResults() {
     const filtered = allTargets.filter((p) => getAssignmentSearchBlob(p).includes(keyword));
 
     if (!filtered.length) {
-        resultsEl.innerHTML = '<div style="padding:10px 14px;color:#94a3b8;font-size:13px;">No matching personnel</div>';
+        resultsEl.innerHTML = '<div class="assignment-empty">No matching personnel</div>';
         resultsEl.style.display = 'block';
         return;
     }
@@ -504,9 +564,73 @@ function filterAssignmentResults() {
         const isActive = String(p.user_id) === String(currentVal);
         const primary = getAssignmentPrimaryLabel(p);
         const secondary = getAssignmentSecondaryLabel(p);
-        return `<button type="button" data-person-id="${p.user_id}" style="display:block;width:100%;text-align:left;padding:10px 14px;background:${isActive ? 'rgba(59,130,246,0.18)' : 'none'};border:none;color:${isActive ? '#93c5fd' : '#dbe7fb'};font-size:14px;cursor:pointer;transition:background 0.15s;" onmouseover="this.style.background='rgba(148,163,184,0.12)'" onmouseout="this.style.background='${isActive ? 'rgba(59,130,246,0.18)' : 'none'}'"><div style="font-weight:600;">${primary}</div>${secondary ? `<div style="margin-top:2px;color:#94a3b8;font-size:12px;">${secondary}</div>` : ''}</button>`;
+        return `<button type="button" class="assignment-result-item${isActive ? ' active' : ''}" data-person-id="${p.user_id}"><div>${primary}</div>${secondary ? `<span>${secondary}</span>` : ''}</button>`;
     }).join('');
     resultsEl.style.display = 'block';
+}
+
+/* ------------------------------------------------------------------
+ * TASK 44 — Cross-Department Assignment Warning
+ *
+ * Assigning a report to personnel from another department is ALLOWED.
+ * These helpers only decide whether the user should be asked to confirm
+ * that choice first. They are NOT an authorization check: nothing here
+ * can block an assignment on its own, and the backend
+ * (ReportAuthorizationService::canModifyReport(), enforced in
+ * ReportController::update()) remains the sole authority on who may
+ * modify a report. Department mismatch alone never produces a 403/422.
+ *
+ * Comparison is done on stable department IDs (maintenance_reports.
+ * department_id vs users.department_id), never on display names; the
+ * names are used only to word the message for the reader.
+ * ------------------------------------------------------------------ */
+function findAssignmentTargetById(userId) {
+    if (userId === null || userId === undefined || String(userId).trim() === '') {
+        return null;
+    }
+    const allTargets = Object.values(assignmentTargetsByRole).flat();
+    return allTargets.find((p) => String(p.user_id) === String(userId)) || null;
+}
+
+function normalizeDepartmentId(value) {
+    if (value === null || value === undefined || value === '') {
+        return null;
+    }
+    const numeric = Number(value);
+    return Number.isNaN(numeric) ? null : numeric;
+}
+
+function describeDepartmentLabel(name, departmentId) {
+    const label = String(name || '').trim();
+    if (label) {
+        return label;
+    }
+    return departmentId === null ? 'No department assigned' : ('Department #' + departmentId);
+}
+
+function isCrossDepartmentAssignment(report, person) {
+    if (!report || !person) {
+        return false;
+    }
+    return normalizeDepartmentId(report.department_id) !== normalizeDepartmentId(person.department_id);
+}
+
+function confirmCrossDepartmentAssignment(report, person) {
+    const reportDepartmentId = normalizeDepartmentId(report && report.department_id);
+    const personnelDepartmentId = normalizeDepartmentId(person && person.department_id);
+
+    return showSystemConfirm({
+        title: '⚠ Cross-Department Assignment',
+        message:
+            'Report Department: ' + describeDepartmentLabel(report && report.department_name, reportDepartmentId) + '\n'
+            + 'Selected Personnel: ' + getAssignmentPrimaryLabel(person) + '\n'
+            + 'Personnel Department: ' + describeDepartmentLabel(person && person.department_name, personnelDepartmentId) + '\n\n'
+            + 'This report belongs to a different department from the selected personnel.\n\n'
+            + 'Cross-department assignments are allowed. Please confirm that this personnel is appropriate to handle this report.',
+        confirmText: 'Assign Anyway',
+        cancelText: 'Cancel',
+        confirmClass: 'btn btn-warning'
+    });
 }
 
 function syncCompletionProofVisibility() {
@@ -545,55 +669,25 @@ function syncCompletionProofVisibility() {
     }
 }
 
+// UI_BROWSER_DIALOG_REPLACEMENT — this page previously had its own
+// hand-rolled confirm modal (duplicate DOM id `system-confirm-modal`,
+// colliding with the shared component's dynamically-created element). It
+// has been removed in favor of the single shared UI.systemConfirm() used
+// application-wide; see call sites below.
 function showSystemConfirm(options = {}) {
-    const modal = document.getElementById('system-confirm-modal');
-    const title = document.getElementById('system-confirm-title');
-    const message = document.getElementById('system-confirm-message');
-    const okBtn = document.getElementById('system-confirm-ok');
-    const cancelBtn = document.getElementById('system-confirm-cancel');
-    const backdrop = modal?.querySelector('[data-close="1"]');
-
-    if (!modal || !title || !message || !okBtn || !cancelBtn || !backdrop) {
-        return Promise.resolve(window.confirm(String(options.message || 'Proceed?')));
-    }
-
-    title.textContent = String(options.title || 'Confirm Action');
-    message.textContent = String(options.message || 'Proceed?');
-    okBtn.textContent = String(options.confirmText || 'OK');
-    cancelBtn.textContent = String(options.cancelText || 'Cancel');
-    okBtn.className = String(options.confirmClass || 'btn btn-primary');
-
-    modal.style.display = 'block';
-    modal.setAttribute('aria-hidden', 'false');
-
-    return new Promise((resolve) => {
-        let done = false;
-        const close = (result) => {
-            if (done) return;
-            done = true;
-            modal.style.display = 'none';
-            modal.setAttribute('aria-hidden', 'true');
-            okBtn.removeEventListener('click', onOk);
-            cancelBtn.removeEventListener('click', onCancel);
-            backdrop.removeEventListener('click', onCancel);
-            document.removeEventListener('keydown', onKeyDown);
-            resolve(result);
-        };
-
-        const onOk = () => close(true);
-        const onCancel = () => close(false);
-        const onKeyDown = (event) => {
-            if (event.key === 'Escape') {
-                close(false);
-            }
-        };
-
-        okBtn.addEventListener('click', onOk);
-        cancelBtn.addEventListener('click', onCancel);
-        backdrop.addEventListener('click', onCancel);
-        document.addEventListener('keydown', onKeyDown);
-        okBtn.focus();
-    });
+    const confirmClass = String(options.confirmClass || '');
+    // 'warning' is one of the shared component's existing variants (see
+    // UI.systemConfirm in utils.js); it was simply never requested from this
+    // page before TASK 44's cross-department confirmation needed it.
+    const variant = confirmClass.includes('btn-success')
+        ? 'success'
+        : (confirmClass.includes('btn-danger')
+            ? 'danger'
+            : (confirmClass.includes('btn-warning') ? 'warning' : 'primary'));
+    const message = options.title
+        ? `<strong>${UI.escapeHtml(options.title)}</strong>\n\n${UI.escapeHtml(String(options.message || 'Proceed?'))}`
+        : UI.escapeHtml(String(options.message || 'Proceed?'));
+    return UI.systemConfirm(message, String(options.confirmText || 'OK'), String(options.cancelText || 'Cancel'), variant);
 }
 
 function updateNeedChangeApprovalUI(report) {
@@ -629,9 +723,9 @@ function updateNeedChangeApprovalUI(report) {
     approvalAlert.innerHTML = '';
 
     approvalMeta.innerHTML = `
-        <div><strong>Replacement Item:</strong> ${report.need_change_item_name || ('Item #' + report.need_change_item_id)}</div>
-        <div><strong>Current Need Change Status:</strong> ${status.replace(/_/g, ' ').toUpperCase()}</div>
-        ${report.need_change_deducted_at ? `<div><strong>Deducted At:</strong> ${report.need_change_deducted_at}</div>` : ''}
+        <div><strong>Replacement Item:</strong> ${UI.escapeHtml(report.need_change_item_name) || ('Item #' + report.need_change_item_id)}</div>
+        <div><strong>Current Need Change Status:</strong> ${UI.escapeHtml(status.replace(/_/g, ' ').toUpperCase())}</div>
+        ${report.need_change_deducted_at ? `<div><strong>Deducted At:</strong> ${UI.escapeHtml(report.need_change_deducted_at)}</div>` : ''}
     `;
 
     if (isApproved) {
@@ -669,91 +763,145 @@ async function loadReport() {
             throw new Error(data.message || 'Failed to load report');
         }
         
-        const report = data.data.report;        console.log('📋 Report loaded from API:', report);
-        console.log('Need Change Item ID:', report.need_change_item_id);
-        console.log('Need Change Item Name:', report.need_change_item_name);        currentReport = report;
-        document.getElementById('report-title').textContent = `#${report.report_id} - ${report.title}`;
-        
-        const sectionWrapStyle = 'margin-top: 20px;';
-        const sectionTitleStyle = 'margin-bottom: 15px; font-weight: 600; color: var(--text-light);';
-        const tableStyle = 'border-collapse: collapse; width: 100%;';
-        const thStyle = 'width: 200px; padding: 12px 8px; text-align: left; font-weight: 700; color: var(--text-light); background: var(--muted-card); border-bottom: 1px solid var(--border);';
-        const thLastStyle = 'width: 200px; padding: 12px 8px; text-align: left; font-weight: 700; color: var(--text-light); background: var(--muted-card);';
-        const tdStyle = 'padding: 12px 8px; color: var(--text-light); background: var(--card-color); border-bottom: 1px solid var(--border);';
-        const tdLastStyle = 'padding: 12px 8px; color: var(--text-light); background: var(--card-color);';
-        const detailBoxStyle = 'background: var(--muted-card); padding: 15px; border-radius: 6px; border-left: 4px solid var(--primary-color); line-height: 1.6; color: var(--text-light);';
+        const report = data.data.report;
+        currentReport = report;
+        document.getElementById('report-id-badge').textContent = `#${report.report_id}`;
+        document.getElementById('report-title').textContent = report.title;
 
-        let html = '<div style="display: grid; gap: 20px;">';
-        
-        // Basic Info
-        html += '<div>';
-        html += `<h3 style="${sectionTitleStyle}">Basic Information</h3>`;
-        html += `<table class="table" style="${tableStyle}">`;
-        html += `<tr><th style="${thStyle}">Report ID</th><td style="${tdStyle}">#${report.report_id}</td></tr>`;
-        html += `<tr><th style="${thStyle}">Title</th><td style="${tdStyle}"><strong>${report.title}</strong></td></tr>`;
-        html += `<tr><th style="${thStyle}">Location</th><td style="${tdStyle}">${report.location}</td></tr>`;
-        html += `<tr><th style="${thStyle}">Priority</th><td style="${tdStyle}">${renderPriorityBadge(report.priority)}</td></tr>`;
-        html += `<tr><th style="${thStyle}">Status</th><td style="${tdStyle}">${renderStatusBadge(report.status)}</td></tr>`;
+        // Enterprise info-card grid layout, mirroring report-detail.php's
+        // (Report Management phase) .report-detail-grid/.report-info-card
+        // pattern. Same report fields as before; only the markup changed.
+        let html = '<div class="report-detail-grid">';
+
+        // Basic Info card
+        html += '<section class="report-info-card">';
+        html += '<h3 class="report-info-card-title">Basic Information</h3>';
+        html += '<dl class="report-info-list">';
+        html += `<div class="report-info-row"><dt>Report ID</dt><dd>#${report.report_id}</dd></div>`;
+        html += `<div class="report-info-row"><dt>Title</dt><dd><strong>${UI.escapeHtml(report.title)}</strong></dd></div>`;
+        // Directly under Title, because the two answer adjacent questions
+        // ("what kind of problem" / "which specific issue") and reading them
+        // together is how a maintenance person triages the report.
+        html += `<div class="report-info-row"><dt>Problem Type</dt><dd>${renderProblemType(report)}</dd></div>`;
+        html += `<div class="report-info-row"><dt>Location</dt><dd>${UI.escapeHtml(report.location)}</dd></div>`;
+        html += `<div class="report-info-row"><dt>Priority</dt><dd>${renderPriorityBadge(report.priority)}</dd></div>`;
+        html += `<div class="report-info-row"><dt>Status</dt><dd>${renderStatusBadge(report.status)}</dd></div>`;
         if (report.need_change_item_id || report.need_change_item_name) {
-            const needChangeStatus = String(report.need_change_status || 'pending').replace(/_/g, ' ').toUpperCase();
-            html += `<tr><th style="${thStyle}">Need Change</th><td style="${tdStyle}">Yes</td></tr>`;
-            html += `<tr><th style="${thStyle}">Replacement Item</th><td style="${tdStyle}"><strong>${report.need_change_item_name || ('Item #' + report.need_change_item_id)}</strong>${report.need_change_item_quantity ? ` <span class="text-muted">(Stock: ${report.need_change_item_quantity})</span>` : ''}</td></tr>`;
-            html += `<tr><th style="${thLastStyle}">Need Change Status</th><td style="${tdLastStyle}">${needChangeStatus}${report.need_change_deducted_at ? ' <span class="badge badge-success">Deducted</span>' : ''}</td></tr>`;
+            const needChangeStatusRaw = String(report.need_change_status || 'pending').toLowerCase();
+            const needChangeStatusLabel = needChangeStatusRaw.replace(/_/g, ' ').toUpperCase();
+            // Task 28.3: badge-only presentation (was plain text + a separate
+            // "Deducted" badge shown side-by-side, duplicating the same value).
+            // Color mapping mirrors reports.php's existing need-change badge
+            // convention (deducted/approved -> success, rejected -> danger,
+            // pending -> warning) so the same status renders the same color
+            // app-wide. No change to report.need_change_status itself.
+            let needChangeStatusBadgeClass = 'badge-info';
+            if (needChangeStatusRaw === 'deducted' || needChangeStatusRaw === 'approved') {
+                needChangeStatusBadgeClass = 'badge-success';
+            } else if (needChangeStatusRaw === 'rejected') {
+                needChangeStatusBadgeClass = 'badge-danger';
+            } else if (needChangeStatusRaw === 'pending') {
+                needChangeStatusBadgeClass = 'badge-warning';
+            }
+            html += `<div class="report-info-row"><dt>Need Change</dt><dd>Yes</dd></div>`;
+            html += `<div class="report-info-row"><dt>Replacement Item</dt><dd><strong>${UI.escapeHtml(report.need_change_item_name) || ('Item #' + report.need_change_item_id)}</strong>${report.need_change_item_quantity ? ` <span class="text-muted">(Stock: ${UI.escapeHtml(report.need_change_item_quantity)})</span>` : ''}</dd></div>`;
+            html += `<div class="report-info-row"><dt>Need Change Status</dt><dd><span class="badge ${needChangeStatusBadgeClass}">${UI.escapeHtml(needChangeStatusLabel)}</span></dd></div>`;
         } else {
-            html += `<tr><th style="${thLastStyle}">Need Change</th><td style="${tdLastStyle}">Not requested</td></tr>`;
+            html += `<div class="report-info-row"><dt>Need Change</dt><dd class="report-unassigned">Not requested</dd></div>`;
         }
-        html += `<tr><th style="${thLastStyle}">Department</th><td style="${tdLastStyle}">${report.department_name || 'Not assigned'}</td></tr>`;
-        html += '</table>';
-        html += '</div>';
-        
-        // Description
-        html += `<div style="${sectionWrapStyle}">`;
-        html += `<h3 style="${sectionTitleStyle}">Description</h3>`;
-        html += `<div style="${detailBoxStyle}">${report.description || 'No description provided'}</div>`;
-        html += '</div>';
-        
-        // People
-        html += `<div style="${sectionWrapStyle}">`;
-        html += `<h3 style="${sectionTitleStyle}">People</h3>`;
-        html += `<table class="table" style="${tableStyle}">`;
-        html += `<tr><th style="${thStyle}">Created By</th><td style="${tdStyle}">${report.creator_name} ${report.creator_email ? `(${report.creator_email})` : ''}</td></tr>`;
-        html += `<tr><th style="${thLastStyle}">Assigned To</th><td style="${tdLastStyle}">${report.assigned_name ? `${report.assigned_name} ${report.assigned_email ? `(${report.assigned_email})` : ''}` : 'Not assigned yet'}</td></tr>`;
-        html += '</table>';
-        html += '</div>';
-        
-        // Dates
+        html += `<div class="report-info-row"><dt>Department</dt><dd>${UI.escapeHtml(report.department_name) || 'Not assigned'}</dd></div>`;
+        html += '</dl>';
+        html += '</section>';
+
+        // Description card
+        html += '<section class="report-info-card">';
+        html += '<h3 class="report-info-card-title">Description</h3>';
+        html += `<div class="report-description-box">${UI.escapeHtml(report.description) || 'No description provided'}</div>`;
+        html += '</section>';
+
+        // People card
+        html += '<section class="report-info-card">';
+        html += '<h3 class="report-info-card-title">People</h3>';
+        html += '<dl class="report-info-list">';
+        html += `<div class="report-info-row"><dt>Created By</dt><dd>${UI.escapeHtml(report.creator_name)} ${report.creator_email ? `(${UI.escapeHtml(report.creator_email)})` : ''}</dd></div>`;
+        html += `<div class="report-info-row"><dt>Assigned To</dt><dd>${report.assigned_name ? `${UI.escapeHtml(report.assigned_name)} ${report.assigned_email ? `(${UI.escapeHtml(report.assigned_email)})` : ''}` : '<span class="report-unassigned">Not assigned yet</span>'}</dd></div>`;
+        html += '</dl>';
+        html += '</section>';
+
+        // TASK 44 (M1 — Unified Read Surface) — Damage & Dispatch Information
+        // card. Only rendered when a linked damage_reports / dispatches
+        // compatibility-layer row exists for this report (fields come from
+        // ReportController::show()'s Schema::hasTable()-guarded LEFT JOINs).
+        //
+        // TASK 12 — the "Repair Request" and "Repair Technician" rows were
+        // removed from this card. The Repair Request row rendered a real
+        // anchor to repair-detail.php, which this task deletes, so leaving it
+        // would have produced a broken link from a PRIMARY-workflow page —
+        // the one thing the retirement must not do. "Repair Technician"
+        // (repair_requests.technician_user_id) went with it because it is a
+        // Repair Request field with no page left to reach.
+        //
+        // The Damage Report and Replacement Dispatch rows are deliberately
+        // KEPT — they are shared primary-workflow information, not Repair
+        // module UI, and both of their detail pages still exist. The card
+        // title dropped "Repair" only because the repair rows are gone.
+        //
+        // The guard now tests damage_report_id || replacement_dispatch_id
+        // rather than damage_report_id || repair_request_id. That keeps the
+        // card visible for every case that previously showed content: a
+        // repair-linked report that also has a replacement dispatch still
+        // renders its dispatch row, while a repair-ONLY report no longer
+        // renders an empty card with nothing but a heading.
+        if (report.damage_report_id || report.replacement_dispatch_id) {
+            html += '<section class="report-info-card">';
+            html += '<h3 class="report-info-card-title">Damage &amp; Dispatch Information</h3>';
+            html += '<dl class="report-info-list">';
+            if (report.damage_report_id) {
+                const damageStatusLabel = String(report.damage_report_status || '').replace(/_/g, ' ').toUpperCase();
+                html += `<div class="report-info-row"><dt>Damage Report</dt><dd><a href="damage-report-detail.php?id=${report.damage_report_id}">${UI.escapeHtml(report.damage_report_code || ('#' + report.damage_report_id))}</a>${damageStatusLabel ? ` <span class="badge badge-info">${UI.escapeHtml(damageStatusLabel)}</span>` : ''}</dd></div>`;
+            }
+            if (report.replacement_dispatch_id) {
+                const dispatchStatusLabel = String(report.replacement_dispatch_status || '').replace(/_/g, ' ').toUpperCase();
+                html += `<div class="report-info-row"><dt>Replacement Dispatch</dt><dd><a href="dispatch-detail.php?id=${report.replacement_dispatch_id}">${UI.escapeHtml(report.replacement_dispatch_code || ('#' + report.replacement_dispatch_id))}</a>${dispatchStatusLabel ? ` <span class="badge badge-info">${UI.escapeHtml(dispatchStatusLabel)}</span>` : ''}</dd></div>`;
+            }
+            html += '</dl>';
+            html += '</section>';
+        }
+
+        // Timeline card
         if (report.created_at_full || report.created_at || report.updated_at_formatted || report.updated_at) {
-            html += `<div style="${sectionWrapStyle}">`;
-            html += `<h3 style="${sectionTitleStyle}">Timeline</h3>`;
-            html += `<table class="table" style="${tableStyle}">`;
+            html += '<section class="report-info-card report-info-card-wide">';
+            html += '<h3 class="report-info-card-title">Timeline</h3>';
+            html += '<ol class="report-timeline">';
             if (report.created_at_full || report.created_at) {
-                html += `<tr><th style="${thStyle}">Created</th><td style="${tdStyle}">${report.created_at_full || report.created_at}</td></tr>`;
+                html += `<li class="report-timeline-item"><span class="report-timeline-dot"></span><div class="report-timeline-content"><strong>Created</strong><span>${report.created_at_full || report.created_at}</span></div></li>`;
             }
             if (report.updated_at_formatted || report.updated_at) {
-                html += `<tr><th style="${thStyle}">Last Updated</th><td style="${tdStyle}">${report.updated_at_formatted || report.updated_at}</td></tr>`;
+                html += `<li class="report-timeline-item"><span class="report-timeline-dot"></span><div class="report-timeline-content"><strong>Last Updated</strong><span>${report.updated_at_formatted || report.updated_at}</span></div></li>`;
             }
             if (report.due_date) {
-                html += `<tr><th style="${thStyle}">Due Date</th><td style="${tdStyle}">${report.due_date_formatted || report.due_date}</td></tr>`;
+                html += `<li class="report-timeline-item"><span class="report-timeline-dot"></span><div class="report-timeline-content"><strong>Due Date</strong><span>${report.due_date_formatted || report.due_date}</span></div></li>`;
             }
             if (report.completed_date) {
-                html += `<tr><th style="${thLastStyle}">Completed</th><td style="${tdLastStyle}">${report.completed_date_formatted || report.completed_date}</td></tr>`;
+                html += `<li class="report-timeline-item report-timeline-item-done"><span class="report-timeline-dot"></span><div class="report-timeline-content"><strong>Completed</strong><span>${report.completed_date_formatted || report.completed_date}</span></div></li>`;
             }
-            html += '</table>';
-            html += '</div>';
+            html += '</ol>';
+            html += '</section>';
         }
 
+        // Completion proof card
         if (report.completion_proof_image) {
             const proofUrl = String(report.completion_proof_image);
-            html += `<div style="${sectionWrapStyle}">`;
-            html += `<h3 style="${sectionTitleStyle}">Completion Proof</h3>`;
+            html += '<section class="report-info-card report-info-card-wide">';
+            html += '<h3 class="report-info-card-title">Completion Proof</h3>';
             html += `<a href="${proofUrl}" target="_blank" rel="noopener">`;
             html += `<img src="${proofUrl}" alt="Completion proof" style="max-width: 360px; width: 100%; border-radius: 10px; border: 1px solid var(--border);">`;
             html += `</a>`;
-            html += '</div>';
+            html += '</section>';
         }
-        
+
         html += '</div>';
-        
+
         document.getElementById('report-details').innerHTML = html;
         
         // Set current status in form
@@ -767,7 +915,13 @@ async function loadReport() {
         syncCompletionProofVisibility();
         updateNeedChangeApprovalUI(report);
         updateReopenCardUI(report);
-        
+
+        // TASK 9 — hide/disable modification controls once we know the
+        // report's actual department_id (Administrator is exempt). Applied
+        // last so it can override the visibility/disabled state the helpers
+        // above just set (e.g. re-disable a reopen button they enabled).
+        applyDepartmentAuthorizationUI(report);
+
     } catch (error) {
         console.error('Error:', error);
         document.getElementById('report-details').innerHTML = 
@@ -778,13 +932,20 @@ async function loadReport() {
 // Handle status update
 document.getElementById('status-update-form').addEventListener('submit', async (e) => {
     e.preventDefault();
-    
+
     const newStatus = document.getElementById('new-status').value;
     const comment = document.getElementById('status-comment').value;
     const btn = document.getElementById('update-status-btn');
     const alertDiv = document.getElementById('status-alert');
     const completionProofInput = document.getElementById('completion-proof-image');
-    
+
+    // TASK 9 — frontend defense-in-depth; the backend still rejects this
+    // with HTTP 403 regardless (see ReportController::update()).
+    if (!canModifyReportClientSide(currentReport)) {
+        alertDiv.innerHTML = '<div class="alert alert-danger">This report belongs to a different department. You do not have permission to modify it.</div>';
+        return;
+    }
+
     if (!newStatus) {
         alertDiv.innerHTML = '<div class="alert alert-danger">Please select a new status</div>';
         return;
@@ -801,12 +962,35 @@ document.getElementById('status-update-form').addEventListener('submit', async (
         return;
     }
     
+    // TASK 44 — the button is disabled BEFORE the (async) cross-department
+    // confirmation opens, and `isStatusUpdateInFlight` guards the handler
+    // itself, so neither a double-click nor a repeated Enter press while the
+    // dialog is open can queue a second submit. Exactly one PATCH is sent per
+    // confirmed assignment, and none at all if the user cancels.
+    if (isStatusUpdateInFlight) {
+        return;
+    }
+
     const originalText = btn.innerHTML;
+    isStatusUpdateInFlight = true;
     btn.disabled = true;
-    btn.innerHTML = 'Updating...';
     alertDiv.innerHTML = '';
-    
+
     try {
+        if (newStatus === 'assigned' && assignSelect) {
+            const selectedPerson = findAssignmentTargetById(assignSelect.value);
+            if (selectedPerson && isCrossDepartmentAssignment(currentReport, selectedPerson)) {
+                const proceedWithAssignment = await confirmCrossDepartmentAssignment(currentReport, selectedPerson);
+                if (!proceedWithAssignment) {
+                    // Cancel: no request is sent and nothing is changed.
+                    alertDiv.innerHTML = '<div class="alert alert-info">Assignment cancelled. No changes were made.</div>';
+                    return;
+                }
+            }
+        }
+
+        btn.innerHTML = 'Updating...';
+
         const formData = new FormData();
         formData.append('status', newStatus);
         formData.append('comment', comment || '');
@@ -816,11 +1000,15 @@ document.getElementById('status-update-form').addEventListener('submit', async (
         if (completionProofInput && completionProofInput.files.length > 0) {
             formData.append('completion_proof_image', completionProofInput.files[0]);
         }
+        // Browsers/PHP do not parse multipart/form-data bodies on PATCH requests,
+        // so the actual request is sent as POST with Laravel's method-spoofing
+        // field; the route itself remains PATCH (routes/web.php) and is unchanged.
+        formData.append('_method', 'PATCH');
 
         const response = await fetch(
             window.SFMS_PUBLIC_URL(`/api/reports/${reportId}`),
             {
-                method: 'PATCH',
+                method: 'POST',
                 credentials: 'include',
                 body: formData
             }
@@ -843,6 +1031,7 @@ document.getElementById('status-update-form').addEventListener('submit', async (
     } catch (error) {
         alertDiv.innerHTML = '<div class="alert alert-danger">' + error.message + '</div>';
     } finally {
+        isStatusUpdateInFlight = false;
         btn.disabled = false;
         btn.innerHTML = originalText;
     }
@@ -985,6 +1174,14 @@ function updateReopenCardUI(report) {
 document.getElementById('reopen-report-btn')?.addEventListener('click', async () => {
     const btn = document.getElementById('reopen-report-btn');
     const alertDiv = document.getElementById('reopen-alert');
+
+    // TASK 9 — frontend defense-in-depth; the backend still rejects this
+    // with HTTP 403 regardless (see ReportController::update()).
+    if (!canModifyReportClientSide(currentReport)) {
+        alertDiv.innerHTML = '<div class="alert alert-danger">This report belongs to a different department. You do not have permission to modify it.</div>';
+        return;
+    }
+
     const original = btn.textContent;
     btn.disabled = true;
     btn.textContent = 'Reopening...';
@@ -993,7 +1190,11 @@ document.getElementById('reopen-report-btn')?.addEventListener('click', async ()
         const formData = new FormData();
         formData.append('status', 'in_progress');
         formData.append('comment', 'Report reopened');
-        const response = await fetch(window.SFMS_PUBLIC_URL(`/api/reports/${reportId}`), { method: 'PATCH', credentials: 'include', body: formData });
+        // See status-update-form handler above: multipart bodies aren't parsed by
+        // PHP on PATCH requests, so POST + method-spoofing is used instead. The
+        // route itself remains PATCH (routes/web.php) and is unchanged.
+        formData.append('_method', 'PATCH');
+        const response = await fetch(window.SFMS_PUBLIC_URL(`/api/reports/${reportId}`), { method: 'POST', credentials: 'include', body: formData });
         const data = await response.json();
         if (!data.success) throw new Error(data.message || 'Failed to reopen report');
         alertDiv.innerHTML = '<div class="alert alert-success">Report reopened successfully!</div>';

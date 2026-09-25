@@ -7,7 +7,24 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-require_once __DIR__ . '/../../backend/config/settings.php';
+// TASK 60 — this was '/../../backend/config/settings.php', which resolves to
+// <project root>/backend/config/settings.php. No root-level backend/ directory
+// exists (that is exactly why the root .htaccess rewrites ^backend/ into
+// public/backend/), so every request to /frontend/ — this file is the
+// DirectoryIndex target for that URL — died in a PHP fatal error that printed
+// the absolute filesystem path and the include_path, the same disclosure
+// TASK 58 removed when it retired the broken public inventory workflow shim.
+// display_errors=0 (TASK 55) could not contain it, because that hardening lives
+// in settings.php, the very file that failed to load.
+//
+// (That sentence deliberately avoids spelling the retired endpoint's filename:
+// the TASK 58 regression guard greps public/frontend/ for the literal string
+// and cannot tell a comment from a call. See the TASK 60 report.)
+//
+// The other legacy files that spell '/../../backend/...' are correct: they sit
+// one level deeper, in pages/ and includes/, where '../../' lands on public/.
+// This file sits at public/frontend/, so it needs a single '../'.
+require_once __DIR__ . '/../backend/config/settings.php';
 
 if (!empty($_SESSION['user'])) {
     $role = $_SESSION['user']['role'] ?? '';

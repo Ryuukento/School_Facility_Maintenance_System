@@ -142,7 +142,7 @@ class NeedChangeApprovalTest extends TestCase
         $response->assertStatus(422);
         $response->assertJson([
             'success' => false,
-            'message' => 'Insufficient stock for approval. Available: 2, required: 5',
+            'message' => 'Insufficient Inventory for Rare Sensor. Available Stock: 2. Requested: 5.',
         ]);
 
         $this->assertSame(0, DB::table('inventory_transactions')->where('report_id', $reportId)->count());
@@ -152,6 +152,171 @@ class NeedChangeApprovalTest extends TestCase
         $this->assertSame('pending', $report->need_change_status);
         $this->assertNull($report->need_change_approved_at);
         $this->assertNull($report->need_change_deducted_at);
+    }
+
+    /**
+     * TASK 2 — Need Change stock validation must account for stock already
+     * reserved elsewhere (e.g. by a pending Dispatch), not just raw
+     * quantity, mirroring DispatchService::approveDispatch()'s
+     * (quantity - reserved_quantity) formula.
+     */
+    public function test_approving_request_with_stock_reserved_elsewhere_fails_cleanly(): void
+    {
+        $approverId = $this->seedUser(['role' => 'super_admin']);
+        $itemId = $this->seedItem(['name' => 'Shared Sensor', 'quantity' => 10, 'reserved_quantity' => 8]);
+        $reportId = $this->seedReport([
+            'need_change_item_id' => $itemId,
+            'need_change_quantity' => 5,
+            'need_change_status' => 'pending',
+        ]);
+
+        $response = $this
+            ->actingAsSessionUser($approverId, 'super_admin')
+            ->patchJson("/api/reports/{$reportId}", ['approve_need_change' => true]);
+
+        $response->assertStatus(422);
+        $response->assertJson([
+            'success' => false,
+            'message' => 'Insufficient Inventory for Shared Sensor. Available Stock: 2. Requested: 5.',
+        ]);
+
+        $this->assertSame(0, DB::table('inventory_transactions')->where('report_id', $reportId)->count());
+        $this->assertSame(10, (int) DB::table('items')->where('id', $itemId)->value('quantity'));
+        $this->assertSame(8, (int) DB::table('items')->where('id', $itemId)->value('reserved_quantity'));
+
+        $report = DB::table('maintenance_reports')->where('report_id', $reportId)->first();
+        $this->assertSame('pending', $report->need_change_status);
+    }
+
+    public function test_pending_need_change_leaves_inventory_unchanged_until_approved(): void
+    {
+        $itemId = $this->seedItem(['name' => 'Whiteboard Marker', 'quantity' => 25]);
+        $this->seedReport([
+            'need_change_item_id' => $itemId,
+            'need_change_quantity' => 2,
+            'need_change_status' => 'pending',
+        ]);
+
+        $this->assertSame(25, (int) DB::table('items')->where('id', $itemId)->value('quantity'));
+        $this->assertSame(0, DB::table('inventory_transactions')->count());
+    }
+
+    /**
+     * TASK 2 business rule: "Inventory must NOT be deducted when ... Report
+     * is Rejected." A Need Change that was already rejected must not be
+     * deductible via a later approve_need_change call.
+     */
+    public function test_approving_a_rejected_need_change_is_blocked(): void
+    {
+        $approverId = $this->seedUser(['role' => 'super_admin']);
+        $itemId = $this->seedItem(['name' => 'Rejected Item', 'quantity' => 10]);
+        $reportId = $this->seedReport([
+            'need_change_item_id' => $itemId,
+            'need_change_quantity' => 3,
+            'need_change_status' => 'rejected',
+        ]);
+
+        $response = $this
+            ->actingAsSessionUser($approverId, 'super_admin')
+            ->patchJson("/api/reports/{$reportId}", ['approve_need_change' => true]);
+
+        $response->assertStatus(422);
+        $this->assertStringContainsString(
+            'rejected',
+            (string) $response->json('message')
+        );
+
+        $this->assertSame(0, DB::table('inventory_transactions')->where('report_id', $reportId)->count());
+        $this->assertSame(10, (int) DB::table('items')->where('id', $itemId)->value('quantity'));
+
+        $report = DB::table('maintenance_reports')->where('report_id', $reportId)->first();
+        $this->assertSame('rejected', $report->need_change_status);
+        $this->assertNull($report->need_change_deducted_at);
+    }
+
+    /**
+     * TASK 2 duplicate protection, second layer: even if
+     * need_change_deducted_at is somehow still null, an existing 'deploy'
+     * InventoryTransaction row for this report must independently block a
+     * second deduction (belt-and-suspenders, mirrors
+     * DispatchService::approveDispatch()).
+     */
+    public function test_existing_deploy_transaction_blocks_second_deduction_even_if_deducted_at_is_null(): void
+    {
+        $approverId = $this->seedUser(['role' => 'super_admin']);
+        $itemId = $this->seedItem(['name' => 'Inconsistent State Item', 'quantity' => 10]);
+        $reportId = $this->seedReport([
+            'need_change_item_id' => $itemId,
+            'need_change_quantity' => 3,
+            'need_change_status' => 'pending',
+        ]);
+
+        DB::table('inventory_transactions')->insert([
+            'item_id' => $itemId,
+            'report_id' => $reportId,
+            'room_id' => null,
+            'transaction_type' => 'deploy',
+            'quantity' => 3,
+            'reference_note' => 'Pre-existing transaction simulating a data inconsistency',
+            'performed_by' => $approverId,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $response = $this
+            ->actingAsSessionUser($approverId, 'super_admin')
+            ->patchJson("/api/reports/{$reportId}", ['approve_need_change' => true]);
+
+        $response->assertStatus(422);
+        $this->assertSame(1, DB::table('inventory_transactions')->where('report_id', $reportId)->count());
+
+        $report = DB::table('maintenance_reports')->where('report_id', $reportId)->first();
+        $this->assertNull($report->need_change_deducted_at);
+    }
+
+    /**
+     * TASK 2 Scenario 5 — Rollback simulation. Forces a failure AFTER the
+     * InventoryTransaction (and its Observer-driven stock deduction) has
+     * already been written, but before the surrounding DB::transaction()
+     * commits, by throwing from a MaintenanceReport 'updating' event hook.
+     * Confirms the entire approval — the InventoryTransaction row and the
+     * stock it already deducted — is rolled back atomically, exactly as
+     * DispatchApprovalInventoryTest::test_rollback_leaves_no_partial_inventory_update
+     * verifies for Dispatch.
+     */
+    public function test_rollback_leaves_no_partial_inventory_update(): void
+    {
+        $approverId = $this->seedUser(['role' => 'super_admin']);
+        $itemId = $this->seedItem(['name' => 'Rollback Item', 'quantity' => 10]);
+        $reportId = $this->seedReport([
+            'need_change_item_id' => $itemId,
+            'need_change_quantity' => 4,
+            'need_change_status' => 'pending',
+        ]);
+
+        \App\Models\MaintenanceReport::updating(function (\App\Models\MaintenanceReport $model): void {
+            if ($model->need_change_status === 'deducted') {
+                throw new \RuntimeException('Simulated failure after inventory deduction');
+            }
+        });
+
+        try {
+            $response = $this
+                ->actingAsSessionUser($approverId, 'super_admin')
+                ->patchJson("/api/reports/{$reportId}", ['approve_need_change' => true]);
+
+            $response->assertStatus(500);
+        } finally {
+            \App\Models\MaintenanceReport::flushEventListeners();
+        }
+
+        $this->assertSame(10, (int) DB::table('items')->where('id', $itemId)->value('quantity'), 'Rollback must restore the pre-transaction quantity exactly.');
+        $this->assertSame(0, DB::table('inventory_transactions')->where('report_id', $reportId)->count(), 'No transaction row may survive the rollback.');
+
+        $report = DB::table('maintenance_reports')->where('report_id', $reportId)->first();
+        $this->assertSame('pending', $report->need_change_status);
+        $this->assertNull($report->need_change_deducted_at);
+        $this->assertNull($report->need_change_approved_at);
     }
 
     private function createTestSchema(): void

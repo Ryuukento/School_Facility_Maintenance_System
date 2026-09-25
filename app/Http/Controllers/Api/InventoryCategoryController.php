@@ -16,9 +16,11 @@ class InventoryCategoryController extends Controller
      * GET /api/inventory-categories
      *
      * Query params:
-     *   q        – optional search (matches category name or code)
-     *   per_page – 1–200, default 100
-     *   page     – default 1
+     *   q                – optional search (matches category name or code)
+     *   per_page         – 1–200, default 100
+     *   page             – default 1
+     *   include_inactive – when truthy, also returns inactive categories (default: active-only,
+     *                      preserved for Browse-by-Category and item-form dropdown consumers)
      *
      * Response shape:
      *   { success, message, data: { categories: [{id, name, code, default_low_stock_threshold,
@@ -26,12 +28,13 @@ class InventoryCategoryController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $q       = trim((string) $request->query('q', ''));
-        $perPage = max(1, min(200, (int) $request->query('per_page', 100)));
-        $page    = max(1, (int) $request->query('page', 1));
+        $q               = trim((string) $request->query('q', ''));
+        $perPage         = max(1, min(200, (int) $request->query('per_page', 100)));
+        $page            = max(1, (int) $request->query('page', 1));
+        $includeInactive = filter_var($request->query('include_inactive', false), FILTER_VALIDATE_BOOLEAN);
 
         $baseQuery = fn () => DB::table('inventory_categories as c')
-            ->where('c.is_active', 1)
+            ->when(!$includeInactive, fn ($q2) => $q2->where('c.is_active', 1))
             ->when($q !== '', function ($q2) use ($q) {
                 $like = '%' . strtolower($q) . '%';
                 $q2->where(function ($sub) use ($like) {
@@ -110,6 +113,38 @@ class InventoryCategoryController extends Controller
             return $this->fail('Category with this name already exists', 409);
         }
 
+        // TASK 56 — Inventory Category API Validation Hardening.
+        // `code` carries its OWN unique index, independent of `name` (see
+        // 2026_04_07_001000_add_inventory_categories_and_thresholds.php:
+        // `$table->string('code')->nullable()->unique()`), but only `name`
+        // was checked above before the insert below. Two categories with
+        // different names and the same code therefore passed every
+        // application check and violated the unique index at INSERT time,
+        // surfacing as an uncaught UniqueConstraintViolationException — a
+        // raw 500 (and, with app.debug on, the literal SQL and constraint
+        // name in the response body, per bootstrap/app.php's renderer)
+        // instead of the clean 409 this method already returns for a
+        // duplicate NAME. Reachable through ordinary UI use: `code` is a
+        // live, editable field on the Manage Categories form
+        // (categoryCodeInput in public/frontend/pages/inventory.php) with no
+        // client-side duplicate check.
+        //
+        // The null guard is required, not defensive: `code` is NULLABLE and
+        // a unique index permits unlimited NULLs, so code-less categories
+        // are ordinary and must not conflict with each other. Mirrors the
+        // legacy InventoryCategory::existsByCode() fixed under Task 55.
+        // $code is already lowercased above; LOWER() on the column side
+        // still matters because stored values may predate that
+        // normalization.
+        if ($code !== null) {
+            $codeExists = DB::table('inventory_categories')
+                ->whereRaw('LOWER(code) = ?', [$code])
+                ->exists();
+            if ($codeExists) {
+                return $this->fail('Category with this code already exists', 409);
+            }
+        }
+
         $id = DB::table('inventory_categories')->insertGetId([
             'name'                        => $name,
             'code'                        => $code,
@@ -158,6 +193,22 @@ class InventoryCategoryController extends Controller
             ->exists();
         if ($nameConflict) {
             return $this->fail('Category with this name already exists', 409);
+        }
+
+        // TASK 56 — same unguarded unique index as store() above, on the
+        // PATCH path. The `id != ?` self-exclusion mirrors the name check
+        // immediately above and is what keeps an ordinary edit working: the
+        // Manage Categories form resubmits every field on every save
+        // (saveCategory() in public/frontend/pages/inventory.php), so the
+        // category's own existing code is always present in the payload.
+        if ($code !== null) {
+            $codeConflict = DB::table('inventory_categories')
+                ->whereRaw('LOWER(code) = ?', [$code])
+                ->where('id', '!=', $id)
+                ->exists();
+            if ($codeConflict) {
+                return $this->fail('Category with this code already exists', 409);
+            }
         }
 
         DB::table('inventory_categories')->where('id', $id)->update([

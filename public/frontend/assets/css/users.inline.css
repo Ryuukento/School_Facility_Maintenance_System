@@ -193,10 +193,32 @@
 .users-modal-card {
     background: #0f1b31;
     width: min(520px, 95vw);
+    max-height: calc(100vh - 48px);
+    overflow-y: auto;
     border-radius: 12px;
     padding: 1.25rem;
     box-shadow: 0 20px 50px rgba(2, 8, 23, 0.55);
     border: 1px solid rgba(148, 163, 184, 0.35);
+}
+
+.users-modal-section-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 1.1rem 0 0.85rem;
+    padding-top: 1rem;
+    border-top: 1px solid rgba(148, 163, 184, 0.22);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #a78bfa;
+}
+
+.users-modal-section-title:first-of-type {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
 }
 
 .users-modal-title {
@@ -213,13 +235,24 @@
     margin-bottom: 1rem;
 }
 
+/* COMPACT REGISTER FORM — this row wrapper pairs related fields side by side
+   so the Add New User modal is not excessively tall. Flex (rather than a fixed
+   2-column grid) is deliberate: syncRoleDependentFields() hides
+   #register-department-group for the Administrator role, and a flex item that
+   is display:none leaves the flow entirely, so the surviving Role field grows
+   to the full row width instead of being stranded at half width.
+   `min-width: 0` keeps a long placeholder from forcing horizontal scroll. */
 .users-modal-inline-fields {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.75rem;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 0.75rem 1rem;
+    margin-bottom: 1rem;
 }
 
 .users-modal-field-inline {
+    flex: 1 1 200px;
+    min-width: 0;
     margin-bottom: 0;
 }
 
@@ -230,9 +263,16 @@
     color: #c8d7ee;
 }
 
+/* Narrow/mobile — force a single column so labels and inputs stay readable
+   and nothing scrolls horizontally. */
 @media (max-width: 640px) {
     .users-modal-inline-fields {
-        grid-template-columns: 1fr;
+        flex-direction: column;
+    }
+
+    .users-modal-field-inline {
+        flex: 1 1 auto;
+        width: 100%;
     }
 }
 
@@ -493,6 +533,15 @@
     background: linear-gradient(180deg, rgba(27, 16, 48, 0.96) 0%, rgba(18, 11, 34, 0.98) 100%);
     border: 1px solid rgba(168, 139, 250, 0.18);
     box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+/* TASK 17 — Notification Deep Linking: brief pulse applied to the user
+   card a notification deep-link (?highlight=<user_id>) points at, so
+   landing on a filtered/paginated grid still makes the target obvious. */
+.users-card-highlight {
+    border-color: rgba(168, 139, 250, 0.85);
+    box-shadow: 0 0 0 3px rgba(168, 139, 250, 0.35), 0 18px 40px rgba(0, 0, 0, 0.28);
 }
 
 .users-card-media {
@@ -729,6 +778,19 @@
     border: 1px solid rgba(239, 68, 68, 0.28);
 }
 
+/* Readability fix (2026-09-22): both .users-page-alert-success/-error
+   definitions in this file (this one and the near-duplicate earlier in the
+   stylesheet) pair pale mint/pink text with an equally pale tinted
+   background — built for a dark page background, invisible on the actual
+   light User Management page. Single override here (higher specificity)
+   fixes both declarations; backgrounds/borders/layout untouched. */
+:root[data-theme-resolved='light'] .users-page-alert-success {
+    color: #065f46 !important;
+}
+:root[data-theme-resolved='light'] .users-page-alert-error {
+    color: #991b1b !important;
+}
+
 .users-pagination {
     display: flex;
     justify-content: center;
@@ -787,8 +849,13 @@
     box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.2);
 }
 
+/* COMPACT REGISTER FORM — widened from 540px because the fields are now paired
+   two-per-row; at the old width each column would have been too cramped for the
+   longer placeholders (e.g. "Optional (e.g., Jr., Sr., III)"). Still capped at
+   95vw, so narrow viewports are unaffected. */
 .users-register-modal-card {
-    width: min(540px, 95vw);
+    width: min(680px, 95vw);
+}
 
 .users-modal-field-error {
     display: none;
@@ -816,7 +883,6 @@
         opacity: 1;
         transform: translateY(0);
     }
-}
 }
 
 .users-empty-state {
@@ -961,21 +1027,52 @@
 
 :root[data-theme-resolved='light'] .users-role-filter.is-active,
 :root[data-theme-resolved='light'] .users-page-nav.is-active {
+    /* TASK 79: the light-theme override above (.users-role-filter) sets
+       background:#ffffff for every filter pill, including the active one --
+       this rule only overrode color/border-color, so the active pill ended
+       up white text on a white background (invisible label) in light mode.
+       Restoring the same brand gradient the dark theme/base .is-active
+       state already uses (line 464) keeps the active pill legible and
+       visually consistent across themes. */
+    background: linear-gradient(135deg, #8b5cf6, #6d28d9) !important;
     color: #ffffff !important;
     border-color: transparent !important;
 }
 
+/* Container tier for User Management: the user cards, the outer frame of the
+   users table, and the modal shell. The table's th/td rules further down are
+   deliberately left neutral grey — purple marks the container edge, not every
+   cell. */
 :root[data-theme-resolved='light'] .users-card,
 :root[data-theme-resolved='light'] .users-table,
 :root[data-theme-resolved='light'] .users-modal-card,
 :root[data-theme-resolved='light'] .users-skeleton-card {
     background: #ffffff !important;
-    border-color: #e5e7eb !important;
+    border-color: var(--purple-border, #e5e7eb) !important;
     box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08) !important;
 }
 
 :root[data-theme-resolved='light'] .users-card-media {
     background: linear-gradient(135deg, #f8fafc, #eef2ff) !important;
+}
+
+/* Readability fix (2026-09-22): .users-status-pill's white text on a
+   translucent-white pill was designed for the dark .users-card-media
+   gradient above. In light mode that card is overridden to a near-white
+   gradient (rule above), so the white-on-white pill text became invisible.
+   Text-only + background-opacity tweak per status; the active/pending/
+   inactive color-coding itself is unchanged. */
+:root[data-theme-resolved='light'] .users-status-pill.is-active {
+    background: rgba(16, 185, 129, 0.16) !important;
+    color: #065f46 !important;
+}
+:root[data-theme-resolved='light'] .users-status-pill.is-pending {
+    background: rgba(245, 158, 11, 0.18) !important;
+    color: #92400e !important;
+}
+:root[data-theme-resolved='light'] .users-status-pill.is-inactive {
+    background: rgba(239, 68, 68, 0.16) !important;
+    color: #991b1b !important;
 }
 
 :root[data-theme-resolved='light'] .users-card-headline h3,
@@ -1028,4 +1125,21 @@
 
 :root[data-theme-resolved='light'] .users-modal-overlay {
     background: rgba(15, 23, 42, 0.42);
+}
+
+:root[data-theme-resolved='light'] .users-modal-section-title {
+    color: #6d28d9 !important;
+    border-top-color: #e5e7eb !important;
+}
+
+/* Designation row — slightly bolder than the plain department/meta rows */
+.users-card-designation-text {
+    font-weight: 600;
+    color: var(--text-primary, #111827);
+}
+:root[data-theme-resolved='light'] .users-card-designation-text {
+    color: #111827;
+}
+:root:not([data-theme-resolved='light']) .users-card-designation-text {
+    color: #f1f5f9;
 }

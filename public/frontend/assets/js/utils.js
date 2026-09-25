@@ -5,35 +5,105 @@
 class UI {
 
         /**
-         * Show a system modal confirmation (async)
+         * Escape a value for safe interpolation into innerHTML template strings.
          */
-        static systemConfirm(message, yesLabel = 'Yes', noLabel = 'No') {
+        static escapeHtml(value) {
+            return String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        /**
+         * TASK 7.1 — render a registry icon for the shared system modals.
+         *
+         * systemConfirm() and systemAlert() previously inlined entity-encoded
+         * emoji. This routes them through the same UIIcons registry the rest of
+         * the UI uses, at the size .system-modal-icon was already drawing its
+         * glyph at (48px chip, 22px font).
+         *
+         * If ui-icons.js has not loaded, this returns '' rather than falling
+         * back to an emoji: the modal's own message carries the meaning, so an
+         * empty decorative chip is the safe degradation. It must never throw —
+         * these two modals are the app-wide replacement for window.confirm()
+         * and window.alert().
+         */
+        static _modalIcon(name) {
+            if (!name || !window.UIIcons || typeof window.UIIcons.svg !== 'function') {
+                return '';
+            }
+            return window.UIIcons.svg(name, { size: 26 });
+        }
+
+        /**
+         * Show a system modal confirmation (async)
+         *
+         * UI_BROWSER_DIALOG_REPLACEMENT — this is the application's single
+         * reusable replacement for window.confirm(). `variant` selects both
+         * the card's accent color and the confirm ("Yes") button's color, so
+         * callers can match the existing button-color convention (Approve
+         * dispatch/Confirm = green, Delete = red, Warning-only = yellow).
+         * Defaults to 'danger' to preserve the exact visual behavior every
+         * existing call site had before `variant` was introduced.
+         */
+        static systemConfirm(message, yesLabel = 'Yes', noLabel = 'No', variant = 'danger') {
             return new Promise((resolve) => {
                 // Remove existing modal if any
                 const existing = document.getElementById('system-confirm-modal');
                 if (existing) existing.remove();
 
+                const previouslyFocused = document.activeElement;
+
+                const knownVariants = ['danger', 'success', 'warning', 'primary'];
+                const safeVariant = knownVariants.includes(variant) ? variant : 'danger';
+                const yesBtnClass = { danger: 'btn-danger', success: 'btn-success', warning: 'btn-warning', primary: 'btn-primary' }[safeVariant];
+                // TASK 7.1 — was entity-encoded emoji ('&#9888;' ⚠, '&#10003;' ✓,
+                // '&#10068;' ❔). Same variant->glyph mapping, same four keys, same
+                // fallback behaviour; only the glyph source changes. The icon is
+                // decorative (the modal message states the meaning) and its wrapper
+                // keeps aria-hidden below, so screen-reader output is unchanged.
+                const icon = UI._modalIcon({ danger: 'alert-triangle', success: 'check', warning: 'alert-triangle', primary: 'help-circle' }[safeVariant]);
+
                 const modal = document.createElement('div');
                 modal.id = 'system-confirm-modal';
                 modal.className = 'system-modal-overlay';
+                modal.setAttribute('role', 'alertdialog');
+                modal.setAttribute('aria-modal', 'true');
                 modal.innerHTML = `
-                    <div class="system-modal-card">
+                    <div class="system-modal-card system-modal-${safeVariant}">
+                        <div class="system-modal-icon" aria-hidden="true">${icon}</div>
                         <div class="system-modal-message">${message}</div>
                         <div class="system-modal-actions">
-                            <button id="systemConfirmYes" class="btn btn-danger">${yesLabel}</button>
                             <button id="systemConfirmNo" class="btn btn-secondary">${noLabel}</button>
+                            <button id="systemConfirmYes" class="btn ${yesBtnClass}">${yesLabel}</button>
                         </div>
                     </div>
                 `;
                 document.body.appendChild(modal);
-                document.getElementById('systemConfirmYes').onclick = () => { modal.remove(); resolve(true); };
-                document.getElementById('systemConfirmNo').onclick = () => { modal.remove(); resolve(false); };
-                modal.addEventListener('click', (e) => { if (e.target === modal) { modal.remove(); resolve(false); } });
+
+                const finish = (result) => {
+                    modal.remove();
+                    if (previouslyFocused && typeof previouslyFocused.focus === 'function') {
+                        previouslyFocused.focus();
+                    }
+                    resolve(result);
+                };
+
+                document.getElementById('systemConfirmYes').onclick = () => finish(true);
+                document.getElementById('systemConfirmNo').onclick = () => finish(false);
+                modal.addEventListener('click', (e) => { if (e.target === modal) finish(false); });
+                document.getElementById('systemConfirmYes').focus();
             });
         }
 
         /**
          * Show a system modal alert (async)
+         *
+         * UI_BROWSER_DIALOG_REPLACEMENT — this is the application's single
+         * reusable replacement for window.alert(). `type` covers the four
+         * remaining dialog categories (info/success/warning/danger=error).
          */
         static systemAlert(message, type = 'info', okLabel = 'OK') {
             return new Promise((resolve) => {
@@ -41,11 +111,22 @@ class UI {
                 const existing = document.getElementById('system-alert-modal');
                 if (existing) existing.remove();
 
+                const previouslyFocused = document.activeElement;
+
+                const knownTypes = ['info', 'success', 'warning', 'danger'];
+                const safeType = knownTypes.includes(type) ? type : 'info';
+                // TASK 7.1 — was entity-encoded ('&#8505;' ℹ, '&#10003;' ✓,
+                // '&#9888;' ⚠, '&#10007;' ✗). Mapping and keys unchanged.
+                const icon = UI._modalIcon({ info: 'info', success: 'check', warning: 'alert-triangle', danger: 'x' }[safeType]);
+
                 const modal = document.createElement('div');
                 modal.id = 'system-alert-modal';
                 modal.className = 'system-modal-overlay';
+                modal.setAttribute('role', 'alertdialog');
+                modal.setAttribute('aria-modal', 'true');
                 modal.innerHTML = `
-                    <div class="system-modal-card system-modal-${type}">
+                    <div class="system-modal-card system-modal-${safeType}">
+                        <div class="system-modal-icon" aria-hidden="true">${icon}</div>
                         <div class="system-modal-message">${message}</div>
                         <div class="system-modal-actions">
                             <button id="systemAlertOk" class="btn btn-primary">${okLabel}</button>
@@ -53,27 +134,40 @@ class UI {
                     </div>
                 `;
                 document.body.appendChild(modal);
-                document.getElementById('systemAlertOk').onclick = () => { modal.remove(); resolve(); };
-                modal.addEventListener('click', (e) => { if (e.target === modal) { modal.remove(); resolve(); } });
+
+                const finish = () => {
+                    modal.remove();
+                    if (previouslyFocused && typeof previouslyFocused.focus === 'function') {
+                        previouslyFocused.focus();
+                    }
+                    resolve();
+                };
+
+                document.getElementById('systemAlertOk').onclick = finish;
+                modal.addEventListener('click', (e) => { if (e.target === modal) finish(); });
+                document.getElementById('systemAlertOk').focus();
             });
         }
     /**
      * Show a toast notification
      */
-    static toast(message, type = 'info', duration = 4000) {
+    static toast(message, type = 'info', duration) {
         const toastContainer = document.getElementById('toast-container') || this.createToastContainer();
-        
+
         const toast = document.createElement('div');
         toast.className = `toast toast-${type}`;
         toast.textContent = message;
-        
+
         toastContainer.appendChild(toast);
-        
+
+        // DESIGN_SYSTEM.md §25: success/info auto-dismiss at --duration-toast-visible (4000ms);
+        // warning/danger persist longer (8000ms) since they need more attention.
+        const autoDismissMs = duration ?? ((type === 'danger' || type === 'warning') ? 8000 : 4000);
         setTimeout(() => {
             toast.remove();
-        }, duration);
+        }, autoDismissMs);
     }
-    
+
     /**
      * Create toast container if it doesn't exist
      */
@@ -84,24 +178,35 @@ class UI {
             position: fixed;
             top: 20px;
             right: 20px;
-            z-index: 9999;
+            z-index: var(--z-toast, 500);
             max-width: 400px;
         `;
         document.body.appendChild(container);
         return container;
     }
-    
+
     /**
      * Show/hide a modal
      */
     static toggleModal(modalId, show = true) {
         const modal = document.getElementById(modalId);
         if (!modal) return;
-        
+
         if (show) {
+            this._lastFocused = document.activeElement;
             modal.classList.add('show');
+            modal.setAttribute('aria-hidden', 'false');
+            const focusable = modal.querySelector(
+                'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+            );
+            if (focusable) focusable.focus();
         } else {
             modal.classList.remove('show');
+            modal.setAttribute('aria-hidden', 'true');
+            if (this._lastFocused && typeof this._lastFocused.focus === 'function') {
+                this._lastFocused.focus();
+            }
+            this._lastFocused = null;
         }
     }
     
@@ -153,9 +258,10 @@ class UI {
             'low': 'badge-info',
             'medium': 'badge-warning',
             'high': 'badge-danger',
+            'critical': 'badge-danger',
             'urgent': 'badge-danger'
         };
-        
+
         return `<span class="badge ${colors[priority] || 'badge-info'}">${priority.toUpperCase()}</span>`;
     }
     
@@ -258,6 +364,14 @@ class FormValidator {
         return re.test(email);
     }
 }
+
+// UI_BROWSER_DIALOG_REPLACEMENT — top-level `class` declarations do not
+// auto-attach to `window` in classic scripts, so every pre-existing
+// `window.UI && ...` guard across the app was silently false, falling back
+// to native window.alert()/window.confirm(). Exposing UI on window here is
+// what makes the shared modal system actually engage everywhere it was
+// already being referenced.
+window.UI = UI;
 
 /**
  * Session management

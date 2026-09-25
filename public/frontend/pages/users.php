@@ -39,9 +39,13 @@ include __DIR__ . '/../includes/header.php';
                 <input type="search" id="search-input" name="user-search" class="users-search-input" placeholder="Search by name, email, or role..." autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="search">
                 <div class="users-role-filters" id="users-role-filters" aria-label="Filter users by role">
                     <button type="button" class="users-role-filter is-active" data-role-filter="all">All</button>
-                    <button type="button" class="users-role-filter" data-role-filter="super_admin">Administrator</button>
+                    <!-- TASK 79: super_admin accounts are permanently excluded from GET
+                         /api/users (UserController::index()) and are not part of
+                         setRoleFilter()'s allowlist -- an "Administrator" filter button
+                         here could never surface a match and silently fell back to
+                         "All" when clicked. Removed rather than left as a dead control. -->
                     <button type="button" class="users-role-filter" data-role-filter="maintenance_admin">Head</button>
-                    <button type="button" class="users-role-filter" data-role-filter="maintenance_staff">Maintenance Staff</button>
+                    <button type="button" class="users-role-filter" data-role-filter="maintenance_staff">Staff</button>
                 </div>
             </div>
             <div class="users-toolbar-actions">
@@ -68,7 +72,7 @@ include __DIR__ . '/../includes/header.php';
     </section>
 </main>
 
-<link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/users.inline.css?v=20260414-1">
+<link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/users.inline.css?v=20260921-2">
 
 <script>
 window.API = window.API || {};
@@ -82,6 +86,28 @@ const usersState = {
     searchTerm: '',
     roleFilter: 'all'
 };
+
+/**
+ * TASK 37 — roles whose accounts are meaningless without a department.
+ * Mirrors UserController::DEPARTMENT_REQUIRED_ROLES. The backend copy is the
+ * one that enforces; this one only decides what the register modal shows,
+ * because hiding a field in JavaScript proves nothing about what a direct
+ * POST to /api/users can do.
+ */
+const DEPARTMENT_REQUIRED_ROLES = ['maintenance_admin', 'maintenance_staff'];
+
+function roleRequiresDepartment(role) {
+    return DEPARTMENT_REQUIRED_ROLES.includes(String(role || '').toLowerCase().trim());
+}
+
+/**
+ * TASK 37 — set by openRegisterUserModal() so loadDepartmentsForModal() can
+ * re-apply the role-dependent state after it replaces the <select>'s options.
+ * That replacement wipes the placeholder text and any current selection, so
+ * without this the field would come back reading "No specific department"
+ * even for a role that requires one.
+ */
+let syncRegisterRoleFields = null;
 
 async function loadDepartmentsForModal() {
     const select = document.getElementById('register-department');
@@ -100,10 +126,17 @@ async function loadDepartmentsForModal() {
     } catch (e) {
         select.innerHTML = '<option value="">Could not load departments</option>';
     }
+    syncRegisterRoleFields?.();
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    loadUsers();
+    // TASK 17 — Notification Deep Linking: a 'user' notification (password
+    // reset request) lands here via ?highlight=<user_id>. There is no
+    // GET /api/users/{id} endpoint to preflight against (only the
+    // super_admin-only list endpoint), so notification.js already gated
+    // this link client-side on role; here we just need to find and
+    // highlight the card once the grid has actually rendered.
+    loadUsers().then(() => highlightUserFromQuery());
     document.getElementById('search-input')?.addEventListener('input', searchUsers);
     document.getElementById('add-new-user-btn')?.addEventListener('click', () => { openRegisterUserModal(); setTimeout(loadDepartmentsForModal, 50); });
 
@@ -113,6 +146,19 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 });
+
+function highlightUserFromQuery() {
+    const params = new URLSearchParams(window.location.search);
+    const highlightId = Number(params.get('highlight') || 0);
+    if (!highlightId) return;
+
+    const card = document.querySelector(`.users-card[data-user-id="${highlightId}"]`);
+    if (!card) return;
+
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    card.classList.add('users-card-highlight');
+    setTimeout(() => card.classList.remove('users-card-highlight'), 3000);
+}
 
 async function loadUsers() {
     const container = document.getElementById('users-container');
@@ -276,7 +322,8 @@ function renderUserCard(targetUser) {
     const hasPendingPasswordResetRequest = Boolean(Number(targetUser.has_pending_password_reset_request || 0)) || targetUser.has_pending_password_reset_request === true;
     const avatarMarkup = buildAvatarMarkup(targetUser);
     const mediaMarkup = buildCardMediaMarkup(targetUser);
-    const roleLabel = getRoleLabel(normalizedRole, targetUser.department_name);
+    const roleLabel = getRoleLabel(normalizedRole);
+    const safeDesignation = escapeHtml(targetUser.designation || '');
     const statusLabel = getStatusLabel(normalizedStatus);
     const statusClass = getStatusClass(normalizedStatus);
 
@@ -293,7 +340,7 @@ function renderUserCard(targetUser) {
         // Active status - show Reset Password only if pending, otherwise just Set Inactive
         if (hasPendingPasswordResetRequest) {
             actionButtons = `
-                <button type="button" onclick="openResetPasswordModal(${safeId}, '${escapeJsString(targetUser.full_name || '')}', '${escapeJsString(targetUser.email || '')}')" class="users-action-btn users-action-approve users-action-reset-pending" title="Reset this user's password">🔔 Reset Password</button>
+                <button type="button" onclick="openResetPasswordModal(${safeId}, '${escapeJsString(targetUser.full_name || '')}', '${escapeJsString(targetUser.email || '')}')" class="users-action-btn users-action-approve users-action-reset-pending" title="Reset this user's password">${usersIcon('bell')} Reset Password</button>
                 <button type="button" onclick="openInactiveUserModal(${safeId}, '${escapeJsString(targetUser.full_name || '')}')" class="users-action-btn users-action-activate" title="Set this user to inactive">Set Inactive</button>
             `;
         } else {
@@ -302,7 +349,7 @@ function renderUserCard(targetUser) {
     }
 
     return `
-        <article class="users-card">
+        <article class="users-card" data-user-id="${safeId}">
             <div class="users-card-media">
                 ${mediaMarkup}
                 <div class="users-card-badges">
@@ -318,6 +365,15 @@ function renderUserCard(targetUser) {
                     </div>
                 </div>
                 <div class="users-card-meta">
+                    ${safeDesignation ? `<div class="users-card-row users-card-row-designation">
+                        <span class="users-card-icon">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="2" y="7" width="20" height="14" rx="2"/>
+                                <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>
+                            </svg>
+                        </span>
+                        <span class="users-card-row-text users-card-designation-text">${safeDesignation}</span>
+                    </div>` : ''}
                     <div class="users-card-row">
                         <span class="users-card-icon">
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -409,23 +465,11 @@ function getInitials(name) {
         .join('') || 'U';
 }
 
-function getRoleLabel(role, departmentName) {
-    if (role === 'maintenance_admin') {
-        const dept = String(departmentName || '').toLowerCase().trim();
-        if (dept.includes('computer'))                               return 'Head Computer';
-        if (dept.includes('electrical'))                             return 'Head Electrical';
-        if (dept.includes('chemical') || dept.includes('chemistry')) return 'Head Chemistry';
-        if (dept.includes('laboratory') || dept.includes('lab'))     return 'Head Laboratory';
-        if (dept.length > 0) {
-            // Capitalize each word of department name for display
-            const cap = String(departmentName || '').trim().split(/\s+/).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-            return 'Head ' + cap;
-        }
-        return 'Head';
-    }
+function getRoleLabel(role) {
     const labels = {
         super_admin:       'Administrator',
-        maintenance_staff: 'Maintenance Staff',
+        maintenance_admin: 'Head',
+        maintenance_staff: 'Staff',
         user:              'Data Entry',
         client:            'Client',
     };
@@ -466,6 +510,14 @@ function escapeJsString(value) {
         .replace(/\r?\n/g, ' ');
 }
 
+// TASK 7 — renders an icon from the shared registry (includes/icon-paths.php,
+// serialised into the page by header.php). Used by the row action buttons,
+// which previously carried emoji glyphs. Each button keeps its visible text
+// label and its title attribute, so these icons stay decorative.
+function usersIcon(name) {
+    return window.UIIcons ? window.UIIcons.svg(name, { size: 13 }) : '';
+}
+
 function openRegisterUserModal() {
     if (document.activeElement && typeof document.activeElement.blur === 'function') {
         document.activeElement.blur();
@@ -483,15 +535,26 @@ function openRegisterUserModal() {
             <h3 class="users-modal-title">Register User</h3>
             <p class="users-modal-desc">Create a new active account. Employee ID is auto-generated based on today\'s date (example: 20260409). The user will be prompted to update their profile on first open.</p>
             <div id="register-form-error" class="users-modal-field-error" style="margin-bottom:0.85rem;"></div>
-            <div class="users-modal-field">
-                <label for="register-last-name" class="users-modal-label">Last Name</label>
-                <input id="register-last-name" class="users-modal-input" type="text" placeholder="Enter last name" autocomplete="off" autocapitalize="words" autocorrect="off" spellcheck="false">
-                <div id="register-last-name-error" class="users-modal-field-error"></div>
-            </div>
-            <div class="users-modal-field">
-                <label for="register-first-name" class="users-modal-label">First Name</label>
-                <input id="register-first-name" class="users-modal-input" type="text" placeholder="Enter first name" autocomplete="off" autocapitalize="words" autocorrect="off" spellcheck="false">
-                <div id="register-first-name-error" class="users-modal-field-error"></div>
+
+            <div class="users-modal-section-title">Personal Information</div>
+            <!-- COMPACT FORM LAYOUT — the eight register fields are paired into
+                 four .users-modal-inline-fields rows (Last/First, Middle/Suffix,
+                 Username/Password, Role/Department) purely to shorten the modal.
+                 Field order, ids, names, placeholders, validation hooks and the
+                 submit payload are untouched; the row wrapper only supplies the
+                 two-column layout, which collapses to one column on narrow
+                 viewports via the existing max-width:640px rule. -->
+            <div class="users-modal-inline-fields">
+                <div class="users-modal-field users-modal-field-inline">
+                    <label for="register-last-name" class="users-modal-label">Last Name</label>
+                    <input id="register-last-name" class="users-modal-input" type="text" placeholder="Enter last name" autocomplete="off" autocapitalize="words" autocorrect="off" spellcheck="false">
+                    <div id="register-last-name-error" class="users-modal-field-error"></div>
+                </div>
+                <div class="users-modal-field users-modal-field-inline">
+                    <label for="register-first-name" class="users-modal-label">First Name</label>
+                    <input id="register-first-name" class="users-modal-input" type="text" placeholder="Enter first name" autocomplete="off" autocapitalize="words" autocorrect="off" spellcheck="false">
+                    <div id="register-first-name-error" class="users-modal-field-error"></div>
+                </div>
             </div>
             <div class="users-modal-inline-fields">
                 <div class="users-modal-field users-modal-field-inline">
@@ -505,46 +568,63 @@ function openRegisterUserModal() {
                     <div id="register-suffix-error" class="users-modal-field-error"></div>
                 </div>
             </div>
-            <div class="users-modal-field">
-                <label for="register-username" class="users-modal-label">Username *</label>
-                <input id="register-username" class="users-modal-input" type="text" placeholder="e.g. juan_dela_cruz" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
-                <div id="register-username-error" class="users-modal-field-error"></div>
+
+            <div class="users-modal-section-title">Account Information</div>
+            <div class="users-modal-inline-fields">
+                <div class="users-modal-field users-modal-field-inline">
+                    <label for="register-username" class="users-modal-label">Username *</label>
+                    <input id="register-username" class="users-modal-input" type="text" placeholder="e.g. juan_dela_cruz" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+                    <div id="register-username-error" class="users-modal-field-error"></div>
+                </div>
+                <!-- Email removed: system uses Username only for account creation -->
+                <div class="users-modal-field users-modal-field-inline" style="position:relative;">
+                    <label for="register-password" class="users-modal-label">Password</label>
+                    <input id="register-password" class="users-modal-input" type="password" placeholder="Minimum 8 characters" autocomplete="new-password" autocapitalize="off" autocorrect="off" spellcheck="false" style="padding-right:44px;height:44px;line-height:44px;">
+                    <button
+                        type="button"
+                        id="toggle-register-password"
+                        aria-label="Show password"
+                        aria-pressed="false"
+                        title="Show password"
+                        style="position:absolute;right:12px;top:38px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;padding:0;border:0;background:transparent;color:rgba(248,244,255,0.82);cursor:pointer;"
+                    >
+                        <svg id="register-password-eye" width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                            <path d="M2 12C3.8 7.9 7.5 5 12 5C16.5 5 20.2 7.9 22 12C20.2 16.1 16.5 19 12 19C7.5 19 3.8 16.1 2 12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
+                        </svg>
+                    </button>
+                    <div id="register-password-error" class="users-modal-field-error"></div>
+                </div>
             </div>
-            <!-- Email removed: system uses Username only for account creation -->
-            <div class="users-modal-field" style="position:relative;">
-                <label for="register-password" class="users-modal-label">Password</label>
-                <input id="register-password" class="users-modal-input" type="password" placeholder="Minimum 8 characters" autocomplete="new-password" autocapitalize="off" autocorrect="off" spellcheck="false" style="padding-right:44px;height:44px;line-height:44px;">
-                <button
-                    type="button"
-                    id="toggle-register-password"
-                    aria-label="Show password"
-                    aria-pressed="false"
-                    title="Show password"
-                    style="position:absolute;right:12px;top:38px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;padding:0;border:0;background:transparent;color:rgba(248,244,255,0.82);cursor:pointer;"
-                >
-                    <svg id="register-password-eye" width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                        <path d="M2 12C3.8 7.9 7.5 5 12 5C16.5 5 20.2 7.9 22 12C20.2 16.1 16.5 19 12 19C7.5 19 3.8 16.1 2 12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                        <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
-                    </svg>
-                </button>
-                <div id="register-password-error" class="users-modal-field-error"></div>
-            </div>
-            <div class="users-modal-field">
-                <label for="register-role" class="users-modal-label">Role</label>
-                <select id="register-role" class="users-modal-select">
-                    <option value="super_admin">Administrator</option>
-                    <option value="maintenance_admin">Head</option>
-                    <option value="maintenance_staff" selected>Maintenance Staff</option>
-                </select>
-            </div>
-            <div class="users-modal-field">
-                <label for="register-department" class="users-modal-label">Department</label>
-                <select id="register-department" class="users-modal-select">
-                    <option value="">No specific department</option>
-                </select>
+
+            <!-- COMPACT FORM LAYOUT — Role and Department now share one row, so
+                 the former "Additional Information" heading (which existed only
+                 to separate Department from Role) was folded into this one.
+                 No field was added, removed or reordered. -->
+            <div class="users-modal-section-title">Role Information</div>
+            <div class="users-modal-inline-fields">
+                <div class="users-modal-field users-modal-field-inline">
+                    <label for="register-role" class="users-modal-label">Role</label>
+                    <select id="register-role" class="users-modal-select">
+                        <option value="super_admin">Administrator</option>
+                        <option value="maintenance_admin">Head</option>
+                        <option value="maintenance_staff" selected>Staff</option>
+                    </select>
+                </div>
+
+                <!-- TASK 37: shown/hidden and required/optional by role via
+                     syncRoleDependentFields(). Administrator is system-wide and
+                     has no department, so this whole group is hidden for it. -->
+                <div class="users-modal-field users-modal-field-inline" id="register-department-group">
+                    <label for="register-department" class="users-modal-label" id="register-department-label">Department</label>
+                    <select id="register-department" class="users-modal-select">
+                        <option value="">No specific department</option>
+                    </select>
+                    <div id="register-department-error" class="users-modal-field-error"></div>
+                </div>
             </div>
             <div class="users-modal-field" id="register-designation-group" style="display:none;">
-                <label for="register-designation" class="users-modal-label">Designation / Department</label>
+                <label for="register-designation" class="users-modal-label">Designation</label>
                 <input id="register-designation" class="users-modal-input" type="text" placeholder="e.g. Head Electrical, Computer Technician" autocomplete="off">
                 <small style="color:rgba(148,163,184,0.7);font-size:12px;">Specify the department or specialization (e.g. Head Electrical, Head Computer, Electrical Technician)</small>
             </div>
@@ -559,6 +639,9 @@ function openRegisterUserModal() {
     const closeModal = () => {
         const el = document.getElementById('register-user-modal');
         if (el) el.remove();
+        // TASK 37 — drop the reference so an in-flight loadDepartmentsForModal()
+        // cannot call back into a sync bound to a removed modal.
+        syncRegisterRoleFields = null;
     };
 
     document.getElementById('cancel-register-btn')?.addEventListener('click', closeModal);
@@ -588,12 +671,43 @@ function openRegisterUserModal() {
 
     const roleSelect = document.getElementById('register-role');
     const designationGroup = document.getElementById('register-designation-group');
-    function syncDesignationVisibility() {
+    const departmentGroup = document.getElementById('register-department-group');
+    const departmentSelect = document.getElementById('register-department');
+    const departmentLabel = document.getElementById('register-department-label');
+
+    /**
+     * TASK 37 — everything that depends on the selected role, applied in one
+     * place so a role change can never leave half the form describing the
+     * previous role.
+     */
+    function syncRoleDependentFields() {
         const role = roleSelect ? roleSelect.value : '';
         if (designationGroup) designationGroup.style.display = (role === 'maintenance_admin' || role === 'maintenance_staff') ? 'block' : 'none';
+
+        const needsDepartment = roleRequiresDepartment(role);
+        if (departmentGroup) departmentGroup.style.display = needsDepartment ? 'block' : 'none';
+        if (departmentLabel) departmentLabel.textContent = needsDepartment ? 'Department *' : 'Department';
+        if (departmentSelect) {
+            departmentSelect.required = needsDepartment;
+
+            const placeholder = departmentSelect.querySelector('option[value=""]');
+            if (placeholder) {
+                placeholder.textContent = needsDepartment ? 'Select a department' : 'No specific department';
+            }
+
+            if (!needsDepartment) {
+                // Switching to Administrator must not leave a department
+                // selected behind a hidden field — it would still be read at
+                // submit time — nor leave the previous role's "Department is
+                // required" error on screen blocking a now-valid form.
+                departmentSelect.value = '';
+                setFieldValidationState(departmentSelect, '');
+            }
+        }
     }
-    roleSelect?.addEventListener('change', syncDesignationVisibility);
-    syncDesignationVisibility();
+    roleSelect?.addEventListener('change', syncRoleDependentFields);
+    syncRegisterRoleFields = syncRoleDependentFields;
+    syncRoleDependentFields();
 
         // Password eye icon toggle
         const toggleRegisterPasswordBtn = document.getElementById('toggle-register-password');
@@ -648,6 +762,17 @@ function openRegisterUserModal() {
             return;
         }
 
+        // TASK 37 — mirrors the backend rule so the Administrator can submit
+        // with no department while Head/Maintenance Staff cannot.
+        const needsDepartment = roleRequiresDepartment(role);
+        const selectedDepartmentId = departmentSelect?.value || '';
+        if (needsDepartment && selectedDepartmentId === '') {
+            setFieldValidationState(departmentSelect, 'Department is required for this role');
+            departmentSelect?.focus();
+            return;
+        }
+        setFieldValidationState(departmentSelect, '');
+
         try {
             const response = await fetch(window.SFMS_PUBLIC_URL('/api/users'), {
                 method: 'POST',
@@ -663,7 +788,11 @@ function openRegisterUserModal() {
                     password,
                     role,
                     designation: document.getElementById('register-designation')?.value.trim() || '',
-                    department_id: document.getElementById('register-department')?.value || null
+                    // TASK 37 — never send a department for a role that has
+                    // none. syncRoleDependentFields() already clears the
+                    // select, but deriving the payload from the role too means
+                    // a stale value cannot reach the API by any path.
+                    department_id: needsDepartment ? (selectedDepartmentId || null) : null
                 })
             });
 
@@ -715,8 +844,8 @@ function openApproveUserModal(userId, userName) {
             <div class="users-modal-field">
                 <label for="approve-user-role" class="users-modal-label">Assign role</label>
                 <select id="approve-user-role" class="users-modal-select">
-                    <option value="maintenance_staff" selected>Maintenance Staff</option>
-                    <option value="maintenance_admin">Head Maintenance</option>
+                    <option value="maintenance_staff" selected>Staff</option>
+                    <option value="maintenance_admin">Head</option>
                 </select>
             </div>
             <div class="users-modal-actions">
@@ -1063,21 +1192,21 @@ function showPageAlert(message, type = 'success') {
 // Name-part validation: letters, spaces, apostrophes, and hyphens only.
 function getRequiredNameValidationError(value, label) {
     if (!value) {
-        return `❌ ${label} is required.`;
+        return `${label} is required.`;
     }
 
     // Regex: Only allows A-Z, a-z, spaces, hyphens, and apostrophes.
     const nameRegex = /^[a-zA-Z\s'-]+$/;
     if (!nameRegex.test(value)) {
-        return `❌ ${label} can only contain letters, spaces, hyphens, and apostrophes.`;
+        return `${label} can only contain letters, spaces, hyphens, and apostrophes.`;
     }
 
     if (value.length < 2) {
-        return `❌ ${label} must be at least 2 characters long.`;
+        return `${label} must be at least 2 characters long.`;
     }
 
     if (value.length > 100) {
-        return `❌ ${label} must not exceed 100 characters.`;
+        return `${label} must not exceed 100 characters.`;
     }
 
     return null;
@@ -1089,7 +1218,7 @@ function getMiddleInitialValidationError(value) {
     }
 
     if (!/^[a-zA-Z]$/.test(value)) {
-        return '❌ Middle Initial must be a single letter (A-Z).';
+        return 'Middle Initial must be a single letter (A-Z).';
     }
 
     return null;
@@ -1107,8 +1236,8 @@ function buildFullName(lastName, firstName, middleInitial) {
 
 // Username validation
 function getUsernameValidationError(username) {
-    if (!username) return '❌ Username is required.';
-    if (!/^[a-z][a-z_]{2,49}$/.test(username)) return '❌ Username must contain letters and underscores only (e.g. juan_dela_cruz).';
+    if (!username) return 'Username is required.';
+    if (!/^[a-z][a-z_]{2,49}$/.test(username)) return 'Username must contain letters and underscores only (e.g. juan_dela_cruz).';
     return null;
 }
 
@@ -1119,18 +1248,18 @@ function validateUsernameField(input) {
 // Email validation: must be a valid Gmail address
 function getEmailValidationError(email) {
     if (!email) {
-        return '❌ Email is required.';
+        return 'Email is required.';
     }
 
     // Accept only Gmail addresses and reject typo domains like @gamial.com.
     const gmailRegex = /^[a-zA-Z0-9._+-]+@gmail\.com$/i;
     if (!gmailRegex.test(email)) {
-        return '❌ Email must be a valid Gmail address ending with @gmail.com.';
+        return 'Email must be a valid Gmail address ending with @gmail.com.';
     }
 
     // Check email length
     if (email.length > 254) {
-        return '❌ Email is too long. Maximum 254 characters allowed.';
+        return 'Email is too long. Maximum 254 characters allowed.';
     }
 
     return null;
@@ -1139,15 +1268,15 @@ function getEmailValidationError(email) {
 // Password validation: Minimum 8 characters
 function getPasswordValidationError(password) {
     if (!password) {
-        return '❌ Password is required.';
+        return 'Password is required.';
     }
 
     if (password.length < 8) {
-        return '❌ Password must be at least 8 characters long.';
+        return 'Password must be at least 8 characters long.';
     }
 
     if (password.length > 255) {
-        return '❌ Password is too long.';
+        return 'Password is too long.';
     }
 
     return null;
@@ -1180,12 +1309,12 @@ function getSuffixValidationError(value) {
     }
 
     if (value.length > 50) {
-        return '❌ Suffix must be 50 characters or less.';
+        return 'Suffix must be 50 characters or less.';
     }
 
     // Allow letters, numbers, periods, commas, and hyphens
     if (!/^[a-zA-Z0-9.,\-\s]+$/.test(value)) {
-        return '❌ Suffix can only contain letters, numbers, periods, commas, and hyphens.';
+        return 'Suffix can only contain letters, numbers, periods, commas, and hyphens.';
     }
 
     return null;
@@ -1197,16 +1326,21 @@ function validateSuffixField(input) {
 }
 
 // Helper to show/hide validation state on field and display inline errors
+// TASK 7 — the validation messages used to be built with a leading "❌ " that
+// this function then stripped with .replace(/^❌ /, '') before displaying. The
+// emoji was therefore never actually visible: it was added in fifteen places
+// and removed in the two places that render. Both the prefix and the strip are
+// gone, so the text shown to the user is byte-for-byte what it always was.
 function setFieldValidationState(input, error) {
     const fieldId = input.id;
     const errorContainer = document.getElementById(fieldId + '-error');
-    
+
     if (error) {
         input.classList.add('users-modal-input-error');
-        input.title = error.replace(/^❌ /, '');
+        input.title = error;
         // Show error message in modal
         if (errorContainer) {
-            errorContainer.textContent = error.replace(/^❌ /, '');
+            errorContainer.textContent = error;
             errorContainer.classList.add('is-visible');
         }
     } else {

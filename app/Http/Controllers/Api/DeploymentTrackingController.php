@@ -49,7 +49,7 @@ class DeploymentTrackingController extends Controller
             $status = 'released';
         }
 
-        // Build dynamic WHERE clause for the raw query
+        // Build dynamic WHERE clause for the dispatch-sourced branch
         $where  = ['d.status = ?'];
         $params = [$status];
 
@@ -72,7 +72,12 @@ class DeploymentTrackingController extends Controller
         $whereClause = 'WHERE ' . implode(' AND ', $where);
 
         // Complex query: source OR comes from direct link or fallback (oldest receipt referencing item)
-        $sql = "
+        // TASK 36 PHASE 2 — this SELECT ("dispatch" branch) is untouched from
+        // its original form other than adding the two trailing literal columns
+        // (asset_code, deployment_source, deployed_at) so its column list lines
+        // up with the "direct" branch below for the UNION ALL. No existing
+        // dispatch-side filtering/joins/columns were changed.
+        $dispatchSql = "
             SELECT
                 d.id                                                              AS dispatch_id,
                 d.dispatch_code,
@@ -85,7 +90,10 @@ class DeploymentTrackingController extends Controller
                 COALESCE(pr_direct.supplier_name, pr_item.supplier_name) AS source_supplier,
                 COALESCE(pr_direct.receipt_date,  pr_item.receipt_date)  AS source_receipt_date,
                 r.name                                                            AS room_name,
-                dept.name                                                         AS department_name
+                dept.name                                                         AS department_name,
+                NULL                                                              AS asset_code,
+                'dispatch'                                                        AS deployment_source,
+                d.created_at                                                      AS deployed_at
             FROM       dispatches d
             INNER JOIN dispatch_items di   ON di.dispatch_id = d.id
             INNER JOIN items i             ON i.id = di.item_id
@@ -99,21 +107,112 @@ class DeploymentTrackingController extends Controller
             LEFT  JOIN purchase_receipts pr_item ON pr_item.id = pri_min.pr_id
             LEFT  JOIN rooms r             ON r.id = d.room_id
             LEFT  JOIN departments dept    ON dept.department_id = d.department_id
-            {$whereClause}
-            ORDER BY d.created_at DESC, i.name ASC
-            LIMIT 500";
+            {$whereClause}";
 
+        $sql    = $dispatchSql;
+
+        // TASK 36 PHASE 2 — "direct" branch: Deploy to Room events.
+        //
+        // Deliberately sourced from `items WHERE item_type = 'room_asset'`,
+        // NOT from `inventory_transactions`. A single direct-deploy
+        // `inventory_transactions` row (transaction_type='deploy',
+        // dispatch_id=NULL) can correspond to MULTIPLE room_asset `items`
+        // rows (InventoryStockController::createOrUpdateRoomAsset() inserts
+        // one row per unit, quantity=1 each) and there is no FK column
+        // linking a room_asset item back to the transaction that created it.
+        // Joining via inventory_transactions would require a fragile
+        // heuristic (matching on room_id/name/timestamp proximity) that
+        // could attribute the wrong asset_code to a row. Each room_asset
+        // item, by contrast, already carries an exact, unambiguous
+        // asset_code/room_id/created_at for the units it represents — it IS
+        // the deployment record.
+        //
+        // TASK 5 — dispatched_qty reads ri.quantity instead of the literal 1
+        // it used to hardcode. The "one row per unit, quantity=1 each"
+        // assumption above holds only for assets created by
+        // createOrUpdateRoomAsset(); it is NOT an invariant of the table, and
+        // real rows violate it (item 178 "Keyboard" is a single room_asset row
+        // carrying quantity=40). Hardcoding 1 under-reported those rows and
+        // was why this screen disagreed with Inventory Reports' "42 units"
+        // for the same set of room-placed assets.
+        //
+        // Only unioned in when semantically valid:
+        //  - status: a direct deployment has no dispatch-style
+        //    pending/approved/released/cancelled lifecycle. 'released' is
+        //    the closest existing concept ("already deployed"), so direct
+        //    rows appear only under the default/'released' view and are
+        //    correctly absent when the caller explicitly filters for a
+        //    dispatch-only status.
+        //  - department_id: room_asset items carry no department_id column
+        //    (no such concept exists for a direct deployment), so the
+        //    branch is skipped entirely rather than silently matching
+        //    everything or nothing under an unrelated filter.
+        $includeDirect = ($status === 'released' && $deptId <= 0);
+
+        if ($includeDirect) {
+            $whereDirect  = ["ri.item_type = 'room_asset'"];
+            $paramsDirect = [];
+
+            if ($q !== '') {
+                $whereDirect[]  = '(ri.name LIKE ? OR ri.asset_code LIKE ?)';
+                $paramsDirect[] = '%' . $q . '%';
+                $paramsDirect[] = '%' . $q . '%';
+            }
+
+            if ($roomId > 0) {
+                $whereDirect[]  = 'ri.room_id = ?';
+                $paramsDirect[] = $roomId;
+            }
+
+            $whereDirectClause = 'WHERE ' . implode(' AND ', $whereDirect);
+
+            $directSql = "
+                SELECT
+                    NULL           AS dispatch_id,
+                    NULL           AS dispatch_code,
+                    NULL           AS dispatch_status,
+                    NULL           AS dispatch_date,
+                    ri.id          AS item_id,
+                    ri.name        AS item_name,
+                    ri.quantity    AS dispatched_qty,
+                    NULL           AS source_or,
+                    NULL           AS source_supplier,
+                    NULL           AS source_receipt_date,
+                    r2.name        AS room_name,
+                    NULL           AS department_name,
+                    ri.asset_code  AS asset_code,
+                    'direct'       AS deployment_source,
+                    ri.created_at  AS deployed_at
+                FROM      items ri
+                LEFT JOIN rooms r2 ON r2.id = ri.room_id
+                {$whereDirectClause}";
+
+            $sql    = "SELECT * FROM ({$dispatchSql}) AS dispatch_rows UNION ALL SELECT * FROM ({$directSql}) AS direct_rows";
+            $params = array_merge($params, $paramsDirect);
+        }
+
+        $sql  = "SELECT * FROM ({$sql}) AS combined ORDER BY deployed_at DESC, item_name ASC LIMIT 500";
         $rows = DB::select($sql, $params);
 
-        // Filter-option dropdowns: rooms/departments that have at least one released dispatch
-        $rooms = DB::table('rooms as r')
+        // Filter-option dropdowns: rooms/departments that have at least one
+        // released dispatch OR (TASK 36 PHASE 2) at least one room_asset item.
+        $roomsFromDispatches = DB::table('rooms as r')
             ->select('r.id', 'r.name')
             ->join('dispatches as d', function ($join) {
                 $join->on('d.room_id', '=', 'r.id')
                      ->where('d.status', '=', 'released');
             })
+            ->distinct();
+
+        $rooms = DB::table('rooms as r')
+            ->select('r.id', 'r.name')
+            ->join('items as ri', function ($join) {
+                $join->on('ri.room_id', '=', 'r.id')
+                     ->where('ri.item_type', '=', 'room_asset');
+            })
             ->distinct()
-            ->orderBy('r.name')
+            ->union($roomsFromDispatches)
+            ->orderBy('name')
             ->get();
 
         $departments = DB::table('departments as dept')

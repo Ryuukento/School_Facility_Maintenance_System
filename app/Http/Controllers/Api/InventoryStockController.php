@@ -4,14 +4,18 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\InventoryTransaction;
+use App\Models\Item;
+use App\Services\InventoryAdjustmentService;
 use App\Services\InventoryLowStockNotifier;
 use App\Services\InventoryStatusService;
 use App\Services\RoleNormalizerService;
 use App\Support\ApiResponder;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 // NOTE: stock creation (store, createEntry) has been deprecated.
 // All new stock must flow through PurchaseReceiptController (OR-based receipts).
@@ -24,6 +28,7 @@ class InventoryStockController extends Controller
     private const WRITE_ROLES = ['super_admin', 'maintenance_admin'];
 
     public function __construct(
+        private readonly InventoryAdjustmentService $inventoryAdjustmentService,
         // TASK 18 — notify once on a genuine NORMAL -> LOW/OUT_OF_STOCK transition.
         private readonly InventoryLowStockNotifier $inventoryLowStockNotifier
     ) {
@@ -58,13 +63,19 @@ class InventoryStockController extends Controller
     // ─── Shared helpers ───────────────────────────────────────────────────────
 
     /**
-     * Finds an existing inventory_stock item in the same inventory room
-     * by name / category / unit_type, optionally also by brand / model.
+     * Finds an existing inventory_stock item by name / category / unit_type,
+     * optionally also by brand / model.
      * Two-pass: exact match first, then fallback ignoring unit_type / brand / model.
      * Mirrors findExistingInventoryStockForEntry() in the legacy PHP.
+     *
+     * TASK 6B PHASE 2 — the lookup no longer scopes to an inventory room.
+     * Inventory is a single centralized pool, so an item's identity is its
+     * name/category/unit fingerprint alone. The Phase 1 audit verified there
+     * are ZERO cross-room name collisions among inventory_stock items today,
+     * so widening the scope cannot start flagging two pre-existing rows as
+     * duplicates of each other — it only prevents NEW duplicates.
      */
     private function findExistingStock(
-        int     $inventoryRoomId,
         string  $name,
         ?int    $categoryId,
         string  $unitType,
@@ -74,15 +85,14 @@ class InventoryStockController extends Controller
         // Primary: name + category + unit_type + brand + model
         $row = DB::selectOne(
             "SELECT * FROM items
-             WHERE inventory_room_id = ?
-               AND item_type = 'inventory_stock'
+             WHERE item_type = 'inventory_stock'
                AND LOWER(name) = LOWER(?)
                AND LOWER(COALESCE(unit_type,'')) = LOWER(?)
                AND ((category_id IS NULL AND ? IS NULL) OR category_id = ?)
                AND LOWER(COALESCE(brand,'')) = LOWER(COALESCE(?,''))
                AND LOWER(COALESCE(model,'')) = LOWER(COALESCE(?,''))
              LIMIT 1",
-            [$inventoryRoomId, $name, $unitType, $categoryId, $categoryId,
+            [$name, $unitType, $categoryId, $categoryId,
              $brand ?? '', $model ?? '']
         );
         if ($row) return (array) $row;
@@ -90,12 +100,11 @@ class InventoryStockController extends Controller
         // Fallback: ignore unit_type / brand / model (used by create_entry path)
         $row = DB::selectOne(
             "SELECT * FROM items
-             WHERE inventory_room_id = ?
-               AND item_type = 'inventory_stock'
+             WHERE item_type = 'inventory_stock'
                AND LOWER(name) = LOWER(?)
                AND ((category_id IS NULL AND ? IS NULL) OR category_id = ?)
              LIMIT 1",
-            [$inventoryRoomId, $name, $categoryId, $categoryId]
+            [$name, $categoryId, $categoryId]
         );
         return $row ? (array) $row : null;
     }
@@ -526,9 +535,14 @@ class InventoryStockController extends Controller
                 ? trim((string) ($validated['description'] ?? ''))
                 : trim((string) ($existing['description'] ?? ''));
 
+            // Null-safe: items.inventory_room_id is a NULLABLE FK, so an
+            // existing NULL must round-trip as NULL rather than being coerced
+            // to 0 (which would violate the foreign key on write). The old
+            // `$inventoryRoomId <= 0` guard used to mask this; it is gone now
+            // that the field is no longer user-selectable.
             $inventoryRoomId = $request->has('inventory_room_id')
                 ? (int) $validated['inventory_room_id']
-                : (int) $existing['inventory_room_id'];
+                : ($existing['inventory_room_id'] !== null ? (int) $existing['inventory_room_id'] : null);
 
             // category_id: explicit null clears it; absent = keep existing
             if ($request->has('category_id')) {
@@ -559,19 +573,23 @@ class InventoryStockController extends Controller
 
             // ── Semantic validations ──────────────────────────────────────────
 
-            if ($name === '' || $unitType === '' || $itemCondition === '' || $inventoryRoomId <= 0) {
+            // TASK 6B PHASE 2 — inventory_room_id is no longer user-editable
+            // and is no longer part of the validity check. It is still carried
+            // through and re-persisted below so the stored value is preserved
+            // exactly as-is; it is simply never required to be chosen.
+            if ($name === '' || $unitType === '' || $itemCondition === '') {
                 throw new \InvalidArgumentException('Invalid stock update payload');
             }
 
-            // Duplicate check: same fingerprint in the same room for a DIFFERENT item
+            // Duplicate check: same fingerprint on a DIFFERENT item
             $duplicate = $this->findExistingStock(
-                $inventoryRoomId, $name, $categoryId, $unitType,
+                $name, $categoryId, $unitType,
                 $brand !== '' ? $brand : null,
                 $model !== '' ? $model : null,
             );
             if ($duplicate && (int) $duplicate['id'] !== $id) {
                 throw new \InvalidArgumentException(
-                    'An item with the same name, category, brand, model, and unit type already exists in this inventory room'
+                    'An item with the same name, category, brand, model, and unit type already exists in inventory'
                 );
             }
 
@@ -723,7 +741,14 @@ class InventoryStockController extends Controller
         }
     }
 
-    // ─── SECTION 5 ── adjust(), deploy() ─────────────────────────────────────
+    // ─── SECTION 5 ── adjust() ────────────────────────────────────────────────
+    // TASK 36 PHASE 7 — deploy() (and its exclusive private helpers
+    // createOrUpdateRoomAsset(), fetchRoomAssetById(), syncDeploymentAllocation())
+    // were retired here as part of the full Deploy-to-Room feature retirement.
+    // See TASK_36_PHASE_7_DEPLOY_TO_ROOM_FULL_RETIREMENT_IMPLEMENTATION_REPORT.md.
+    // Dispatch's release workflow (DispatchService::releaseDispatch()) is the
+    // sole remaining path that creates 'deploy' InventoryTransaction rows; it
+    // does not call any of the removed methods.
 
     /**
      * POST /api/inventory-stock/{id}/adjust
@@ -752,301 +777,35 @@ class InventoryStockController extends Controller
             return $this->fail('item_id, quantity_change, and reason are required', 400);
         }
 
-        DB::beginTransaction();
+        // HIGH_PRIORITY_FIX_3 — Reuse the project's single canonical stock-mutation
+        // path (InventoryAdjustmentService -> InventoryTransaction ->
+        // InventoryTransactionObserver) instead of writing to items.quantity and
+        // inventory_transactions directly. See HIGH_PRIORITY_FIX_3_INVENTORY_STOCK.md.
+        $item = Item::query()->where('item_type', 'inventory_stock')->find($id);
+        if (! $item) {
+            return $this->fail('Inventory stock item not found', 404);
+        }
+
+        $direction = $quantityChange > 0 ? 'increase' : 'decrease';
+
         try {
-            $existing = $this->fetchStockItemById($id);
-            if (! $existing) {
-                throw new \RuntimeException('Inventory stock item not found');
-            }
-
-            $newQty = $existing['quantity'] + $quantityChange;
-
-            if ($newQty < 0) {
-                throw new \InvalidArgumentException('Adjustment would make quantity negative');
-            }
-            if ($newQty < $existing['reserved_quantity']) {
-                throw new \InvalidArgumentException('Adjustment would reduce quantity below reserved stock');
-            }
-
-            $status = InventoryStatusService::deriveStatus($newQty, (int) ($existing['reorder_level'] ?? 0));
-
-            DB::update(
-                "UPDATE items
-                 SET quantity = ?, status = ?, updated_at = NOW()
-                 WHERE id = ? AND item_type = 'inventory_stock'",
-                [$newQty, $status, $id]
+            $this->inventoryAdjustmentService->adjust(
+                $item,
+                $direction,
+                abs($quantityChange),
+                $reason,
+                $performedBy
             );
-
-            // Raw insert — bypasses InventoryTransactionObserver intentionally.
-            // The observer is only used for deploy() per project instruction.
-            DB::insert(
-                "INSERT INTO inventory_transactions
-                     (item_id, report_id, room_id, transaction_type, quantity,
-                      reference_note, performed_by, created_at, updated_at)
-                 VALUES (?, NULL, NULL, 'adjustment', ?, ?, ?, NOW(), NOW())",
-                [$id, $quantityChange, $reason, $performedBy ?: null]
-            );
-
-            DB::commit();
-
-            return $this->ok(
-                'Stock quantity adjusted successfully',
-                ['item' => $this->fetchStockItemById($id)]
-            );
-
-        } catch (\InvalidArgumentException $e) {
-            DB::rollBack();
-            return $this->fail($e->getMessage(), 400);
-        } catch (\RuntimeException $e) {
-            DB::rollBack();
-            return $this->fail($e->getMessage(), 404);
-        } catch (\Throwable $e) {
-            DB::rollBack();
-            throw $e;
-        }
-    }
-
-    /**
-     * POST /api/inventory-stock/{id}/deploy
-     * Directly deploys stock from a bodega item to a room, outside the dispatch workflow.
-     * Body: { room_id*, quantity*, report_id?, notes? }
-     *
-     * Uses InventoryTransaction::create() as instructed — the observer fires
-     * synchronously on created() and deducts both `quantity` and `reserved_quantity`
-     * from the source item. `status` is not touched by the observer, so it is
-     * recalculated and written in a follow-up DB::update().
-     *
-     * Note: for direct deploys where stock was never reserved, the observer will
-     * decrement reserved_quantity from its current value. This differs from the legacy
-     * which only decremented `quantity`. If the distinction matters, add a separate
-     * transaction_type (e.g. 'direct_deploy') whose observer branch skips
-     * reserved_quantity.
-     */
-    public function deploy(Request $request, int $id): JsonResponse
-    {
-        $this->requireWriteAccess($request);
-        $performedBy = $this->sessionUserId($request);
-
-        if ($id <= 0) {
-            return $this->fail('item_id is required', 400);
+        } catch (ValidationException $e) {
+            return $this->fail(collect($e->errors())->flatten()->first() ?: 'Unable to adjust stock', 400);
+        } catch (ModelNotFoundException $e) {
+            return $this->fail('Inventory stock item not found', 404);
         }
 
-        $validated = $request->validate([
-            'room_id'   => ['required', 'integer', 'min:1', 'exists:rooms,id'],
-            'quantity'  => ['required', 'integer', 'min:1'],
-            'report_id' => ['nullable', 'integer', 'min:1'],
-            'notes'     => ['nullable', 'string', 'max:1000'],
-        ]);
-
-        $roomId   = (int) $validated['room_id'];
-        $quantity = (int) $validated['quantity'];
-        $reportId = isset($validated['report_id']) ? (int) $validated['report_id'] : null;
-        $notes    = trim($validated['notes'] ?? '');
-
-        DB::beginTransaction();
-        try {
-            $stockItem = $this->fetchStockItemById($id);
-            if (! $stockItem) {
-                throw new \RuntimeException('Inventory stock item not found');
-            }
-
-            if ($stockItem['available_quantity'] < $quantity) {
-                throw new \InvalidArgumentException('Insufficient available stock');
-            }
-
-            // Pre-compute the new status before the observer mutates the row
-            $newStatus     = InventoryStatusService::deriveStatus(
-                $stockItem['quantity'] - $quantity,
-                (int) ($stockItem['reorder_level'] ?? 0)
-            );
-            $referenceNote = $notes !== '' ? $notes : 'Deployed to room #' . $roomId;
-
-            // ── InventoryTransactionObserver fires here ────────────────────────
-            // Observer deducts `quantity` and `reserved_quantity` synchronously.
-            InventoryTransaction::create([
-                'item_id'          => $id,
-                'report_id'        => $reportId,
-                'room_id'          => $roomId,
-                'transaction_type' => 'deploy',
-                'quantity'         => $quantity,
-                'reference_note'   => $referenceNote,
-                'performed_by'     => $performedBy ?: null,
-            ]);
-
-            // Observer does not recalculate status — do it in a targeted update
-            DB::update(
-                "UPDATE items
-                 SET status = ?, updated_at = NOW()
-                 WHERE id = ? AND item_type = 'inventory_stock'",
-                [$newStatus, $id]
-            );
-
-            $roomAsset = $this->createOrUpdateRoomAsset($stockItem, $roomId, $quantity, $notes ?: null);
-
-            $this->syncDeploymentAllocation($id, $roomId, $quantity, $performedBy ?: null, $reportId);
-
-            // TASK 18 — fires only on a genuine NORMAL -> LOW/OUT_OF_STOCK transition.
-            $this->inventoryLowStockNotifier->handleStatusChange(
-                $id,
-                $stockItem['name'],
-                $stockItem['status'] ?? null,
-                $newStatus
-            );
-
-            DB::commit();
-
-            return $this->ok('Stock deployed successfully', [
-                'stock_item' => $this->fetchStockItemById($id),
-                'room_asset' => $roomAsset,
-            ]);
-
-        } catch (\InvalidArgumentException $e) {
-            DB::rollBack();
-            return $this->fail($e->getMessage(), 400);
-        } catch (\RuntimeException $e) {
-            DB::rollBack();
-            return $this->fail($e->getMessage(), 404);
-        } catch (\Throwable $e) {
-            DB::rollBack();
-            throw $e;
-        }
-    }
-
-    // ─── Private helpers (first used in Section 5) ───────────────────────────
-
-    /**
-     * Finds or creates a room_asset item in the target room matching the
-     * deployed stock item's name and category. Increments quantity if found.
-     * Mirrors createOrUpdateRoomAsset() in the legacy PHP.
-     */
-    private function createOrUpdateRoomAsset(
-        array   $stockItem,
-        int     $roomId,
-        int     $quantity,
-        ?string $notes,
-    ): array {
-        $description = trim((string) ($stockItem['description'] ?? ''));
-        $notesStr    = trim((string) ($notes ?? ''));
-        if ($notesStr !== '') {
-            $description = $description === '' ? $notesStr : $description . ' | ' . $notesStr;
-        }
-
-        $categoryId = $stockItem['category_id'] !== null ? (int) $stockItem['category_id'] : null;
-
-        $existing = DB::selectOne(
-            "SELECT * FROM items
-             WHERE room_id = ? AND item_type = 'room_asset'
-               AND LOWER(name) = LOWER(?)
-               AND ((category_id IS NULL AND ? IS NULL) OR category_id = ?)
-             LIMIT 1",
-            [$roomId, $stockItem['name'], $categoryId, $categoryId]
-        );
-
-        if ($existing) {
-            $existing = (array) $existing;
-            $newQty   = (int) $existing['quantity'] + $quantity;
-            $status   = InventoryStatusService::deriveStatus($newQty, (int) ($existing['reorder_level'] ?? 5));
-
-            DB::update(
-                "UPDATE items
-                 SET quantity = ?, status = ?, description = ?, updated_at = NOW()
-                 WHERE id = ?",
-                [$newQty, $status, $description !== '' ? $description : null, (int) $existing['id']]
-            );
-
-            return $this->fetchRoomAssetById((int) $existing['id']);
-        }
-
-        // Create a new room_asset seeded from the stock item's profile
-        $status = InventoryStatusService::deriveStatus($quantity, (int) ($stockItem['reorder_level'] ?? 5));
-
-        DB::insert(
-            "INSERT INTO items
-                 (room_id, item_type, name, status, quantity, reserved_quantity,
-                  reorder_level, description, category_id, low_stock_threshold_override,
-                  created_at, updated_at)
-             VALUES (?, 'room_asset', ?, ?, ?, 0, ?, ?, ?, ?, NOW(), NOW())",
-            [
-                $roomId,
-                $stockItem['name'],
-                $status,
-                $quantity,
-                (int) ($stockItem['reorder_level'] ?? 5),
-                $description !== '' ? $description : null,
-                $categoryId,
-                $stockItem['low_stock_threshold_override'] !== null
-                    ? (int) $stockItem['low_stock_threshold_override']
-                    : null,
-            ]
-        );
-
-        return $this->fetchRoomAssetById((int) DB::getPdo()->lastInsertId());
-    }
-
-    /**
-     * Fetches a single room_asset item with its room name.
-     * Mirrors fetchRoomAssetById() in the legacy PHP.
-     */
-    private function fetchRoomAssetById(int $id): array
-    {
-        $row = DB::selectOne(
-            "SELECT i.*, r.name AS room_name
-             FROM items i
-             LEFT JOIN rooms r ON i.room_id = r.id
-             WHERE i.id = ? AND i.item_type = 'room_asset'
-             LIMIT 1",
-            [$id]
-        );
-
-        return $row ? (array) $row : [];
-    }
-
-    /**
-     * Updates or inserts a report_inventory_allocations row for this deployment.
-     * No-ops silently when $reportId is null.
-     * Mirrors syncDeploymentAllocation() in the legacy PHP.
-     */
-    private function syncDeploymentAllocation(
-        int  $itemId,
-        int  $roomId,
-        int  $quantity,
-        ?int $performedBy,
-        ?int $reportId,
-    ): void {
-        if (! $reportId) {
-            return;
-        }
-
-        $allocation = DB::selectOne(
-            "SELECT * FROM report_inventory_allocations
-             WHERE report_id = ? AND item_id = ? AND room_id = ?
-             ORDER BY id DESC
-             LIMIT 1",
-            [$reportId, $itemId, $roomId]
-        );
-
-        if ($allocation) {
-            $allocation     = (array) $allocation;
-            $newDeployedQty = (int) $allocation['deployed_qty'] + $quantity;
-            $reservedQty    = (int) $allocation['reserved_qty'];
-            $newStatus      = $newDeployedQty >= $reservedQty ? 'deployed' : 'reserved';
-
-            DB::update(
-                "UPDATE report_inventory_allocations
-                 SET deployed_qty = ?, status = ?, updated_at = NOW()
-                 WHERE id = ?",
-                [$newDeployedQty, $newStatus, (int) $allocation['id']]
-            );
-            return;
-        }
-
-        // No prior allocation row — insert a standalone deployed record
-        DB::insert(
-            "INSERT INTO report_inventory_allocations
-                 (report_id, item_id, room_id, reserved_qty, deployed_qty,
-                  status, created_by, created_at, updated_at)
-             VALUES (?, ?, ?, 0, ?, 'deployed', ?, NOW(), NOW())",
-            [$reportId, $itemId, $roomId, $quantity, $performedBy]
+        return $this->ok(
+            'Stock quantity adjusted successfully',
+            ['item' => $this->fetchStockItemById($id)]
         );
     }
+
 }

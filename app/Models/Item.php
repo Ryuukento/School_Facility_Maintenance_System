@@ -19,6 +19,7 @@ class Item extends Model
         'model',
         'item_type',
         'name',
+        'asset_code',
         'unit_type',
         'item_condition',
         'status',

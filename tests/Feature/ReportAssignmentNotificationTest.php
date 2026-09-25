@@ -105,6 +105,7 @@ class ReportAssignmentNotificationTest extends TestCase
         $this
             ->actingAsSessionUser($reporterId, 'maintenance_staff')
             ->postJson('/api/reports', [
+                'problem_type' => 'Plumbing',
                 'title' => 'Leaking Pipe',
                 'description' => 'Water leaking near the entrance.',
                 'location' => 'Room 105',

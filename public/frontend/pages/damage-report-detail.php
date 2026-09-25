@@ -22,9 +22,20 @@ include __DIR__ . '/../includes/header.php';
             </div>
             <div class="d-flex gap-sm">
                 <a href="<?php echo htmlspecialchars(public_url('/damage-reports')); ?>" class="btn btn-secondary">Back to List</a>
-                <!-- TODO: unhide when Repairs module is built -->
-                <a id="damage-repair-link" href="#" class="btn btn-secondary" style="display:none;">Repair Workflow</a>
-                <a id="damage-update-link" href="#" class="btn btn-primary">Update Status / Notes</a>
+                <!-- TASK 12 — the "Repair Workflow" button was removed here.
+                     It pointed at /repairs?damage_report_id=..., i.e. the
+                     Repair Requests page that this task deletes. It had never
+                     actually shipped to users: it carried style="display:none"
+                     and a "TODO: unhide when Repairs module is built" note, so
+                     removing it changes nothing a user could previously see or
+                     click. The "View Maintenance Report" button below is the
+                     primary-workflow route and is deliberately untouched. -->
+                <!-- TASK 45 PHASE 9 — route to the PRIMARY maintenance report,
+                     which owns assignment, status and the Task 44
+                     cross-department warning. Hidden until loadDamageDetail()
+                     confirms a linked report exists, so it never dead-ends. -->
+                <a id="damage-view-report-link" href="#" class="btn btn-primary" style="display:none;">View Maintenance Report</a>
+                <a id="damage-update-link" href="#" class="btn btn-secondary">Update Status / Notes</a>
             </div>
         </div>
         <div class="card-body" id="damage-detail-container">
@@ -45,7 +56,11 @@ include __DIR__ . '/../includes/header.php';
 <script>
 const DAMAGE_REPORTS_API_BASE = window.SFMS_PUBLIC_URL ? window.SFMS_PUBLIC_URL('/api/damage-reports') : '/api/damage-reports';
 const DAMAGE_REPORTS_PAGE_BASE = window.SFMS_PUBLIC_URL ? window.SFMS_PUBLIC_URL('/damage-reports') : '/damage-reports';
-const REPAIRS_PAGE_BASE = window.SFMS_PUBLIC_URL ? window.SFMS_PUBLIC_URL('/repairs') : '/repairs';
+// TASK 45 — the existing maintenance report detail page. Damage Reports links
+// TO this workflow rather than reimplementing any part of it.
+const MAINTENANCE_REPORT_DETAIL_BASE = window.SFMS_PUBLIC_URL
+    ? window.SFMS_PUBLIC_URL('/frontend/pages/maintenance-report-detail.php')
+    : '/frontend/pages/maintenance-report-detail.php';
 
 function detailNotify(message, type = 'danger') {
     // UI_BROWSER_DIALOG_REPLACEMENT — Components/UI are always loaded (see
@@ -108,7 +123,6 @@ async function loadDamageDetail() {
     }
 
     document.getElementById('damage-update-link').href = `${DAMAGE_REPORTS_PAGE_BASE}/${id}/update`;
-    document.getElementById('damage-repair-link').href = `${REPAIRS_PAGE_BASE}?damage_report_id=${id}`;
 
     try {
         const { response, data: payload } = await Components.fetchJson(`${DAMAGE_REPORTS_API_BASE}/${id}`, {
@@ -134,22 +148,87 @@ async function loadDamageDetail() {
         }
 
         const createdAt = report.created_at ? new Date(report.created_at).toLocaleString() : 'N/A';
-        const detailHtml = `
+
+        // TASK 45 (Damage Report Role Redesign) — the detail view is organised
+        // into four sections that make the architecture visible: the asset
+        // damage information THIS record owns, and then the PRIMARY maintenance
+        // report it is attached to, that report's assignment, and the
+        // repair/resolution state. Every value below is read straight from the
+        // API payload; nothing is inferred or fabricated, and each section
+        // degrades to an explicit placeholder when the data genuinely is absent
+        // (notably `report`, which is null for legacy pre-Sprint-4 rows).
+        const linked = report.report || null;
+        const linkedId = report.report_id || null;
+
+        const assetSection = `
+            <h3 style="margin:0 0 8px;">Damage / Asset Information</h3>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
                 <div><strong>Item:</strong> ${escapeHtml(report.item?.name || 'Unknown')}</div>
                 <div><strong>Room/Laboratory:</strong> ${escapeHtml(report.room?.name || 'N/A')}</div>
+                <div><strong>Building:</strong> ${escapeHtml(report.room?.building?.name || 'N/A')}</div>
+                <div><strong>Severity:</strong> ${severityBadge(report.severity_level)}</div>
                 <div><strong>Department:</strong> ${escapeHtml(report.department?.name || 'N/A')}</div>
                 <div><strong>Reported By:</strong> ${escapeHtml(report.reporter?.full_name || 'Unknown')}</div>
-                <div><strong>Date Reported:</strong> ${escapeHtml(createdAt)}</div>
-                <div><strong>Status:</strong> ${statusBadge(report.status)}</div>
             </div>
             <div style="margin-top:12px;"><strong>Damage Description:</strong><br>${escapeHtml(report.damage_description || '')}</div>
-            <div style="margin-top:12px;"><strong>Repair Notes:</strong><br>${escapeHtml(report.repair_notes || 'No repair notes yet.')}</div>
-            <div style="margin-top:12px;"><strong>Image:</strong><br>${imageMarkup}</div>
-            <div style="margin-top:12px;"><strong>Replacement:</strong> ${report.replacement_item_id ? `${escapeHtml(report.replacement_item?.name || 'Unknown Item')} (Qty ${escapeHtml(report.replacement_quantity || 1)})` : 'Not yet replaced'}</div>
+            <div style="margin-top:12px;"><strong>Photo:</strong><br>${imageMarkup}</div>
         `;
 
-        document.getElementById('damage-detail-container').innerHTML = detailHtml;
+        const maintenanceSection = linkedId
+            ? `
+            <h3 style="margin:18px 0 8px;">Maintenance Report</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                <div><strong>Report Code:</strong> <a href="${MAINTENANCE_REPORT_DETAIL_BASE}?id=${encodeURIComponent(linkedId)}">#${escapeHtml(linkedId)}</a></div>
+                <div><strong>Title:</strong> ${escapeHtml(linked?.title || 'N/A')}</div>
+                <div><strong>Department:</strong> ${escapeHtml(linked?.department?.name || 'N/A')}</div>
+                <div><strong>Priority:</strong> ${escapeHtml(formatStatus(linked?.priority) || 'N/A')}</div>
+                <div><strong>Submitted By:</strong> ${escapeHtml(linked?.creator?.full_name || 'Unknown')}</div>
+                <div><strong>Date Reported:</strong> ${escapeHtml(createdAt)}</div>
+                <div><strong>Report Status:</strong> ${escapeHtml(formatStatus(linked?.status) || 'N/A')}</div>
+                <div><strong>Location:</strong> ${escapeHtml(linked?.location || 'N/A')}</div>
+            </div>
+            <div style="margin-top:12px;"><strong>Description:</strong><br>${escapeHtml(linked?.description || '')}</div>
+            `
+            : `
+            <h3 style="margin:18px 0 8px;">Maintenance Report</h3>
+            <div class="text-muted">This damage record is not linked to a maintenance report. It predates the unified Report a Problem flow, in which every asset damage case is recorded together with its maintenance report.</div>
+            `;
+
+        // Assignment is DISPLAY-ONLY here. Damage Reports deliberately provides
+        // no assignment control: assigning personnel remains the sole
+        // responsibility of the maintenance report detail page, which owns the
+        // authorization checks and the Task 44 cross-department warning.
+        const assignmentSection = linkedId
+            ? `
+            <h3 style="margin:18px 0 8px;">Assignment</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                <div><strong>Assigned Personnel:</strong> ${escapeHtml(linked?.assignee?.full_name || 'Unassigned')}</div>
+                <div><strong>Personnel Department:</strong> ${escapeHtml(linked?.assignee?.department?.name || 'N/A')}</div>
+                <div><strong>Assignment Status:</strong> ${escapeHtml(linked?.assigned_to ? formatStatus(linked?.status) : 'Not yet assigned')}</div>
+            </div>
+            <div class="text-muted" style="margin-top:8px;font-size:13px;">Personnel are assigned on the maintenance report, which is the primary workflow for this case.</div>
+            `
+            : '';
+
+        const repairSection = `
+            <h3 style="margin:18px 0 8px;">Repair / Resolution</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                <div><strong>Damage Status:</strong> ${statusBadge(report.status)}</div>
+                <div><strong>Replacement:</strong> ${report.replacement_item_id ? `${escapeHtml(report.replacement_item?.name || 'Unknown Item')} (Qty ${escapeHtml(report.replacement_quantity || 1)})` : 'Not yet replaced'}</div>
+            </div>
+            <div style="margin-top:12px;"><strong>Repair Notes:</strong><br>${escapeHtml(report.repair_notes || 'No repair notes yet.')}</div>
+        `;
+
+        document.getElementById('damage-detail-container').innerHTML =
+            assetSection + maintenanceSection + assignmentSection + repairSection;
+
+        // TASK 45 PHASE 9 — surface the route back to the primary workflow.
+        // Only shown when a link actually exists, so it can never lead nowhere.
+        const viewReportLink = document.getElementById('damage-view-report-link');
+        if (viewReportLink && linkedId) {
+            viewReportLink.href = `${MAINTENANCE_REPORT_DETAIL_BASE}?id=${encodeURIComponent(linkedId)}`;
+            viewReportLink.style.display = '';
+        }
     } catch (error) {
         document.getElementById('damage-detail-container').innerHTML = '<div class="ui-empty-state"><strong>Failed to load damage report.</strong></div>';
         detailNotify(error.message || 'Unable to load details.');

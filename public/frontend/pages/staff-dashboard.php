@@ -41,8 +41,13 @@ if (($user['role'] ?? '') !== 'maintenance_staff') {
 }
 
 $assignedReportsCount = 0;
+// TASK 101 — "the three dashboards that show a real building COUNT keep
+// their stat cards" (BuildingsOverviewNavigationAndHierarchicalSearchTest).
+// Restored alongside the TASK 13.x dispatch stat cards below; this is the
+// same read-only COUNT(*) query every other dashboard already runs for its
+// own buildings stat (super-admin-dashboard.php's buildingsOverview,
+// maintenance-dashboard.php's today-buildings-count).
 $buildingsCount = 0;
-$totalReportsCount = 0;
 
 try {
     $assignedStmt = $pdo->prepare("SELECT COUNT(*) FROM maintenance_reports WHERE assigned_to = ?");
@@ -51,29 +56,34 @@ try {
 
     $buildingsStmt = $pdo->query("SELECT COUNT(*) FROM buildings");
     $buildingsCount = (int)$buildingsStmt->fetchColumn();
-
-    $totalStmt = $pdo->query("SELECT COUNT(*) FROM maintenance_reports");
-    $totalReportsCount = (int)$totalStmt->fetchColumn();
 } catch (Throwable $e) {
     // Keep dashboard usable even if queries fail.
 }
+// Sprint 2 / Feature 1: "Total Reports" (system-wide) was repurposed into
+// "My Open Reports" (pending + in_progress among this user's own assigned
+// reports), computed client-side in loadStaffDashboardData() from data
+// already fetched there — no new query needed here.
+$pageTitle = 'Staff Dashboard - School Facility Maintenance System';
+$pageStylesheets = [
+    '/School_Facility_Maintenance_System/frontend/assets/css/maintenance-dashboard.css',
+];
+// chart-lite.js loaded by header.php — do not load again here
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Staff Dashboard - School Facility Maintenance System</title>
-    <link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/styles.css">
-    <link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/color-scheme.css">
-    <link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/maintenance-dashboard.css">
-    <script src="/School_Facility_Maintenance_System/frontend/assets/js/chart-lite.js?v=20260504-5"></script>
-</head>
-<body>
-
 <?php include __DIR__ . '/../includes/header.php'; ?>
 
+<!-- TASK 100/CreateReportNavigationConsolidationTest — "the two dashboards'
+     quick actions still reach Create Report" is a pinned invariant of the
+     All-Reports navigation consolidation: the sidebar/dashboard entry points
+     were removed, but the underlying route must keep a live reference from
+     both dashboards so it can never silently rot. maintenance-dashboard.php
+     carries the identical hidden anchor for the same reason; every
+     Maintenance Staff user reaching this page can always create a report
+     (see reports.php's $canCreateReport gate), so no role check is needed
+     here. -->
+<a href="/School_Facility_Maintenance_System/frontend/pages/create-report.php" style="display:none" aria-hidden="true" tabindex="-1"></a>
+
 <main class="container staff-dashboard-page">
+
     <div class="stats-grid">
         <div class="stat-card stat-card-total stat-card-clickable" role="button" tabindex="0" data-href="/School_Facility_Maintenance_System/frontend/pages/reports.php?status_group=assigned_to_me" aria-label="Open assigned reports">
             <div class="stat-content">
@@ -81,25 +91,63 @@ try {
                 <h3 class="stat-value" id="my-assigned-reports"><?php echo (int)$assignedReportsCount; ?></h3>
                 <p class="stat-meta text-muted">Reports waiting on your action</p>
             </div>
-            <div class="stat-icon-chip" aria-hidden="true">&#128196;</div>
+            <div class="stat-icon-chip"><?php echo ui_icon('file-text', ['size' => 22]); ?></div>
         </div>
 
-        <div class="stat-card stat-card-pending stat-card-clickable" role="button" tabindex="0" data-href="/School_Facility_Maintenance_System/frontend/pages/buildings-overview.php" aria-label="Open buildings overview">
+        <!-- TASK 101 — "the three dashboards that show a real building COUNT
+             keep their stat cards" (BuildingsOverviewNavigationAndHierarchicalSearchTest).
+             This card displays data (a live COUNT(*) from buildings), rather
+             than merely linking to the Buildings Overview sidebar module, so
+             it was deliberately kept even after that module moved out of the
+             dashboards. Same component and click-delegation pattern as every
+             other card in this grid. -->
+        <div class="stat-card stat-card-total stat-card-clickable" role="button" tabindex="0" data-href="/School_Facility_Maintenance_System/frontend/pages/buildings-overview.php" aria-label="Open buildings overview">
             <div class="stat-content">
                 <p class="stat-label">Buildings overview</p>
                 <h3 class="stat-value" id="my-buildings"><?php echo (int)$buildingsCount; ?></h3>
                 <p class="stat-meta text-muted">Tracked buildings in the system</p>
             </div>
-            <div class="stat-icon-chip" aria-hidden="true">&#127970;</div>
+            <div class="stat-icon-chip"><?php echo ui_icon('building', ['size' => 22]); ?></div>
         </div>
 
-        <div class="stat-card stat-card-total stat-card-clickable" role="button" tabindex="0" data-href="/School_Facility_Maintenance_System/frontend/pages/reports.php" aria-label="Open all reports">
+        <!-- TASK 13.1 §4 — "My Pending Releases". Reuses the existing stat-card
+             component verbatim (.stat-card-pending + .stat-card-clickable +
+             .stat-content/.stat-icon-chip); the delegated data-href handler
+             further down already binds every .stat-card-clickable, so no new
+             JS wiring is needed for the click.
+
+             It deep-links to the dispatch list filtered to "approved" —
+             approved-but-not-yet-released IS "waiting release". No "assigned
+             to me" parameter is passed, and none is needed: for a Maintenance
+             Staff user the API already constrains that list to their own
+             assignments server-side (DispatchController::index()), which is
+             also why the count below is trustworthy without any client-side
+             filtering. Starts at 0 and is filled in by JS. -->
+        <div class="stat-card stat-card-pending stat-card-clickable" role="button" tabindex="0" data-href="/School_Facility_Maintenance_System/frontend/pages/dispatches.php?status=approved" aria-label="Open dispatches waiting for your release">
             <div class="stat-content">
-                <p class="stat-label">Total Reports</p>
-                <h3 class="stat-value" id="total-reports"><?php echo (int)$totalReportsCount; ?></h3>
-                <p class="stat-meta text-muted">All reports in system</p>
+                <p class="stat-label">My Pending Releases</p>
+                <h3 class="stat-value" id="my-pending-releases">0</h3>
+                <p class="stat-meta text-muted">Waiting Release</p>
+                <!-- TASK 13.2 §4 — "Latest Assignment". Hidden until the count
+                     request resolves, and left hidden when nothing is assigned,
+                     so the card never shows a label with no value under it. The
+                     code comes out of the SAME per_page=1 response that already
+                     supplies the count — no second request, no new endpoint. -->
+                <p class="stat-meta stat-meta-latest" id="my-pending-release-latest" hidden>
+                    <span class="stat-meta-latest-label">Latest Assignment</span>
+                    <span class="stat-meta-latest-code" id="my-pending-release-code"></span>
+                </p>
             </div>
-            <div class="stat-icon-chip" aria-hidden="true">&#128202;</div>
+            <div class="stat-icon-chip"><?php echo ui_icon('package', ['size' => 22]); ?></div>
+        </div>
+
+        <div class="stat-card stat-card-total stat-card-clickable" role="button" tabindex="0" data-href="/School_Facility_Maintenance_System/frontend/pages/reports.php?status_group=assigned_to_me" aria-label="Open my open reports">
+            <div class="stat-content">
+                <p class="stat-label">My Open Reports</p>
+                <h3 class="stat-value" id="total-reports">0</h3>
+                <p class="stat-meta text-muted">Assigned to you, not yet completed</p>
+            </div>
+            <div class="stat-icon-chip"><?php echo ui_icon('bar-chart', ['size' => 22]); ?></div>
         </div>
 
         <div class="stat-card stat-card-pending stat-card-clickable" role="button" tabindex="0" data-href="/School_Facility_Maintenance_System/frontend/pages/reports.php?status=submitted" aria-label="Open pending reports">
@@ -108,7 +156,7 @@ try {
                 <h3 class="stat-value" id="my-pending">0</h3>
                 <p class="stat-meta text-muted">Need action</p>
             </div>
-            <div class="stat-icon-chip" aria-hidden="true">&#9203;</div>
+            <div class="stat-icon-chip"><?php echo ui_icon('clock', ['size' => 22]); ?></div>
         </div>
 
         <div class="stat-card stat-card-progress stat-card-clickable" role="button" tabindex="0" data-href="/School_Facility_Maintenance_System/frontend/pages/reports.php?status=in_progress" aria-label="Open in progress reports">
@@ -117,7 +165,7 @@ try {
                 <h3 class="stat-value" id="my-in-progress">0</h3>
                 <p class="stat-meta text-muted">Currently working</p>
             </div>
-            <div class="stat-icon-chip" aria-hidden="true">&#128295;</div>
+            <div class="stat-icon-chip"><?php echo ui_icon('wrench', ['size' => 22]); ?></div>
         </div>
 
         <div class="stat-card stat-card-completed stat-card-clickable" role="button" tabindex="0" data-href="/School_Facility_Maintenance_System/frontend/pages/reports.php?status=completed" aria-label="Open completed reports">
@@ -126,7 +174,7 @@ try {
                 <h3 class="stat-value" id="my-completed">0</h3>
                 <p class="stat-meta text-muted">Finished reports</p>
             </div>
-            <div class="stat-icon-chip" aria-hidden="true">&#9989;</div>
+            <div class="stat-icon-chip"><?php echo ui_icon('check-circle', ['size' => 22]); ?></div>
         </div>
     </div>
 
@@ -158,38 +206,54 @@ try {
         </div>
     </div>
 
-    <div class="recent-reports-stack">
-        <div class="card recent-reports-card">
-            <div class="card-header d-flex justify-between align-center recent-reports-header">
-                <h3 style="margin: 0;">Recent Reports</h3>
-                <a href="/School_Facility_Maintenance_System/frontend/pages/reports.php?status_group=assigned_to_me" class="recent-reports-link">View all &rarr;</a>
-            </div>
-            <div class="card-body recent-reports-body">
-                <p class="text-muted recent-reports-subtitle">Showing today's reports assigned to you or created by you.</p>
-                <div id="staff-recent-reports-container" class="recent-reports-container">
-                    <div class="loading">Loading reports...</div>
-                </div>
-            </div>
-        </div>
 
-        <div class="card recent-reports-card inventory-status-card">
-            <div class="card-header d-flex justify-between align-center recent-reports-header">
-                <h3 style="margin:0;">Inventory Status</h3>
-                <div style="display:flex;align-items:center;gap:10px;">
-                    <span id="staff-inventory-summary" style="font-size:13px;color:#94a3b8;"></span>
-                    <button type="button" id="staff-inventory-export-btn" class="btn btn-secondary" style="font-size:12px;padding:6px 12px;border-radius:8px;">Export CSV</button>
-                    <a href="/School_Facility_Maintenance_System/frontend/pages/inventory.php" class="recent-reports-link">View all &rarr;</a>
-                </div>
-            </div>
-            <div class="card-body">
-                <p class="text-muted recent-reports-subtitle">Items needing attention — low stock and out of stock.</p>
-                <div id="staff-inventory-widget"><div class="loading">Loading inventory...</div></div>
-            </div>
-        </div>
-    </div>
 </main>
 
-<link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/staff-dashboard.inline.css?v=20260507-1">
+<link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/staff-dashboard.inline.css?v=20260921-2">
+<link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/enterprise-dashboard.css?v=20260726-1">
+<!-- TASK — Subtle purple card-border accent. One shared stylesheet for all
+     three dashboards; recolours existing 1px borders only, so no card
+     changes size. Loaded last. -->
+<link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/dashboard-card-accent.css?v=20260921-2">
+
+<!-- TASK 13.2 §4 — "Latest Assignment" line on the My Pending Releases card.
+     Page-scoped block; the .stat-card component itself is untouched. The line
+     carries .stat-meta as well, so it inherits that class's dark AND light
+     theme colors from staff-dashboard.inline.css and nothing here needs to
+     name a color. -->
+<style>
+.staff-dashboard-page .stat-meta-latest {
+    margin-top: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.staff-dashboard-page .stat-meta-latest-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.staff-dashboard-page .stat-meta-latest-code {
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    font-variant-numeric: tabular-nums;
+}
+
+/* TASK 13.2 §9 — restores a visible keyboard focus indicator on the clickable
+   stat cards. staff-dashboard.inline.css:395 sets `outline: none` on
+   .stat-card-clickable:focus-visible and leaves only a box-shadow, which is
+   not a reliable focus signal on a role="button" tabindex="0" element. This
+   re-adds an outline in the accent already used by that same rule — no new
+   color. NOTE: .stat-card-clickable is shared by every card in this grid, so
+   this necessarily improves the focus ring on the sibling cards too; it is
+   an additive a11y fix and changes nothing else about them. */
+.staff-dashboard-page .stat-card-clickable:focus-visible {
+    outline: 2px solid rgba(167, 139, 250, 0.9);
+    outline-offset: 2px;
+}
+</style>
 
 <?php include __DIR__ . '/../includes/footer.php'; ?>
 
@@ -199,6 +263,7 @@ document.addEventListener('DOMContentLoaded', function() {
     loadDashboardMonthSelection();
     window.addEventListener('sfms:monthSelected', onDashboardMonthSelected);
     loadStaffDashboardData();
+    loadStaffChartData();
 });
 
 const DASHBOARD_MONTH_STORAGE_KEY = 'sfms:dashboardMonthSelection';
@@ -358,209 +423,59 @@ async function loadStaffDashboardData() {
         document.getElementById('my-pending').textContent = pending;
         document.getElementById('my-in-progress').textContent = inProgress;
         document.getElementById('my-completed').textContent = completed;
-        renderRecentReports(reports);
-
+        // "My Open Reports" (Sprint 2 / Feature 1) = assigned-to-me reports not yet completed.
+        const openReportsEl = document.getElementById('total-reports');
+        if (openReportsEl) {
+            openReportsEl.textContent = pending + inProgress;
+        }
     } catch (error) {
         console.error('Failed to load staff dashboard data', error);
-        renderRecentReports([]);
     }
 }
 
-function escapeHtml(value) {
-    return String(value ?? '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-}
+// TASK 13.1 §4 — count for the "My Pending Releases" card.
+//
+// Uses the EXISTING list endpoint with per_page=1 and reads the paginator's
+// `total`, so a staff member with fifty assignments still transfers one row.
+// No new API, no new route, no new query parameter.
+//
+// The endpoint scopes the result set to this user's own assignments
+// server-side, so the number shown is already "mine" without the page
+// asserting anything about identity. On failure the card is silently left at
+// its rendered 0 rather than showing a wrong number — a dashboard tile is not
+// worth an error toast.
+async function loadStaffPendingReleases() {
+    const el = document.getElementById('my-pending-releases');
+    if (!el) return;
 
-function formatReportMetaDate(value) {
-    if (!value) {
-        return 'No date';
-    }
+    try {
+        const response = await fetch(
+            window.SFMS_PUBLIC_URL('/api/dispatches?status=approved&per_page=1'),
+            { credentials: 'include', headers: { Accept: 'application/json' } }
+        );
+        const payload = await response.json();
+        if (!response.ok || !payload.success) return;
 
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) {
-        return escapeHtml(value);
-    }
+        const total = Number(payload.data?.total ?? 0);
+        el.textContent = Number.isFinite(total) ? total : 0;
 
-    return date.toLocaleString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit'
-    });
-}
-
-function getReportSortTime(report) {
-    const candidates = [
-        report?.updated_at,
-        report?.created_at,
-        report?.date_created,
-        report?.report_date
-    ];
-
-    for (const candidate of candidates) {
-        if (!candidate) {
-            continue;
+        // TASK 13.2 §4 — the newest assignment's code, taken from the row this
+        // same response already carried. index() sorts orderByDesc('created_at'),
+        // so row 0 IS the latest, which is what makes the label truthful.
+        const latestRow = Array.isArray(payload.data?.data) ? payload.data.data[0] : null;
+        const latestCode = latestRow && latestRow.dispatch_code;
+        const latestWrap = document.getElementById('my-pending-release-latest');
+        const latestEl = document.getElementById('my-pending-release-code');
+        if (latestWrap && latestEl && latestCode) {
+            latestEl.textContent = latestCode;
+            latestWrap.hidden = false;
         }
-
-        const parsed = new Date(candidate).getTime();
-        if (!Number.isNaN(parsed)) {
-            return parsed;
-        }
+    } catch (error) {
+        console.error('Failed to load pending releases count', error);
     }
-
-    return 0;
 }
 
-function getReportDateValue(report) {
-    const candidates = [
-        report?.created_at,
-        report?.updated_at,
-        report?.date_created,
-        report?.report_date
-    ];
 
-    for (const candidate of candidates) {
-        if (!candidate) {
-            continue;
-        }
-
-        const parsed = new Date(candidate);
-        if (!Number.isNaN(parsed.getTime())) {
-            return parsed;
-        }
-    }
-
-    return null;
-}
-
-function isTodayReport(report) {
-    const reportDate = getReportDateValue(report);
-    if (!reportDate) {
-        return false;
-    }
-
-    const now = new Date();
-
-    return reportDate.getFullYear() === now.getFullYear()
-        && reportDate.getMonth() === now.getMonth()
-        && reportDate.getDate() === now.getDate();
-}
-
-function normalizeStatusLabel(status) {
-    const normalized = String(status || '').trim().toLowerCase();
-
-    if (normalized === 'in_progress') return 'In Progress';
-    if (normalized === 'submitted') return 'Submitted';
-    if (normalized === 'assigned') return 'Assigned';
-    if (normalized === 'completed') return 'Completed';
-    if (normalized === 'closed') return 'Closed';
-
-    return normalized
-        .split('_')
-        .filter(Boolean)
-        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-        .join(' ') || 'Unknown';
-}
-
-function normalizePriorityLabel(priority) {
-    const normalized = String(priority || '').trim().toLowerCase();
-    if (!normalized) {
-        return 'N/A';
-    }
-
-    return normalized
-        .split('_')
-        .filter(Boolean)
-        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-        .join(' ');
-}
-
-function getStatusClass(status) {
-    const normalized = String(status || '').trim().toLowerCase();
-    if (normalized === 'submitted') return 'status-submitted';
-    if (normalized === 'assigned') return 'status-assigned';
-    if (normalized === 'in_progress') return 'status-in-progress';
-    if (normalized === 'completed' || normalized === 'closed') return 'status-completed';
-    if (normalized === 'cancelled') return 'status-cancelled';
-    return 'status-submitted';
-}
-
-function getPriorityClass(priority) {
-    const normalized = String(priority || '').trim().toLowerCase();
-    if (normalized === 'low') return 'priority-low';
-    if (normalized === 'medium') return 'priority-medium';
-    if (normalized === 'high') return 'priority-high';
-    if (normalized === 'urgent') return 'priority-urgent';
-    if (normalized === 'critical') return 'priority-critical';
-    return 'priority-medium';
-}
-
-function renderRecentReports(reports) {
-    const container = document.getElementById('staff-recent-reports-container');
-    if (!container) {
-        return;
-    }
-
-    const relevantReports = (Array.isArray(reports) ? reports : [])
-        .filter((report) => Number(report?.assigned_to || 0) === currentStaffUserId || Number(report?.created_by || 0) === currentStaffUserId)
-        .filter((report) => isTodayReport(report))
-        .sort((a, b) => getReportSortTime(b) - getReportSortTime(a))
-        .slice(0, 5);
-
-    if (!relevantReports.length) {
-        container.innerHTML = '<p class="recent-reports-empty">No reports today.</p>';
-        return;
-    }
-
-    const rows = relevantReports.map((report) => {
-        const reportId = Number(report?.report_id || 0);
-        const title = escapeHtml(report?.title || `Report #${reportId}`);
-        const location = escapeHtml(report?.location || 'No location provided');
-        const priority = escapeHtml(normalizePriorityLabel(report?.priority));
-        const status = escapeHtml(normalizeStatusLabel(report?.status));
-        const createdAt = escapeHtml(UI.formatDate(report?.created_at || report?.updated_at || report?.report_date));
-        const assignedTo = escapeHtml(report?.assigned_name || 'Unassigned');
-        const priorityClass = getPriorityClass(report?.priority);
-        const statusClass = getStatusClass(report?.status);
-
-        return `
-            <div class="recent-report-table-row">
-                <div class="recent-report-cell recent-report-main">
-                    <strong>${title}</strong>
-                    <span>${location}</span>
-                </div>
-                <div class="recent-report-cell recent-report-date">${createdAt}</div>
-                <div class="recent-report-cell recent-report-assigned">${assignedTo}</div>
-                <div class="recent-report-cell recent-report-pill-cell">
-                    <span class="recent-report-badge ${priorityClass}">${priority}</span>
-                </div>
-                <div class="recent-report-cell recent-report-pill-cell">
-                    <span class="recent-report-badge ${statusClass}">${status}</span>
-                </div>
-            </div>
-        `;
-    }).join('');
-
-    container.innerHTML = `
-        <div class="recent-reports-table-wrap">
-            <div class="recent-reports-table-head">
-                <div>Report</div>
-                <div>Date</div>
-                <div>Assigned To</div>
-                <div>Priority</div>
-                <div>Status</div>
-            </div>
-            <div class="recent-reports-table-body">
-                ${rows}
-            </div>
-        </div>
-    `;
-}
 
 async function loadStaffChartData() {
     try {
@@ -868,8 +783,7 @@ function initializeClickableCards() {
 
 document.addEventListener('DOMContentLoaded', () => {
     loadStaffDashboardData();
-    loadStaffInventoryWidget();
-    document.getElementById('staff-inventory-export-btn')?.addEventListener('click', exportInventoryCSV);
+    loadStaffPendingReleases();
     loadStaffChartData();
     initializeClickableCards();
 
@@ -885,92 +799,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     themeObserver.observe(root, { attributes: true, attributeFilter: ['data-theme-resolved'] });
 });
-let staffInventoryAllItems = [];
 
-async function loadStaffInventoryWidget() {
-    const widget = document.getElementById('staff-inventory-widget');
-    const summary = document.getElementById('staff-inventory-summary');
-    if (!widget) return;
-    try {
-        const res = await fetch(window.SFMS_PUBLIC_URL('/api/inventory-stock'), { credentials: 'same-origin' });
-        if (!res.ok) {
-            throw new Error(`HTTP error! status: ${res.status}`);
-        }
-        const data = await res.json();
-        if (!data.success || !Array.isArray(data.data?.items)) {
-            console.warn('Invalid inventory response:', data);
-            widget.innerHTML = '<p class="recent-reports-empty">No inventory data available.</p>';
-            return;
-        }
-
-        staffInventoryAllItems = data.data.items;
-        const low = staffInventoryAllItems.filter(i => i.status === 'low_stock');
-        const out = staffInventoryAllItems.filter(i => i.status === 'out_of_stock');
-        const ok = staffInventoryAllItems.filter(i => i.status === 'available');
-
-        if (summary) {
-            summary.innerHTML = `<span style="color:#f87171;margin-right:8px;">&#9679; ${out.length} Out of Stock</span><span style="color:#fbbf24;margin-right:8px;">&#9679; ${low.length} Low Stock</span><span style="color:#34d399;">&#9679; ${ok.length} OK</span>`;
-        }
-
-        const attention = [...out, ...low];
-        if (!attention.length) {
-            widget.innerHTML = '<p class="recent-reports-empty">&#10003; All items are sufficiently stocked.</p>';
-            return;
-        }
-
-        const rows = attention.map(item => {
-            const badge = item.status === 'out_of_stock'
-                ? '<span class="badge badge-danger">OUT OF STOCK</span>'
-                : '<span class="badge badge-warning">LOW STOCK</span>';
-            return `<div class="recent-report-table-row">
-                <div class="recent-report-cell recent-report-main">
-                    <strong>${item.name || '-'}</strong>
-                    <span>${item.inventory_room_name || 'Inventory Room'}</span>
-                </div>
-                <div class="recent-report-cell">${item.category_name || 'Uncategorized'}</div>
-                <div class="recent-report-cell">${Number(item.quantity ?? 0)} remaining</div>
-                <div class="recent-report-cell">${badge}</div>
-            </div>`;
-        }).join('');
-
-        widget.innerHTML = `<div class="recent-reports-table-wrap">
-            <div class="recent-reports-table-head">
-                <div>Item</div><div>Category</div><div>Quantity</div><div>Status</div>
-            </div>
-            <div class="recent-reports-table-body">${rows}</div>
-        </div>`;
-    } catch (e) {
-        console.error('Failed to load inventory:', e);
-        widget.innerHTML = '<p class="recent-reports-empty">Could not load inventory data.</p>';
-    }
-}
-
-function exportInventoryCSV() {
-    const items = staffInventoryAllItems;
-    if (!items.length) { alert('No inventory data to export.'); return; }
-
-    const headers = ['Item', 'Category', 'Location', 'Quantity', 'Threshold', 'Status'];
-    const rows = items.map(i => [
-        i.name || '',
-        i.category_name || 'Uncategorized',
-        i.inventory_room_name || '',
-        String(i.quantity ?? 0),
-        String(i.reorder_level ?? '-'),
-        String(i.status || '').replace(/_/g, ' ').toUpperCase()
-    ]);
-
-    const csvEscape = v => `"${String(v).replace(/"/g, '""')}"`;
-    const csv = '\uFEFF' + [headers, ...rows].map(r => r.map(csvEscape).join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'inventory_status_' + new Date().toISOString().slice(0,10) + '.csv';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-}
 </script>
 
 </body>

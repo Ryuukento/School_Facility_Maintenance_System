@@ -33,6 +33,15 @@ class InventoryAdjustmentService
                 throw new ModelNotFoundException('Item not found');
             }
 
+            // Captured BEFORE creating the InventoryTransaction below — see
+            // the identical note in PurchaseReceiptPostingService::postReceipt().
+            // The Observer's created() hook re-derives and persists
+            // Item.status synchronously inside that create() call, so
+            // capturing $previousStatus any later (e.g. after refresh()
+            // following create()) would already reflect the post-mutation
+            // status and handleStatusChange() would never notify.
+            $previousStatus = $locked->status;
+
             if ($direction === 'decrease') {
                 // The Observer's creating() hook does not validate 'adjustment'
                 // transactions for insufficient stock (negative adjustments are
@@ -61,9 +70,12 @@ class InventoryAdjustmentService
             ]);
 
             // Mirrors ItemController::store()'s post-transaction status
-            // re-derivation for the same 'adjustment' transaction type.
+            // re-derivation for the same 'adjustment' transaction type. The
+            // Observer already derived and saved the post-mutation status as
+            // part of the create() call above; refresh() here just pulls that
+            // value back into this in-memory model and the redundant
+            // derive+save keeps this resilient if that invariant ever changes.
             $locked->refresh();
-            $previousStatus = $locked->status;
             $locked->status = InventoryStatusService::deriveStatus((int) $locked->quantity, (int) ($locked->reorder_level ?? 0));
             $locked->save();
 

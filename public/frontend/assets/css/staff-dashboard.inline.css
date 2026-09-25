@@ -72,7 +72,7 @@
     align-items: stretch;
     gap: 14px;
     margin-top: 28px;
-    margin-bottom: 40px;
+    margin-bottom: 28px;
 }
 
 .staff-dashboard-page .chart-card {
@@ -136,30 +136,6 @@
 
 .staff-dashboard-page .priority-chart-card .card-body {
     padding: 18px 16px 14px;
-}
-
-.staff-dashboard-page .recent-reports-card {
-    margin-top: -10px;
-    margin-bottom: 36px;
-    background: linear-gradient(180deg, #111827 0%, #0f172a 100%);
-    border: 1px solid rgba(148, 163, 184, 0.14);
-    border-radius: 14px;
-    box-shadow: 0 14px 28px rgba(2, 6, 23, 0.35);
-    overflow: hidden;
-}
-
-.staff-dashboard-page .recent-reports-stack {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    align-items: stretch;
-    gap: 14px;
-    margin-top: -10px;
-    margin-bottom: 36px;
-}
-
-.staff-dashboard-page .recent-reports-stack .recent-reports-card {
-    margin-top: 0;
-    margin-bottom: 0;
 }
 
 .staff-dashboard-page .recent-reports-header {
@@ -306,7 +282,6 @@
 
 .staff-dashboard-page .snapshot-card:hover,
 .staff-dashboard-page .snapshot-card:focus-visible {
-    transform: translateY(-2px);
     border-color: rgba(148, 163, 184, 0.32);
     box-shadow: 0 18px 34px rgba(2, 6, 23, 0.38);
     outline: none;
@@ -394,7 +369,6 @@
 
 .staff-dashboard-page .stat-card-clickable:hover,
 .staff-dashboard-page .stat-card-clickable:focus-visible {
-    transform: translateY(-2px);
     box-shadow: 0 18px 34px rgba(2, 6, 23, 0.45);
     border-color: rgba(167, 139, 250, 0.45);
     outline: none;
@@ -519,17 +493,6 @@
         margin-top: 22px;
     }
 
-    .staff-dashboard-page .recent-reports-card {
-        margin-top: -4px;
-        margin-bottom: 24px;
-    }
-
-    .staff-dashboard-page .recent-reports-stack {
-        grid-template-columns: 1fr;
-        margin-top: -4px;
-        margin-bottom: 24px;
-    }
-
     .staff-dashboard-page .recent-reports-header,
     .staff-dashboard-page .recent-reports-body {
         padding-left: 14px;
@@ -543,7 +506,7 @@
 :root[data-theme-resolved='light'] .staff-dashboard-page .chart-card,
 :root[data-theme-resolved='light'] .staff-dashboard-page .card {
     background: #ffffff !important;
-    border-color: #e5e7eb !important;
+    border-color: var(--purple-border, #e5e7eb) !important;
     box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08) !important;
 }
 
@@ -570,15 +533,17 @@
     color: #6b7280 !important;
 }
 
+/* Outer frame of the recent-reports table = container tier; the
+   .recent-report-table-row separator below stays neutral. */
 :root[data-theme-resolved='light'] .staff-dashboard-page .recent-reports-table-wrap {
-    border-color: #e5e7eb;
+    border-color: var(--purple-border, #e5e7eb);
     background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
     box-shadow: 0 16px 30px rgba(15, 23, 42, 0.08);
 }
 
 :root[data-theme-resolved='light'] .staff-dashboard-page .recent-reports-table-head {
     background: #f3f4f6;
-    border-bottom-color: #e5e7eb;
+    border-bottom-color: var(--purple-border-light, #e5e7eb);
 }
 
 :root[data-theme-resolved='light'] .staff-dashboard-page .recent-reports-table-head > div {

@@ -212,11 +212,15 @@
     }
 }
 
+/* Container tier — these three are the summary tiles, the filter panel and
+   the replacement cards. This is the rule that owns their edge (!important at
+   (0,3,0)), so pointing it at the token is what brings Replacement Tracking
+   into line with the Inventory page it is reached from. */
 :root[data-theme-resolved='light'] .replacement-summary-card,
 :root[data-theme-resolved='light'] .replacement-filters-card,
 :root[data-theme-resolved='light'] .replacement-card {
     background: #ffffff !important;
-    border-color: #e5e7eb !important;
+    border-color: var(--purple-border, #e5e7eb) !important;
     box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08) !important;
 }
 

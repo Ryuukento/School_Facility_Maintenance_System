@@ -64,8 +64,17 @@ class FacilityService {
             $id = $this->buildingModel->create($name, $description);
             return ['success' => true, 'message' => 'Building created successfully', 'id' => $id, 'name' => $name];
         } catch (Exception $e) {
+            // TASK 55 — Security & Input Validation Hardening: this used to
+            // return 'Database error: ' . $e->getMessage() straight to the
+            // HTTP client, unlike every sibling update/delete method in this
+            // class (which already return a generic message here). A raw
+            // PDOException message can contain the SQLSTATE code, the
+            // literal SQL, and column/constraint names — real internal
+            // schema detail with no legitimate reason to reach an API
+            // response. The full message is still captured server-side via
+            // Logger::error() above; only the client-facing copy changes.
             Logger::error('Failed to create building', ['error' => $e->getMessage()]);
-            return ['success' => false, 'message' => 'Database error: ' . $e->getMessage(), 'code' => Response::HTTP_INTERNAL_ERROR];
+            return ['success' => false, 'message' => 'Failed to create building', 'code' => Response::HTTP_INTERNAL_ERROR];
         }
     }
 
@@ -173,8 +182,10 @@ class FacilityService {
             $id = $this->floorModel->create($buildingId, $name);
             return ['success' => true, 'message' => 'Floor created successfully', 'id' => $id, 'name' => $name];
         } catch (Exception $e) {
+            // TASK 55 — see the identical fix/rationale in createBuilding()
+            // above: never echo a raw exception message to the client.
             Logger::error('Failed to create floor', ['error' => $e->getMessage()]);
-            return ['success' => false, 'message' => 'Database error: ' . $e->getMessage(), 'code' => Response::HTTP_INTERNAL_ERROR];
+            return ['success' => false, 'message' => 'Failed to create floor', 'code' => Response::HTTP_INTERNAL_ERROR];
         }
     }
 
@@ -307,11 +318,32 @@ class FacilityService {
                 return ['success' => false, 'message' => 'Room with this name already exists on this floor', 'code' => Response::HTTP_CONFLICT];
             }
 
+            // TASK 55 — Security & Input Validation Hardening: the check
+            // above only reflects HALF of the real DB constraint. The
+            // `rooms` table (2026_03_27_000300_create_facility_tables.php)
+            // carries TWO separate unique indexes:
+            // unique(floor_id, name) — checked above — AND, independently,
+            // unique(building_id, name) spanning every floor in the
+            // building. Two different floors of the SAME building could
+            // each pass the floor-scoped check above and still collide on
+            // the building-scoped one at INSERT time (proven directly: a
+            // legitimate "Room 101" on Floor A followed by "Room 101" on
+            // Floor B of the same building threw an uncaught PDOException
+            // instead of returning a clean conflict). That exception's raw
+            // message used to be echoed straight to the client below — this
+            // check closes the validation gap that made that reachable at
+            // all in ordinary (non-race-condition) use.
+            if ($this->roomModel->existsByBuildingAndName($buildingId, $name)) {
+                return ['success' => false, 'message' => 'Room with this name already exists in this building', 'code' => Response::HTTP_CONFLICT];
+            }
+
             $id = $this->roomModel->create($buildingId, $floorId, $name, $capacity);
             return ['success' => true, 'message' => 'Room created successfully', 'id' => $id, 'name' => $name];
         } catch (Exception $e) {
+            // TASK 55 — see createBuilding() above: never echo a raw
+            // exception message to the client.
             Logger::error('Failed to create room', ['error' => $e->getMessage()]);
-            return ['success' => false, 'message' => 'Database error: ' . $e->getMessage(), 'code' => Response::HTTP_INTERNAL_ERROR];
+            return ['success' => false, 'message' => 'Failed to create room', 'code' => Response::HTTP_INTERNAL_ERROR];
         }
     }
 
@@ -341,6 +373,11 @@ class FacilityService {
 
             if ($this->roomModel->existsByFloorAndName($floorId, $name, $id)) {
                 return ['success' => false, 'message' => 'Room with this name already exists on this floor', 'code' => Response::HTTP_CONFLICT];
+            }
+
+            // TASK 55 — same building-wide gap as createRoom() above.
+            if ($this->roomModel->existsByBuildingAndName($buildingId, $name, $id)) {
+                return ['success' => false, 'message' => 'Room with this name already exists in this building', 'code' => Response::HTTP_CONFLICT];
             }
 
             $this->roomModel->update($id, $buildingId, $floorId, $name, $capacity);
@@ -538,8 +575,10 @@ class FacilityService {
             if ($this->pdo->inTransaction()) {
                 $this->pdo->rollBack();
             }
+            // TASK 55 — see createBuilding() above: never echo a raw
+            // exception message to the client.
             Logger::error('Failed to create item', ['error' => $e->getMessage()]);
-            return ['success' => false, 'message' => 'Database error: ' . $e->getMessage(), 'code' => Response::HTTP_INTERNAL_ERROR];
+            return ['success' => false, 'message' => 'Failed to create item', 'code' => Response::HTTP_INTERNAL_ERROR];
         }
     }
 
@@ -712,11 +751,30 @@ class FacilityService {
                 return ['success' => false, 'message' => 'Category with this name already exists', 'code' => Response::HTTP_CONFLICT];
             }
 
+            // TASK 55 — Security & Input Validation Hardening:
+            // inventory_categories.code carries its OWN unique index,
+            // independent of `name` (see
+            // 2026_04_07_001000_add_inventory_categories_and_thresholds.php),
+            // and is a real, live field on the Category admin form
+            // (categoryCodeInput in public/frontend/pages/inventory.php) —
+            // not merely an API-only concern. Only `name` was ever checked
+            // for a duplicate here, so two categories with different names
+            // but the same code (an easy, realistic mistake — e.g. reusing
+            // "consumables") passed validation and then hit an uncaught
+            // PDOException on the unique-index violation at INSERT time,
+            // whose raw message used to be echoed straight to the client
+            // below.
+            if ($code !== null && $this->inventoryCategoryModel->existsByCode($code)) {
+                return ['success' => false, 'message' => 'Category with this code already exists', 'code' => Response::HTTP_CONFLICT];
+            }
+
             $id = $this->inventoryCategoryModel->create($name, $code, $defaultThreshold, $allowOverride, $isActive, $sortOrder);
             return ['success' => true, 'message' => 'Category created successfully', 'id' => $id];
         } catch (Exception $e) {
+            // TASK 55 — see createBuilding() above: never echo a raw
+            // exception message to the client.
             Logger::error('Failed to create inventory category', ['error' => $e->getMessage()]);
-            return ['success' => false, 'message' => 'Database error: ' . $e->getMessage(), 'code' => Response::HTTP_INTERNAL_ERROR];
+            return ['success' => false, 'message' => 'Failed to create category', 'code' => Response::HTTP_INTERNAL_ERROR];
         }
     }
 
@@ -752,6 +810,11 @@ class FacilityService {
 
             if ($this->inventoryCategoryModel->existsByName($name, $id)) {
                 return ['success' => false, 'message' => 'Category with this name already exists', 'code' => Response::HTTP_CONFLICT];
+            }
+
+            // TASK 55 — same code-uniqueness gap as createInventoryCategory() above.
+            if ($code !== null && $this->inventoryCategoryModel->existsByCode($code, $id)) {
+                return ['success' => false, 'message' => 'Category with this code already exists', 'code' => Response::HTTP_CONFLICT];
             }
 
             $this->inventoryCategoryModel->update($id, $name, $code, $defaultThreshold, $allowOverride, $isActive, $sortOrder);

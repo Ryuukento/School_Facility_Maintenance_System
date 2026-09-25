@@ -47,6 +47,32 @@ class InventoryCategory {
         return (bool)$stmt->fetch(PDO::FETCH_ASSOC);
     }
 
+    /**
+     * TASK 55 — inventory_categories.code carries its own unique index,
+     * independent of `name` (see
+     * 2026_04_07_001000_add_inventory_categories_and_thresholds.php). See
+     * FacilityService::createInventoryCategory()/updateInventoryCategory()
+     * for why this must be checked before insert/update. $code is expected
+     * pre-normalized to lowercase by the caller (or null when absent); the
+     * LOWER() comparison here is defense in depth, matching existsByName()'s
+     * style above.
+     */
+    public function existsByCode($code, $excludeId = null) {
+        if ($code === null || $code === '') {
+            return false;
+        }
+
+        if ($excludeId) {
+            $stmt = $this->pdo->prepare("SELECT id FROM inventory_categories WHERE LOWER(code) = LOWER(?) AND id != ? LIMIT 1");
+            $stmt->execute([$code, (int)$excludeId]);
+        } else {
+            $stmt = $this->pdo->prepare("SELECT id FROM inventory_categories WHERE LOWER(code) = LOWER(?) LIMIT 1");
+            $stmt->execute([$code]);
+        }
+
+        return (bool)$stmt->fetch(PDO::FETCH_ASSOC);
+    }
+
     public function create($name, $code, $defaultThreshold, $allowOverride, $isActive, $sortOrder) {
         $stmt = $this->pdo->prepare(
             "INSERT INTO inventory_categories (name, code, default_low_stock_threshold, allow_threshold_override, is_active, sort_order, created_at, updated_at)

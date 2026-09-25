@@ -159,6 +159,97 @@ class ReportsApiNeedChangeTest extends TestCase
         $this->assertSame($matching, (int) $combined[0]['report_id']);
     }
 
+    /**
+     * TASK 9 — Role + Department Based Authorization. Supersedes the earlier
+     * Sprint 1 / Feature 2 auto-scope: Head Maintenance (maintenance_admin)
+     * now sees reports from ALL departments in the default listing (no
+     * status_group, no explicit department_id query param), the same as
+     * super_admin/maintenance_staff. Modification remains department-gated
+     * (see ReportDepartmentAuthorizationTest) — this test only covers
+     * viewing.
+     */
+    public function test_head_maintenance_with_department_sees_all_departments_by_default(): void
+    {
+        $ownDeptId = $this->seedDepartment();
+        $otherDeptId = $this->seedDepartment();
+        $adminId = $this->seedUser(['role' => 'maintenance_admin', 'department_id' => $ownDeptId]);
+
+        $ownReport = $this->seedReport([
+            'created_by' => $adminId,
+            'department_id' => $ownDeptId,
+        ]);
+        $otherDeptReport = $this->seedReport([
+            'created_by' => $this->seedUser(),
+            'department_id' => $otherDeptId,
+        ]);
+
+        $response = $this
+            ->actingAsSessionUser($adminId, 'maintenance_admin')
+            ->getJson('/api/reports');
+
+        $response->assertOk();
+        $reportIds = collect($response->json('data.reports'))->pluck('report_id')->map(fn ($id) => (int) $id);
+
+        $this->assertTrue($reportIds->contains($ownReport));
+        $this->assertTrue($reportIds->contains($otherDeptReport));
+    }
+
+    /**
+     * TASK 9 — a Head Maintenance user can explicitly filter/search by any
+     * department_id, including a department that is not their own, since
+     * viewing is unrestricted across departments.
+     */
+    public function test_head_maintenance_can_filter_by_a_department_that_is_not_their_own(): void
+    {
+        $ownDeptId = $this->seedDepartment();
+        $otherDeptId = $this->seedDepartment();
+        $adminId = $this->seedUser(['role' => 'maintenance_admin', 'department_id' => $ownDeptId]);
+
+        $ownReport = $this->seedReport([
+            'created_by' => $adminId,
+            'department_id' => $ownDeptId,
+        ]);
+        $otherDeptReport = $this->seedReport([
+            'created_by' => $this->seedUser(),
+            'department_id' => $otherDeptId,
+        ]);
+
+        $response = $this
+            ->actingAsSessionUser($adminId, 'maintenance_admin')
+            ->getJson("/api/reports?department_id={$otherDeptId}");
+
+        $response->assertOk();
+        $reportIds = collect($response->json('data.reports'))->pluck('report_id')->map(fn ($id) => (int) $id);
+
+        $this->assertTrue($reportIds->contains($otherDeptReport));
+        $this->assertFalse($reportIds->contains($ownReport));
+    }
+
+    /**
+     * Sprint 1 / Feature 2 — Super Admin must remain unaffected by the new
+     * department-scoping rule: they still see reports across every
+     * department by default.
+     */
+    public function test_super_admin_still_sees_all_departments_by_default(): void
+    {
+        $deptA = $this->seedDepartment();
+        $deptB = $this->seedDepartment();
+        $superAdminId = $this->seedUser(['role' => 'super_admin']);
+
+        $reportA = $this->seedReport(['created_by' => $superAdminId, 'department_id' => $deptA]);
+        $reportB = $this->seedReport(['created_by' => $superAdminId, 'department_id' => $deptB]);
+
+        $response = $this
+            ->actingAsSessionUser($superAdminId, 'super_admin')
+            ->getJson('/api/reports');
+
+        $response->assertOk();
+        $reportIds = collect($response->json('data.reports'))->pluck('report_id')->map(fn ($id) => (int) $id);
+
+        $this->assertTrue($reportIds->contains($reportA));
+        $this->assertTrue($reportIds->contains($reportB));
+    }
+
     public function test_assigned_to_me_filter_is_unaffected_by_need_change_fields(): void
     {
         $staffId = $this->seedUser(['role' => 'maintenance_staff']);

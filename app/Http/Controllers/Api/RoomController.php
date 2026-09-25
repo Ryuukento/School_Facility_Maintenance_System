@@ -20,51 +20,107 @@ class RoomController extends Controller
      *   per_page    – 1–200, default 50
      *   page        – default 1
      *   building_id – optional filter by building
+     *   with_item_counts – optional "1"/"true"; adds item_count + total_quantity
+     *                      per room via a grouped LEFT JOIN on items.
+     *                      Opt-in on purpose: /api/rooms is consumed by several
+     *                      pages that do not need the aggregate, so they must not
+     *                      pay for the join.
+     *   include_inactive – when truthy, also returns inactive (deactivated/sample)
+     *                      rooms (default: active-only). Same convention as
+     *                      InventoryCategoryController. Deactivated rooms are kept
+     *                      (never hard-deleted) so historical dispatches/reports/PM
+     *                      tasks referencing them still resolve; this flag just
+     *                      controls whether they surface in normal room-picker UIs.
      *
      * Response shape:
-     *   { success, message, data: { rooms: [{id, name, capacity, building_id, building_name, floor_id, floor_name}], pagination: {...} } }
+     *   { success, message, data: { rooms: [{id, name, capacity, building_id, building_name, floor_id, floor_name, is_active}], pagination: {...} } }
+     *   (+ item_count, total_quantity on each room when with_item_counts is set)
      */
     public function index(Request $request): JsonResponse
     {
-        $q          = trim((string) $request->query('q', ''));
-        $perPage    = max(1, min(200, (int) $request->query('per_page', 50)));
-        $page       = max(1, (int) $request->query('page', 1));
-        $buildingId = (int) $request->query('building_id', 0);
-        $floorId    = (int) $request->query('floor_id', 0);
+        $q               = trim((string) $request->query('q', ''));
+        $perPage         = max(1, min(200, (int) $request->query('per_page', 50)));
+        $page            = max(1, (int) $request->query('page', 1));
+        $buildingId      = (int) $request->query('building_id', 0);
+        $floorId         = (int) $request->query('floor_id', 0);
+        $withCounts      = filter_var($request->query('with_item_counts', false), FILTER_VALIDATE_BOOLEAN);
+        $includeInactive = filter_var($request->query('include_inactive', false), FILTER_VALIDATE_BOOLEAN);
 
-        $query = DB::table('rooms')
-            ->select([
-                'rooms.id',
-                'rooms.name',
-                'rooms.capacity',
-                'rooms.building_id',
-                'rooms.floor_id',
-                'buildings.name as building_name',
-                'floors.name as floor_name',
-            ])
-            ->leftJoin('buildings', 'rooms.building_id', '=', 'buildings.id')
-            ->leftJoin('floors',    'rooms.floor_id',    '=', 'floors.id')
+        // Filters are shared by the count query and the page query.
+        $applyFilters = function ($query) use ($q, $buildingId, $floorId, $includeInactive) {
+            if (!$includeInactive) {
+                $query->where('rooms.is_active', 1);
+            }
+
+            if ($q !== '') {
+                $like = '%' . strtolower($q) . '%';
+                $query->where(function ($sub) use ($like) {
+                    $sub->whereRaw('LOWER(rooms.name) LIKE ?',       [$like])
+                        ->orWhereRaw('LOWER(buildings.name) LIKE ?', [$like]);
+                });
+            }
+
+            if ($buildingId > 0) {
+                $query->where('rooms.building_id', $buildingId);
+            }
+
+            if ($floorId > 0) {
+                $query->where('rooms.floor_id', $floorId);
+            }
+
+            return $query;
+        };
+
+        // Total is counted WITHOUT the items join/GROUP BY. Under GROUP BY, ->count()
+        // returns the row count of the first group rather than the number of groups,
+        // and wrapping the grouped query in a pagination subquery loses the
+        // rooms.id reference the aggregate needs.
+        $total = (int) $applyFilters(
+            DB::table('rooms')
+                ->leftJoin('buildings', 'rooms.building_id', '=', 'buildings.id')
+                ->leftJoin('floors',    'rooms.floor_id',    '=', 'floors.id')
+        )->count();
+
+        $columns = [
+            'rooms.id',
+            'rooms.name',
+            'rooms.capacity',
+            'rooms.building_id',
+            'rooms.floor_id',
+            'rooms.is_active',
+            'buildings.name as building_name',
+            'floors.name as floor_name',
+        ];
+
+        if ($withCounts) {
+            $columns[] = DB::raw('COUNT(items.id) AS item_count');
+            $columns[] = DB::raw('COALESCE(SUM(items.quantity), 0) AS total_quantity');
+        }
+
+        $query = $applyFilters(
+            DB::table('rooms')
+                ->select($columns)
+                ->leftJoin('buildings', 'rooms.building_id', '=', 'buildings.id')
+                ->leftJoin('floors',    'rooms.floor_id',    '=', 'floors.id')
+        )
             ->orderBy('buildings.name')
             ->orderBy('floors.name')
             ->orderBy('rooms.name');
 
-        if ($q !== '') {
-            $like = '%' . strtolower($q) . '%';
-            $query->where(function ($sub) use ($like) {
-                $sub->whereRaw('LOWER(rooms.name) LIKE ?',       [$like])
-                    ->orWhereRaw('LOWER(buildings.name) LIKE ?', [$like]);
-            });
+        if ($withCounts) {
+            $query->leftJoin('items', 'items.room_id', '=', 'rooms.id')
+                  ->groupBy(
+                      'rooms.id',
+                      'rooms.name',
+                      'rooms.capacity',
+                      'rooms.building_id',
+                      'rooms.floor_id',
+                      'rooms.is_active',
+                      'buildings.name',
+                      'floors.name'
+                  );
         }
 
-        if ($buildingId > 0) {
-            $query->where('rooms.building_id', $buildingId);
-        }
-
-        if ($floorId > 0) {
-            $query->where('rooms.floor_id', $floorId);
-        }
-
-        $total = $query->count();
         $rooms = $query->skip(($page - 1) * $perPage)->take($perPage)->get();
 
         return $this->ok('Rooms retrieved', [
@@ -125,6 +181,37 @@ class RoomController extends Controller
         ]);
 
         return $this->ok('Room created successfully', ['id' => $id, 'name' => $name], 201);
+    }
+
+    /** PATCH /api/rooms/{id} — rename a room (floor/building are not reassignable here). */
+    public function update(Request $request, int $id): JsonResponse
+    {
+        $name = trim((string) $request->input('name', ''));
+
+        if ($name === '') {
+            return $this->fail('Room name is required', 422);
+        }
+
+        $room = DB::table('rooms')->where('id', $id)->first();
+        if (!$room) {
+            return $this->fail('Room not found', 404);
+        }
+
+        $duplicate = DB::table('rooms')
+            ->where('floor_id', $room->floor_id)
+            ->whereRaw('LOWER(name) = ?', [strtolower($name)])
+            ->where('id', '!=', $id)
+            ->exists();
+        if ($duplicate) {
+            return $this->fail('Room with this name already exists on this floor', 409);
+        }
+
+        DB::table('rooms')->where('id', $id)->update([
+            'name'       => $name,
+            'updated_at' => now(),
+        ]);
+
+        return $this->ok('Room updated successfully');
     }
 
     /** DELETE /api/rooms/{id} */

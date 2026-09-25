@@ -10,12 +10,12 @@ use App\Http\Controllers\Api\BuildingController;
 use App\Http\Controllers\Api\InventoryCategoryController;
 use App\Http\Controllers\Api\InventoryRoomController;
 use App\Http\Controllers\Api\NotificationController;
+use App\Http\Controllers\Api\PreventiveMaintenanceController;
 use App\Http\Controllers\Api\PurchaseReceiptController;
 use App\Http\Controllers\Api\ReplacementTrackingController;
 use App\Http\Controllers\Api\RoomController;
 use App\Http\Controllers\Api\SchoolSettingsController;
 use App\Http\Controllers\Api\ItemController;
-use App\Http\Controllers\Api\RepairController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\AnalyticsReportController;
 use App\Http\Controllers\Api\InventoryStockController;
@@ -50,22 +50,53 @@ Route::middleware(EnsureApiAuthenticated::class)->group(function (): void {
     Route::get('/notifications', fn() => redirect('/frontend/pages/notifications-center.php'))->name('notifications');
     Route::get('/inventory', fn() => redirect('/frontend/pages/inventory.php'))->name('inventory.index');
     Route::get('/suppliers/manage', fn() => redirect('/frontend/pages/suppliers-manage.php'))->name('suppliers.manage');
+    // TASK 25 — dedicated Semester Settings page (replaces the old
+    // "Change Semester" dashboard modal). Page itself re-checks for
+    // super_admin and redirects otherwise; this route only requires login.
+    Route::get('/settings/semester', fn() => redirect('/frontend/pages/semester-settings.php'))->name('settings.semester');
     Route::get('/dispatches', fn() => redirect('/frontend/pages/dispatches.php'))->name('dispatches.index');
     Route::get('/dispatches/create', fn() => redirect('/frontend/pages/dispatch-create.php'))->name('dispatches.create');
     Route::get('/dispatches/{id}', function ($id) { return redirect('/frontend/pages/dispatch-detail.php?id=' . (int)$id); })->name('dispatches.show');
     Route::get('/damage-reports', fn() => redirect('/frontend/pages/damage-reports.php'))->name('damage-reports.index');
-    Route::get('/damage-reports/create', fn() => redirect('/frontend/pages/damage-report-create.php'))->name('damage-reports.create');
+    // TASK 33 PHASE 11 — the standalone legacy Damage Report creation route
+    // (and its target page, damage-report-create.php) was retired here.
+    // Phase 10's verification confirmed zero live navigation referenced
+    // this route (sidebar.php only had the page in an active-nav highlight
+    // array, never as an href target) and damage-reports.php has no Create
+    // link of its own. The unified Create Report workflow (/reports/create
+    // above) already carries every capability the legacy page had,
+    // including Severity Level, Image Upload, and Repair Notes (Task 33
+    // Phases 7 and 9). See TASK_33_PHASE_10_LEGACY_DAMAGE_REPORT_RETIREMENT_VERIFICATION_REPORT.md
+    // and TASK_33_PHASE_11_LEGACY_DAMAGE_REPORT_RETIREMENT_IMPLEMENTATION_REPORT.md.
     Route::get('/damage-reports/{id}', fn($id) => redirect('/frontend/pages/damage-report-detail.php?id=' . (int)$id))->name('damage-reports.show');
     Route::get('/damage-reports/{id}/update', fn($id) => redirect('/frontend/pages/damage-report-update.php?id=' . (int)$id))->name('damage-reports.update');
-    Route::get('/repairs', fn() => redirect('/frontend/pages/repair-requests.php'))->name('repairs.index');
-    Route::get('/repairs/{id}', fn($id) => redirect('/frontend/pages/repair-detail.php?id=' . (int)$id))->name('repairs.show');
-    Route::get('/repairs/{id}/assign', fn($id) => redirect('/frontend/pages/repair-assignment.php?id=' . (int)$id))->name('repairs.assign-page');
-    Route::get('/repairs/{id}/update', fn($id) => redirect('/frontend/pages/repair-update.php?id=' . (int)$id))->name('repairs.update-page');
-    Route::get('/repairs/{id}/replacement', fn($id) => redirect('/frontend/pages/replacement-request.php?id=' . (int)$id))->name('repairs.replacement-page');
+    // TASK 13 PHASE 2 — the five Repair Request page routes (/repairs,
+    // /repairs/{id}, and its /assign, /update and /replacement variants) were
+    // removed here. Each one was a bare redirect into a page that TASK 12
+    // deleted, so every one of them had already become a guaranteed 404 for
+    // any user who reached it.
+    //
+    // NOTE the next line: /replacement-tracking is INVENTORY, not Repair. It
+    // is one hyphen away from the retired /repairs/{id}/replacement route and
+    // is deliberately kept.
     Route::get('/replacement-tracking', fn() => redirect('/frontend/pages/replacement-tracking.php'))->name('inventory.replacement-tracking');
-    Route::get('/settings', fn() => redirect('/frontend/pages/settings.php'))->name('settings');
+    // TASK 98.2 fix: this used to redirect to '/frontend/pages/settings.php',
+    // which does not exist (404) — confirmed no page in public/frontend/pages/
+    // is named settings.php, and no live nav link points at this route or
+    // path. account.php is the actual account/settings page the sidebar's
+    // "Account" nav item links to (see sidebar.php), so repoint here instead
+    // of leaving a dead redirect target.
+    Route::get('/settings', fn() => redirect('/frontend/pages/account.php'))->name('settings');
     Route::get('/maintenance-dashboard', fn() => redirect('/frontend/pages/maintenance-dashboard.php'))->name('maintenance.dashboard');
-    Route::get('/maintenance-reports', fn() => redirect('/frontend/pages/maintenance-reports-list.php'))->name('maintenance.reports.index');
+    // TASK LEGACY QUARTET PHASE 2 — the /maintenance-reports route (and its
+    // target page, maintenance-reports-list.php) was retired here. The page
+    // itself only performed a redirect to reports.php (forwarding the query
+    // string) after an auth/role check; all 5 live links that used to point
+    // here (sidebar "All Reports" for Maintenance Staff, Super Admin
+    // dashboard "Last Month Reports", both Maintenance dashboard report
+    // links, and maintenance-report-detail.php's "Back to Reports") were
+    // repointed directly at reports.php first, eliminating the redirect hop.
+    // See TASK_LEGACY_QUARTET_PHASE2_MAINTENANCE_REPORTS_LIST_RETIREMENT_IMPLEMENTATION_REPORT.md.
     Route::get('/maintenance-reports/{id}', fn($id) => redirect('/frontend/pages/maintenance-report-detail.php?id=' . (int) $id))->name('maintenance.reports.show');
     Route::get('/staff-dashboard', fn() => redirect('/frontend/pages/staff-dashboard.php'))->name('staff.dashboard');
     Route::get('/super-admin-dashboard', fn() => redirect('/frontend/pages/super-admin-dashboard.php'))->name('superadmin.dashboard');
@@ -78,7 +109,8 @@ Route::middleware(EnsureApiAuthenticated::class)->group(function (): void {
     Route::get('/inventory-reports', fn() => redirect('/frontend/pages/inventory-reports.php'))->name('inventory.reports');
     Route::get('/purchase-receipts', fn() => redirect('/frontend/pages/purchase-receipts.php'))->name('purchase-receipts.page');
     Route::get('/deployment-tracking', fn() => redirect('/frontend/pages/deployment-tracking.php'))->name('deployment.tracking');
-    
+    Route::get('/preventive-maintenance', fn() => redirect('/frontend/pages/preventive-maintenance.php'))->name('preventive-maintenance.page');
+
     // Logout route (web)
     Route::get('/logout', function () {
         // Clear native PHP $_SESSION so legacy frontend pages lose access too
@@ -123,7 +155,11 @@ Route::prefix('api')->group(function (): void {
 
     Route::middleware([EnsureApiAuthenticated::class])->group(function (): void {
         Route::get('reports',          [ReportController::class, 'index']);
-        Route::post('reports',         [ReportController::class, 'store']);
+        // RBAC POLICY UPDATE — Administrator (super_admin) reviews/assigns/
+        // monitors reports but does not submit them; Head Maintenance
+        // (maintenance_admin) and Maintenance Staff are the report submitters.
+        Route::post('reports',         [ReportController::class, 'store'])
+            ->middleware(EnsureRole::class . ':maintenance_admin,maintenance_staff');
         Route::get('reports/recent',   [ReportController::class, 'recent']);
         Route::get('reports/{report}', [ReportController::class, 'show']);
         Route::patch('reports/{report}', [ReportController::class, 'update']);
@@ -139,9 +175,19 @@ Route::prefix('api')->group(function (): void {
 
         Route::prefix('dashboard')->group(function (): void {
             Route::get('stats', [DashboardController::class, 'stats']);
+            // TASK — Technician Workload card. Read-only workload visibility
+            // for the two management dashboards. Guarded by the SAME
+            // centralized EnsureRole middleware every other role-restricted
+            // route here uses, rather than a role check inside the controller
+            // — Maintenance Staff is refused before the handler runs. This
+            // grants no assignment capability; it returns counts only.
+            Route::get('technician-workload', [DashboardController::class, 'technicianWorkload'])
+                ->middleware(EnsureRole::class . ':super_admin,maintenance_admin');
             Route::prefix('maintenance')->group(function (): void {
-                Route::get('stats',  [DashboardController::class, 'maintenanceStats']);
-                Route::get('charts', [DashboardController::class, 'maintenanceCharts']);
+                Route::get('stats',     [DashboardController::class, 'maintenanceStats']);
+                Route::get('charts',    [DashboardController::class, 'maintenanceCharts']);
+                Route::get('personnel', [DashboardController::class, 'maintenancePersonnel']);
+                Route::get('activity',  [DashboardController::class, 'maintenanceActivity']);
             });
             Route::prefix('super-admin')->middleware(EnsureRole::class . ':super_admin')->group(function (): void {
                 Route::get('stats',    [DashboardController::class, 'superAdminStats']);
@@ -154,17 +200,33 @@ Route::prefix('api')->group(function (): void {
         Route::get('departments', [DepartmentController::class, 'index']);
 
         Route::get('rooms',         [RoomController::class, 'index']);
-        Route::post('rooms',        [RoomController::class, 'store']);
-        Route::delete('rooms/{id}', [RoomController::class, 'destroy']);
+        // TASK 35 — Buildings Overview RBAC: only Administrator (super_admin)
+        // may create/modify/delete rooms. Previously also allowed
+        // maintenance_admin (Head Maintenance), which must now be view-only.
+        Route::post('rooms',        [RoomController::class, 'store'])
+            ->middleware(EnsureRole::class . ':super_admin');
+        Route::patch('rooms/{id}',  [RoomController::class, 'update'])
+            ->middleware(EnsureRole::class . ':super_admin');
+        Route::delete('rooms/{id}', [RoomController::class, 'destroy'])
+            ->middleware(EnsureRole::class . ':super_admin');
 
         Route::get('buildings',                                  [BuildingController::class, 'index']);
-        Route::post('buildings',                                 [BuildingController::class, 'store']);
-        Route::patch('buildings/{id}',                           [BuildingController::class, 'update']);
-        Route::delete('buildings/{id}',                          [BuildingController::class, 'destroy']);
+        // TASK 35 — Buildings Overview RBAC: only Administrator (super_admin)
+        // may create/modify/delete buildings and floors. Previously also
+        // allowed maintenance_admin (Head Maintenance) and maintenance_staff,
+        // which must now be view-only.
+        Route::post('buildings',                                 [BuildingController::class, 'store'])
+            ->middleware(EnsureRole::class . ':super_admin');
+        Route::patch('buildings/{id}',                           [BuildingController::class, 'update'])
+            ->middleware(EnsureRole::class . ':super_admin');
+        Route::delete('buildings/{id}',                          [BuildingController::class, 'destroy'])
+            ->middleware(EnsureRole::class . ':super_admin');
         Route::get('buildings/deployed-items',                   [BuildingController::class, 'deployedItems']);
         Route::get('buildings/{id}/floors',                      [BuildingController::class, 'floors']);
-        Route::post('buildings/{id}/floors',                     [BuildingController::class, 'storeFloor']);
-        Route::delete('buildings/{id}/floors/{floorId}',         [BuildingController::class, 'destroyFloor']);
+        Route::post('buildings/{id}/floors',                     [BuildingController::class, 'storeFloor'])
+            ->middleware(EnsureRole::class . ':super_admin');
+        Route::delete('buildings/{id}/floors/{floorId}',         [BuildingController::class, 'destroyFloor'])
+            ->middleware(EnsureRole::class . ':super_admin');
 
         Route::get('inventory-categories',    [InventoryCategoryController::class, 'index']);
         Route::post('inventory-categories',   [InventoryCategoryController::class, 'store'])
@@ -183,10 +245,13 @@ Route::prefix('api')->group(function (): void {
         });
 
         Route::get('items', [ItemController::class, 'index']);
-        Route::post('items', [ItemController::class, 'store']);
+        Route::post('items', [ItemController::class, 'store'])
+            ->middleware(EnsureRole::class . ':super_admin,maintenance_admin');
         Route::get('items/{item}', [ItemController::class, 'show']);
-        Route::patch('items/{item}', [ItemController::class, 'update']);
-        Route::delete('items/{item}', [ItemController::class, 'destroy']);
+        Route::patch('items/{item}', [ItemController::class, 'update'])
+            ->middleware(EnsureRole::class . ':super_admin,maintenance_admin');
+        Route::delete('items/{item}', [ItemController::class, 'destroy'])
+            ->middleware(EnsureRole::class . ':super_admin,maintenance_admin');
         Route::get('items/{item}/history', [ItemController::class, 'history']);
         Route::post('items/{item}/adjust-stock', [ItemController::class, 'adjustStock'])
             ->middleware(EnsureRole::class . ':super_admin,maintenance_admin');
@@ -212,10 +277,13 @@ Route::prefix('api')->group(function (): void {
         // Suppliers
         Route::prefix('suppliers')->group(function (): void {
             Route::get('', [\App\Http\Controllers\Api\SupplierController::class, 'index']);
-            Route::post('', [\App\Http\Controllers\Api\SupplierController::class, 'store']);
+            Route::post('', [\App\Http\Controllers\Api\SupplierController::class, 'store'])
+                ->middleware(EnsureRole::class . ':super_admin,maintenance_admin');
             Route::get('{supplier}', [\App\Http\Controllers\Api\SupplierController::class, 'show']);
-            Route::patch('{supplier}', [\App\Http\Controllers\Api\SupplierController::class, 'update']);
-            Route::delete('{supplier}', [\App\Http\Controllers\Api\SupplierController::class, 'destroy']);
+            Route::patch('{supplier}', [\App\Http\Controllers\Api\SupplierController::class, 'update'])
+                ->middleware(EnsureRole::class . ':super_admin,maintenance_admin');
+            Route::delete('{supplier}', [\App\Http\Controllers\Api\SupplierController::class, 'destroy'])
+                ->middleware(EnsureRole::class . ':super_admin,maintenance_admin');
             Route::get('{supplier}/history', [\App\Http\Controllers\Api\SupplierController::class, 'history']);
         });
 
@@ -226,14 +294,41 @@ Route::prefix('api')->group(function (): void {
         });
 
         // Dispatching
+        // TASK 13 — Dispatch Release Assignment Workflow. Role gates below now
+        // mirror the revised business process exactly:
+        //   Head Maintenance   creates + assigns/reassigns release personnel
+        //   Administrator      approves or rejects Head-created dispatches;
+        //                      TASK 41 also creates its own, which skip
+        //                      approval and are immediately releasable
+        //   Maintenance Staff  releases (and only its own assignment — the
+        //                      identity check is in DispatchAuthorizationService,
+        //                      because a role gate alone cannot express it)
         Route::prefix('dispatches')->group(function (): void {
             Route::get('', [\App\Http\Controllers\Api\DispatchController::class, 'index']);
-            Route::post('', [\App\Http\Controllers\Api\DispatchController::class, 'store']);
+            // TASK 41 — Administrator Create Dispatch Without Approval.
+            // Head Maintenance creates dispatches that require approval;
+            // Administrator creates dispatches that skip approval entirely
+            // (DispatchAuthorizationService::creationRequiresApproval()).
+            // Maintenance Staff are deliberately NOT listed here — both
+            // allowed roles are named explicitly so no other role can reach
+            // store() at all, and the bypass itself is re-derived from the
+            // session inside the controller rather than trusted from input.
+            Route::post('', [\App\Http\Controllers\Api\DispatchController::class, 'store'])
+                ->middleware(\App\Http\Middleware\EnsureRole::class . ':maintenance_admin,super_admin');
+            // MUST be registered before the '{dispatch}' route below, otherwise
+            // 'support' is captured as a dispatch id and fails model binding.
+            // Same ordering rule the repairs group already relies on.
+            Route::get('support/release-personnel', [\App\Http\Controllers\Api\DispatchController::class, 'releasePersonnel'])
+                ->middleware(\App\Http\Middleware\EnsureRole::class . ':maintenance_admin,super_admin');
             Route::get('{dispatch}', [\App\Http\Controllers\Api\DispatchController::class, 'show']);
+            Route::post('{dispatch}/assign-personnel', [\App\Http\Controllers\Api\DispatchController::class, 'assignPersonnel'])
+                ->middleware(\App\Http\Middleware\EnsureRole::class . ':maintenance_admin');
             Route::post('{dispatch}/approve', [\App\Http\Controllers\Api\DispatchController::class, 'approve'])
-                ->middleware(\App\Http\Middleware\EnsureRole::class . ':super_admin,maintenance_admin');
+                ->middleware(\App\Http\Middleware\EnsureRole::class . ':super_admin');
+            Route::post('{dispatch}/reject', [\App\Http\Controllers\Api\DispatchController::class, 'reject'])
+                ->middleware(\App\Http\Middleware\EnsureRole::class . ':super_admin');
             Route::post('{dispatch}/release', [\App\Http\Controllers\Api\DispatchController::class, 'release'])
-                ->middleware(\App\Http\Middleware\EnsureRole::class . ':super_admin,maintenance_admin');
+                ->middleware(\App\Http\Middleware\EnsureRole::class . ':maintenance_staff');
             Route::post('{dispatch}/cancel', [\App\Http\Controllers\Api\DispatchController::class, 'cancel'])
                 ->middleware(\App\Http\Middleware\EnsureRole::class . ':super_admin,maintenance_admin');
             Route::get('{dispatch}/print', [\App\Http\Controllers\Api\DispatchController::class, 'print']);
@@ -241,7 +336,15 @@ Route::prefix('api')->group(function (): void {
 
         Route::prefix('damage-reports')->group(function (): void {
             Route::get('', [DamageReportController::class, 'index']);
+            // TASK 33 PHASE 3 — Administrator (super_admin) is a supervisory
+            // role and does not submit/create Damage Reports, matching the
+            // existing Maintenance Report policy (see /api/reports POST
+            // above). Head Maintenance (maintenance_admin) and Maintenance
+            // Staff remain the operational creators.
             Route::post('', [DamageReportController::class, 'store'])
+                ->middleware(EnsureRole::class . ':maintenance_admin,maintenance_staff');
+            // check-duplicate MUST precede {damageReport} to avoid route capture.
+            Route::post('check-duplicate', [DamageReportController::class, 'checkDuplicate'])
                 ->middleware(EnsureRole::class . ':super_admin,maintenance_admin,maintenance_staff');
             Route::get('{damageReport}', [DamageReportController::class, 'show']);
             Route::post('{damageReport}/status', [DamageReportController::class, 'updateStatus'])
@@ -249,21 +352,25 @@ Route::prefix('api')->group(function (): void {
             Route::get('{damageReport}/history', [DamageReportController::class, 'history']);
         });
 
-        Route::prefix('repairs')->group(function (): void {
-            Route::get('', [RepairController::class, 'index']);
-            Route::post('', [RepairController::class, 'store'])
-                ->middleware(EnsureRole::class . ':super_admin,maintenance_admin,maintenance_staff');
-            Route::get('support/damage-reports', [RepairController::class, 'supportDamageReports']);
-            Route::get('support/technicians', [RepairController::class, 'supportTechnicians']);
-            Route::get('{repairRequest}', [RepairController::class, 'show']);
-            Route::get('{repairRequest}/history', [RepairController::class, 'history']);
-            Route::post('{repairRequest}/assign', [RepairController::class, 'assign'])
-                ->middleware(EnsureRole::class . ':super_admin,maintenance_admin');
-            Route::post('{repairRequest}/update', [RepairController::class, 'update'])
-                ->middleware(EnsureRole::class . ':super_admin,maintenance_admin,maintenance_staff');
-            Route::post('{repairRequest}/replacement', [RepairController::class, 'replacement'])
-                ->middleware(EnsureRole::class . ':super_admin,maintenance_admin');
-        });
+        // TASK 13 PHASE 3 — the entire /api/repairs group (index, store,
+        // show, history, assign, update, replacement, and the two
+        // support/* lookups) was removed here along with RepairController.
+        //
+        // Every consumer had already been decoupled before this task ran:
+        //   - the five Repair pages that called index/show/assign/update/
+        //     replacement were deleted in TASK 12;
+        //   - Preventive Maintenance stopped calling
+        //     GET repairs/support/technicians in TASK 11 and now uses
+        //     GET /api/preventive-maintenance/support/personnel, which is
+        //     backed by the neutral PersonnelDirectoryService;
+        //   - Dispatch stopped routing through RepairService in TASK 65 and
+        //     uses GET /api/dispatches/support/release-personnel.
+        //
+        // support/damage-reports had no remaining consumer at all — its only
+        // caller was the deleted repair-requests.php creation form.
+        //
+        // The repair_requests / repair_histories TABLES are deliberately left
+        // in place; dropping them is a separate, later task.
 
         Route::prefix('activity-logs')->middleware(EnsureRole::class . ':super_admin,maintenance_admin')->group(function (): void {
             Route::get('', [ActivityLogController::class, 'index']);
@@ -271,9 +378,22 @@ Route::prefix('api')->group(function (): void {
             Route::get('{activityLog}', [ActivityLogController::class, 'show']);
         });
 
-        Route::apiResource('inventory-rooms', InventoryRoomController::class)
-            ->except(['show'])
-            ->parameters(['inventory-rooms' => 'id']);
+        // Inventory rooms — explicit routes (not apiResource) so that mutating
+        // actions can carry a role gate while index remains open to any
+        // authenticated user, matching the items/inventory-categories pattern.
+        // URIs, verbs, and route names are identical to what apiResource(...)
+        // ->except(['show'])->parameters(['inventory-rooms' => 'id']) produced.
+        Route::get('inventory-rooms', [InventoryRoomController::class, 'index'])
+            ->name('inventory-rooms.index');
+        Route::post('inventory-rooms', [InventoryRoomController::class, 'store'])
+            ->middleware(EnsureRole::class . ':super_admin,maintenance_admin')
+            ->name('inventory-rooms.store');
+        Route::match(['put', 'patch'], 'inventory-rooms/{id}', [InventoryRoomController::class, 'update'])
+            ->middleware(EnsureRole::class . ':super_admin,maintenance_admin')
+            ->name('inventory-rooms.update');
+        Route::delete('inventory-rooms/{id}', [InventoryRoomController::class, 'destroy'])
+            ->middleware(EnsureRole::class . ':super_admin,maintenance_admin')
+            ->name('inventory-rooms.destroy');
 
         Route::prefix('deployment-tracking')->group(function (): void {
             Route::get('search', [DeploymentTrackingController::class, 'search']);
@@ -284,11 +404,24 @@ Route::prefix('api')->group(function (): void {
 
         // Purchase receipts — search MUST precede apiResource to avoid {id} capture
         Route::get('purchase-receipts/search', [PurchaseReceiptController::class, 'search']);
+        // store registered explicitly (before apiResource) so it can carry a role gate
+        // while index/show remain open to any authenticated user.
+        Route::post('purchase-receipts', [PurchaseReceiptController::class, 'store'])
+            ->middleware(EnsureRole::class . ':super_admin,maintenance_admin,maintenance_staff')
+            ->name('purchase-receipts.store');
         Route::apiResource('purchase-receipts', PurchaseReceiptController::class)
-            ->except(['update', 'destroy'])
+            ->except(['store', 'update', 'destroy'])
             ->parameters(['purchase-receipts' => 'id']);
-        Route::post('purchase-receipts/{id}/items', [PurchaseReceiptController::class, 'addItem']);
-        Route::post('purchase-receipts/{id}/post',  [PurchaseReceiptController::class, 'postReceipt']);
+        // TASK H — bulk entry. Registered BEFORE the single-item route so the
+        // literal "bulk" segment is matched first. Same role gate as addItem:
+        // bulk entry is the same operation performed N times, so it must not be
+        // reachable by anyone who could not already add a line individually.
+        Route::post('purchase-receipts/{id}/items/bulk', [PurchaseReceiptController::class, 'addItems'])
+            ->middleware(EnsureRole::class . ':super_admin,maintenance_admin,maintenance_staff');
+        Route::post('purchase-receipts/{id}/items', [PurchaseReceiptController::class, 'addItem'])
+            ->middleware(EnsureRole::class . ':super_admin,maintenance_admin,maintenance_staff');
+        Route::post('purchase-receipts/{id}/post',  [PurchaseReceiptController::class, 'postReceipt'])
+            ->middleware(EnsureRole::class . ':super_admin,maintenance_admin,maintenance_staff');
 
         // Inventory stock management
         Route::prefix('inventory-stock')->group(function (): void {
@@ -296,30 +429,92 @@ Route::prefix('api')->group(function (): void {
             Route::get('summary',           [InventoryStockController::class, 'summary']);
             Route::get('entries',           [InventoryStockController::class, 'listEntries']);
             Route::get('{id}/transactions', [InventoryStockController::class, 'transactions']);
-            Route::put('{id}',              [InventoryStockController::class, 'update']);
-            Route::delete('{id}',           [InventoryStockController::class, 'destroy']);
-            Route::post('{id}/adjust',      [InventoryStockController::class, 'adjust']);
-            Route::post('{id}/deploy',      [InventoryStockController::class, 'deploy']);
+            Route::put('{id}',              [InventoryStockController::class, 'update'])
+                ->middleware(EnsureRole::class . ':super_admin,maintenance_admin');
+            Route::delete('{id}',           [InventoryStockController::class, 'destroy'])
+                ->middleware(EnsureRole::class . ':super_admin,maintenance_admin');
+            Route::post('{id}/adjust',      [InventoryStockController::class, 'adjust'])
+                ->middleware(EnsureRole::class . ':super_admin,maintenance_admin');
+        });
+
+        // Preventive Maintenance module. RBAC per the confirmed plan:
+        // create/archive/activate are Administrator/Head Maintenance only;
+        // index/show/summary/options/history are open to any authenticated
+        // role (Maintenance Staff sees the full list, per "view all, edit
+        // only own"); update/complete carry the broader role gate here and
+        // the actual "own task only" restriction is enforced per-record
+        // inside PreventiveMaintenanceController via
+        // PreventiveMaintenanceService::canManageTask() — a role middleware
+        // alone cannot express an identity check, same reasoning as
+        // Dispatch's release-personnel restriction.
+        Route::prefix('preventive-maintenance')->group(function (): void {
+            Route::get('support/options', [PreventiveMaintenanceController::class, 'options']);
+            // TASK 11 — neutral personnel source for the PM assignee /
+            // performed-by selectors, replacing the page's former dependency
+            // on GET repairs/support/technicians. Delegates to the shared
+            // PersonnelDirectoryService, same as Dispatch's
+            // support/release-personnel (Task 65). No EnsureRole, matching
+            // both the sibling support/options route and the un-gated Repair
+            // endpoint it replaces — the data source moved, the access
+            // boundary did not. Registered with the other support/* routes so
+            // it resolves before {preventiveMaintenanceTask}.
+            Route::get('support/personnel', [PreventiveMaintenanceController::class, 'supportPersonnel']);
+            Route::get('summary', [PreventiveMaintenanceController::class, 'summary']);
+            // Registered ahead of the {preventiveMaintenanceTask} show route
+            // so these literal segments never get swallowed by route model
+            // binding as if "schedule-grid"/"checklist" were a task id.
+            Route::get('schedule-grid', [PreventiveMaintenanceController::class, 'scheduleGrid']);
+            Route::get('checklist', [PreventiveMaintenanceController::class, 'checklist']);
+            Route::get('', [PreventiveMaintenanceController::class, 'index']);
+            Route::post('', [PreventiveMaintenanceController::class, 'store'])
+                ->middleware(EnsureRole::class . ':super_admin,maintenance_admin');
+            Route::get('{preventiveMaintenanceTask}', [PreventiveMaintenanceController::class, 'show']);
+            Route::patch('{preventiveMaintenanceTask}', [PreventiveMaintenanceController::class, 'update'])
+                ->middleware(EnsureRole::class . ':super_admin,maintenance_admin,maintenance_staff');
+            Route::post('{preventiveMaintenanceTask}/complete', [PreventiveMaintenanceController::class, 'complete'])
+                ->middleware(EnsureRole::class . ':super_admin,maintenance_admin,maintenance_staff');
+            Route::post('{preventiveMaintenanceTask}/archive', [PreventiveMaintenanceController::class, 'archive'])
+                ->middleware(EnsureRole::class . ':super_admin,maintenance_admin');
+            Route::post('{preventiveMaintenanceTask}/activate', [PreventiveMaintenanceController::class, 'activate'])
+                ->middleware(EnsureRole::class . ':super_admin,maintenance_admin');
+            Route::get('{preventiveMaintenanceTask}/history', [PreventiveMaintenanceController::class, 'history']);
         });
 
         // Analytics and reporting endpoints (aggregates, trends, exports)
-        Route::prefix('analytics')->group(function (): void {
-            Route::get('options', [AnalyticsReportController::class, 'options']);
-            Route::get('overview', [AnalyticsReportController::class, 'overview']);
-            Route::get('top-requested', [AnalyticsReportController::class, 'topRequested']);
-            Route::get('top-repaired', [AnalyticsReportController::class, 'topRepaired']);
-            Route::get('monthly-comparison', [AnalyticsReportController::class, 'monthlyComparison']);
-            Route::get('department-usage', [AnalyticsReportController::class, 'departmentUsage']);
-            Route::get('semester-comparison', [AnalyticsReportController::class, 'semesterComparison']);
-            Route::get('inventory-health', [AnalyticsReportController::class, 'inventoryHealth']);
-            Route::get('inventory-summary', [AnalyticsReportController::class, 'inventorySummary']);
-            Route::get('low-stock', [AnalyticsReportController::class, 'lowStock']);
-            Route::get('damaged-items', [AnalyticsReportController::class, 'damagedItems']);
-            Route::get('dispatch-report', [AnalyticsReportController::class, 'dispatchReport']);
-            Route::get('repair-report', [AnalyticsReportController::class, 'repairReport']);
-            Route::get('replacement-report', [AnalyticsReportController::class, 'replacementReport']);
-            Route::get('semester-detail', [AnalyticsReportController::class, 'semesterDetail']);
-        });
+        // TASK 82 GAP #1 — previously had no EnsureRole at all (any
+        // authenticated session, including a pending/unapproved 'user'-role
+        // account, could reach every endpoint below). The frontend has
+        // always restricted the Analytics Dashboard nav link and page itself
+        // to super_admin/maintenance_admin/maintenance_staff (see
+        // includes/sidebar.php and pages/analytics-dashboard.php) — this
+        // just brings route-level enforcement in line with that existing,
+        // already-shipped access model instead of inventing a new one.
+        Route::prefix('analytics')
+            ->middleware(EnsureRole::class . ':super_admin,maintenance_admin,maintenance_staff')
+            ->group(function (): void {
+                Route::get('options', [AnalyticsReportController::class, 'options']);
+                Route::get('overview', [AnalyticsReportController::class, 'overview']);
+                Route::get('top-requested', [AnalyticsReportController::class, 'topRequested']);
+                // TASK 13 PHASE 8 — 'top-repaired' was removed here. It read
+                // repair_requests exclusively (topRepairedItems()), so it is
+                // Repair-only, not a shared inventory metric. 'top-requested'
+                // above is the Inventory/Dispatch metric and is untouched.
+                Route::get('monthly-comparison', [AnalyticsReportController::class, 'monthlyComparison']);
+                Route::get('department-usage', [AnalyticsReportController::class, 'departmentUsage']);
+                Route::get('semester-comparison', [AnalyticsReportController::class, 'semesterComparison']);
+                Route::get('inventory-health', [AnalyticsReportController::class, 'inventoryHealth']);
+                Route::get('inventory-summary', [AnalyticsReportController::class, 'inventorySummary']);
+                Route::get('low-stock', [AnalyticsReportController::class, 'lowStock']);
+                Route::get('damaged-items', [AnalyticsReportController::class, 'damagedItems']);
+                Route::get('dispatch-report', [AnalyticsReportController::class, 'dispatchReport']);
+                // TASK 13 PHASE 8 — 'repair-report' was removed here; it read
+                // repair_requests exclusively. 'dispatch-report' above and
+                // 'replacement-report' below are NOT Repair: replacementReport()
+                // reads damage_reports.replacement_transaction_id, which is
+                // Damage Report data and stays.
+                Route::get('replacement-report', [AnalyticsReportController::class, 'replacementReport']);
+                Route::get('semester-detail', [AnalyticsReportController::class, 'semesterDetail']);
+            });
     });
 });
 

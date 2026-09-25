@@ -118,12 +118,20 @@ class Notification {
         return $stmt->fetchAll();
     }
     
-    public function markAsRead($notificationId) {
+    /**
+     * TASK 52 — $userId is required and scopes the UPDATE so an authenticated
+     * user can only mark their OWN notifications as read. Previously this
+     * trusted the client-supplied notification_id alone: any logged-in user
+     * could pass another user's notification_id and mark it read (an IDOR).
+     * The Laravel API's equivalent endpoint (NotificationController) has
+     * always scoped by the session user; this legacy endpoint did not.
+     */
+    public function markAsRead($notificationId, $userId) {
         $this->ensureSchemaMetadata();
 
-        $query = "UPDATE notifications SET is_read = 1 WHERE {$this->primaryKey} = ?";
+        $query = "UPDATE notifications SET is_read = 1 WHERE {$this->primaryKey} = ? AND user_id = ?";
         $stmt = $this->pdo->prepare($query);
-        return $stmt->execute([$notificationId]);
+        return $stmt->execute([$notificationId, $userId]);
     }
     
     public function markAllAsRead($userId) {
@@ -140,11 +148,17 @@ class Notification {
         return $result['count'] ?? 0;
     }
     
-    public function delete($notificationId) {
+    /**
+     * TASK 52 — $userId is required and scopes the DELETE for the same
+     * ownership reason documented on markAsRead() above: without it, any
+     * authenticated user could delete another user's notification by guessing
+     * or enumerating notification_id.
+     */
+    public function delete($notificationId, $userId) {
         $this->ensureSchemaMetadata();
 
-        $query = "DELETE FROM notifications WHERE {$this->primaryKey} = ?";
+        $query = "DELETE FROM notifications WHERE {$this->primaryKey} = ? AND user_id = ?";
         $stmt = $this->pdo->prepare($query);
-        return $stmt->execute([$notificationId]);
+        return $stmt->execute([$notificationId, $userId]);
     }
 }

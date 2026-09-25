@@ -100,11 +100,68 @@ define('SESSION_TIMEOUT', 3600); // 1 hour
 define('SESSION_REGENERATE_INTERVAL', 600); // 10 minutes
 
 // Debug mode
-define('APP_DEBUG', true);
+//
+// TASK 100.2.3 remediation (2026-08-17): this used to hardcode APP_DEBUG to
+// `true` with no environment gate at all, independently of Laravel's own
+// APP_DEBUG (already fixed in Task 100.2.2). Tracing every file that loads
+// this settings.php (directly or via bootstrap.php) showed the debug flags
+// below are NOT limited to the _dev_guard.php-gated one-off admin scripts —
+// they are also active on public/frontend/pages/index.php (the login page,
+// always reachable without authentication), the project-root index.php
+// (every request to "/"), and the 37 authenticated frontend pages that
+// include includes/header.php. None of those are protected by
+// _dev_guard.php. With display_errors forced on unconditionally, any
+// uncaught PHP warning/notice/fatal error on any of those pages would have
+// printed raw error text — potentially including file paths and line
+// numbers — directly into the HTTP response for any visitor.
+//
+// Fix: read APP_DEBUG from the same .env value Laravel and
+// public/backend/config/database.php already use (via the same Dotenv
+// loader established in Task 100.1), defaulting to false when absent, so
+// nothing is displayed to an HTTP client unless a developer explicitly
+// opts in via .env. This file is often loaded standalone, without
+// database.php (e.g. by the login page and header.php), so it cannot rely
+// on database.php's sfmsBackendEnv() helper already being defined — the
+// loader below is self-contained and uses a distinctly-named helper
+// (sfmsLegacyEnv, not sfmsBackendEnv) to avoid a "cannot redeclare"
+// collision on the request path where bootstrap.php loads both files.
+if (!function_exists('sfmsLegacyEnv')) {
+    function sfmsLegacyEnv(string $key, $default = null) {
+        $value = $_ENV[$key] ?? $_SERVER[$key] ?? getenv($key);
 
-// Error reporting (set to 0 in production)
+        if ($value === false || $value === null || $value === '') {
+            return $default;
+        }
+
+        return $value;
+    }
+}
+
+$sfmsSettingsProjectRoot = dirname(__DIR__, 3);
+$sfmsSettingsAutoload = $sfmsSettingsProjectRoot . '/vendor/autoload.php';
+
+if (is_file($sfmsSettingsAutoload)) {
+    require_once $sfmsSettingsAutoload;
+
+    if (class_exists(\Dotenv\Dotenv::class) && is_file($sfmsSettingsProjectRoot . '/.env')) {
+        // safeLoad(): never overwrites a real OS-level env var that is
+        // already set; safe to call again even if database.php also calls
+        // it later in the same request.
+        \Dotenv\Dotenv::createImmutable($sfmsSettingsProjectRoot)->safeLoad();
+    }
+}
+
+$sfmsLegacyDebugEnabled = filter_var(sfmsLegacyEnv('APP_DEBUG', false), FILTER_VALIDATE_BOOLEAN);
+
+define('APP_DEBUG', $sfmsLegacyDebugEnabled);
+
+// Error reporting: keep reporting everything so real bugs are still fully
+// captured server-side (log_errors is On, writing to PHP's configured
+// error_log — confirmed independently of this change), but only print
+// errors into the HTTP response when APP_DEBUG is explicitly enabled via
+// .env. This preserves diagnostics without exposing them to HTTP clients.
 error_reporting(E_ALL);
-ini_set('display_errors', 1);
+ini_set('display_errors', $sfmsLegacyDebugEnabled ? '1' : '0');
 
 if (!function_exists('sfms_public_base_path')) {
     function sfms_public_base_path() {

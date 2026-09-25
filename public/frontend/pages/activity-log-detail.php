@@ -44,11 +44,10 @@ function getActivityLogId() {
 }
 
 function activityDetailNotify(message, type = 'danger') {
-    if (window.Components && typeof Components.alert === 'function') {
-        Components.alert(message, type);
-        return;
-    }
-    window.alert(message);
+    // UI_BROWSER_DIALOG_REPLACEMENT — Components/UI are always loaded (see
+    // includes/footer.php), so this always goes through the reusable
+    // in-app modal; no window.alert() fallback.
+    Components.alert(message, type);
 }
 
 function escapeActivityDetailHtml(value) {

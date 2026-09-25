@@ -21,11 +21,31 @@ include __DIR__ . '/../includes/header.php';
 ?>
 
 <link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/maintenance-dashboard.css">
-<link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/maintenance-dashboard.inline.css">
-<link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/inventory.inline.css?v=20260413-1">
-<link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/replacement-tracking.inline.css?v=20260424-1">
+<link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/maintenance-dashboard.inline.css?v=20260921-2">
+<link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/inventory.inline.css?v=20260921-2">
+<?php /* Token bumped with inventory.php's: this page shares
+         inventory-redesign.css AND the `main.inventory-page` class, so the
+         container border token applies here too. Leaving the old token would
+         serve this page a cached grey-bordered copy while inventory.php —
+         one click away via its Replacement Tracking button — shows lavender. */ ?>
+<link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/inventory-redesign.css?v=20260921-3">
+<link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/replacement-tracking.inline.css?v=20260921-2">
 
 <main class="container maintenance-admin-dashboard-page inventory-page replacement-tracking-page">
+    <div class="card inventory-page-header-card">
+        <div class="card-body inventory-page-header-body">
+            <div class="page-header inventory-header-row inventory-page-header-row">
+                <div>
+                    <h1 class="inventory-title">Replacement Tracking</h1>
+                    <p class="text-muted inventory-subtitle">Track item replacement requests from pending approval through disposal.</p>
+                </div>
+                <div class="inventory-header-actions">
+                    <a href="<?php echo htmlspecialchars(public_url('/frontend/pages/inventory.php')); ?>" class="btn btn-secondary">Back to Inventory</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="replacement-summary-grid" id="replacement-summary-grid">
         <div class="summary-card replacement-summary-card tone-pending">
             <div class="summary-card-content">

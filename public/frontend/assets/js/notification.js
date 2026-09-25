@@ -20,7 +20,7 @@ const NotificationManager = {
      * per-record 403, not re-implementing a permission rule client-side).
      * `build` returns the existing detail page URL for that entity — again
      * no new pages, just the ones report-detail.php / dispatch-detail.php /
-     * repair-detail.php / damage-report-detail.php / users.php already are.
+     * damage-report-detail.php / users.php already are.
      *
      * 'user' has no GET /api/users/{id} endpoint (only the super_admin-only
      * list endpoint exists), so it is marked clientOnly and checked via the
@@ -40,10 +40,17 @@ const NotificationManager = {
             check: (id) => (window.SFMS_PUBLIC_URL ? window.SFMS_PUBLIC_URL(`/api/dispatches/${id}`) : `/api/dispatches/${id}`),
             build: (id) => (window.SFMS_PUBLIC_URL ? window.SFMS_PUBLIC_URL('/frontend/pages/dispatch-detail.php') : '/frontend/pages/dispatch-detail.php') + `?id=${id}`,
         },
-        repair_request: {
-            check: (id) => (window.SFMS_PUBLIC_URL ? window.SFMS_PUBLIC_URL(`/api/repairs/${id}`) : `/api/repairs/${id}`),
-            build: (id) => (window.SFMS_PUBLIC_URL ? window.SFMS_PUBLIC_URL('/frontend/pages/repair-detail.php') : '/frontend/pages/repair-detail.php') + `?id=${id}`,
-        },
+        // TASK 12 — the 'repair_request' entity route was removed here. It
+        // built a deep link to repair-detail.php, which this task deletes, so
+        // keeping it would have sent a user from the notification bell to a
+        // page that no longer exists.
+        //
+        // Removal degrades gracefully rather than throwing: resolveNotification-
+        // Target() looks the type up with ENTITY_ROUTES[entityType], so an
+        // unmapped type simply yields undefined and falls through to the same
+        // Task 13.1 text-extraction path that every pre-entity-column
+        // notification already uses. No notification rows carry this type
+        // today, so nothing in the current data set changes behaviour.
         damage_report: {
             check: (id) => (window.SFMS_PUBLIC_URL ? window.SFMS_PUBLIC_URL(`/api/damage-reports/${id}`) : `/api/damage-reports/${id}`),
             build: (id) => (window.SFMS_PUBLIC_URL ? window.SFMS_PUBLIC_URL('/frontend/pages/damage-report-detail.php') : '/frontend/pages/damage-report-detail.php') + `?id=${id}`,
@@ -525,15 +532,36 @@ const NotificationManager = {
         }
     },
     
+    // TASK 7 — these five were emoji ('📋', '⚠️', '✅', '📌', 'ℹ️', falling back
+    // to '🔔'). They are now names from the shared icon registry, rendered as
+    // inline SVG by UIIcons so they match the bell and the server-rendered
+    // notification rows in header.php exactly. The notification's title and
+    // message sit right beside the icon, so it stays decorative.
+    //
+    // The mapping is unchanged in meaning: only the glyph is different. The
+    // status/type strings themselves are untouched.
     getIcon(type) {
         const icons = {
-            'report': '📋',
-            'urgent': '⚠️',
-            'completed': '✅',
-            'assigned': '📌',
-            'low': 'ℹ️'
+            'report': 'clipboard-list',
+            'urgent': 'alert-triangle',
+            'completed': 'check-circle',
+            'assigned': 'pin',
+            'low': 'info'
         };
-        return icons[type] || '🔔';
+        const name = icons[type] || 'bell';
+        const tone = {
+            'urgent': ' ui-icon-warning',
+            'completed': ' ui-icon-success',
+            'low': ' ui-icon-info'
+        }[type] || '';
+
+        // Defensive: if ui-icons.js somehow has not loaded, render nothing
+        // rather than reintroducing an emoji.
+        if (!window.UIIcons) {
+            return '';
+        }
+
+        return window.UIIcons.svg(name, { size: 18, className: tone.trim() });
     },
     
     getTimeAgo(dateString) {

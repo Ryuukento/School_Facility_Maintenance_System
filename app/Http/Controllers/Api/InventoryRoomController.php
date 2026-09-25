@@ -14,7 +14,12 @@ class InventoryRoomController extends Controller
 
     /**
      * GET /api/inventory-rooms
-     * List active inventory rooms (bodegas/stockrooms) with item counts.
+     * List active inventory rooms with item counts.
+     *
+     * TASK 6B PHASE 2 — inventory rooms are no longer a user-facing concept:
+     * the UI now presents one centralized Inventory. This controller and its
+     * routes are intentionally left in place and unchanged as an internal
+     * implementation detail; no page calls them any more.
      * Supports: q, per_page, page
      * Response: { success, data: { rooms: [{id, name, code, description,
      *   is_active, sort_order, item_count, total_quantity}], pagination } }

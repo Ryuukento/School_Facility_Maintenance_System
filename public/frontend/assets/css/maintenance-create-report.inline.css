@@ -116,7 +116,7 @@
     color: #e5eefc;
     text-align: left;
     cursor: pointer;
-    transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+    transition: border-color 0.18s ease, background 0.18s ease;
 }
 
 .need-change-result-item span {
@@ -127,7 +127,6 @@
 .need-change-result-item.active {
     border-color: rgba(139, 92, 246, 0.38);
     background: rgba(49, 46, 129, 0.34);
-    transform: translateY(-1px);
 }
 
 .need-change-empty {

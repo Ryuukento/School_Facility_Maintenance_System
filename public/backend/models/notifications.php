@@ -63,7 +63,9 @@ try {
             if ($notificationId <= 0) {
                 throw new Exception('Notification ID is required');
             }
-            $notification->markAsRead($notificationId);
+            // TASK 52 — $userId passed through so Notification::markAsRead()
+            // can scope the UPDATE to the caller's own notifications (IDOR fix).
+            $notification->markAsRead($notificationId, $userId);
             echo json_encode(['success' => true, 'message' => 'Marked as read']);
             break;
             
@@ -77,7 +79,9 @@ try {
             if ($notificationId <= 0) {
                 throw new Exception('Notification ID is required');
             }
-            $notification->delete($notificationId);
+            // TASK 52 — $userId passed through so Notification::delete() can
+            // scope the DELETE to the caller's own notifications (IDOR fix).
+            $notification->delete($notificationId, $userId);
             echo json_encode(['success' => true, 'message' => 'Notification deleted']);
             break;
             
@@ -92,7 +96,42 @@ try {
         default:
             throw new Exception('Invalid action');
     }
+} catch (PDOException $e) {
+    // TASK 59 — Legacy Public Backend Shim Audit. This endpoint previously had
+    // only the generic `catch (Exception)` below, which returned
+    // $e->getMessage() verbatim to the HTTP client. PDOException extends
+    // Exception, and the legacy PDO handle is built with
+    // PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION
+    // (public/backend/config/database.php:67), so any database failure was
+    // caught there and its message — which can carry the SQLSTATE code, the
+    // literal SQL, and column/constraint names — was echoed into the response
+    // body. This mirrors the disclosure TASK 55 fixed in
+    // FacilityService::createBuilding() (services/FacilityService.php:66-78);
+    // Task 55 audited the legacy services and did not reach this procedural
+    // endpoint. The `display_errors=0` hardening in config/settings.php does
+    // not mitigate it, because this is an explicit echo in application code
+    // rather than a PHP-emitted error.
+    //
+    // Caught BEFORE `Exception` deliberately: PDOException is a subclass, so
+    // the reverse order would leave this block unreachable. The full message
+    // is still captured server-side; only the client-facing copy changes. 500
+    // replaces the old blanket 400 because a database failure is not a client
+    // error.
+    Logger::error('Notifications endpoint database failure', [
+        'action'  => $action,
+        'user_id' => $userId,
+        'error'   => $e->getMessage(),
+    ]);
+    http_response_code(500);
+    echo json_encode([
+        'success' => false,
+        'message' => 'Unable to process notification request'
+    ]);
 } catch (Exception $e) {
+    // Retains $e->getMessage() on purpose: the only exceptions reaching here
+    // are the deliberate validation throws above ('Notification ID is
+    // required', 'Invalid action'), which are developer-authored literals and
+    // are this endpoint's only user-facing feedback.
     http_response_code(400);
     echo json_encode([
         'success' => false,

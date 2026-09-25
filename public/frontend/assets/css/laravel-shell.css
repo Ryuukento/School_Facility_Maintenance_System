@@ -25,57 +25,54 @@
     --shell-avatar-text: #ffffff;
     --shell-footer-text: #000000;
 
-    --sidebar-bg: linear-gradient(180deg, #f8f7ff 0%, #f2efff 58%, #ece8ff 100%);
-    --sidebar-hover: rgba(124, 58, 237, 0.1);
-    --sidebar-active: #7c3aed;
-    --sidebar-active-border: #8b5cf6;
-    --sidebar-text: #000000;
-    --sidebar-text-hover: #000000;
-    --glow-color: rgba(124, 58, 237, 0.22);
+    /* The --sidebar-* overrides that used to sit here (a pale lavender
+       gradient with near-black nav text) were removed.
+
+       This file is linked AFTER sidebar.css in layouts/app.blade.php, so those
+       six declarations won out over sidebar.css's own palette and would have
+       repainted the Blade shell's rail light while the legacy PHP pages' rail
+       rendered dark — the same sidebar, two different colours, depending on
+       which shell rendered the page.
+
+       sidebar.css is the single source of truth for sidebar colour. Only the
+       --shell-* tokens above, which style the top header and the main content
+       area, belong to this file. The main content stays LIGHT. */
 }
 
 body[data-user-role] {
     background: var(--shell-app-bg);
 }
 
-body[data-user-role] .top-header {
-    position: fixed;
-    top: 0;
-    left: var(--sidebar-width);
-    right: 0;
-    height: var(--header-height);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0 22px;
-    z-index: 1100;
-    background: var(--shell-header-bg);
-    border-bottom: 1px solid var(--shell-header-border);
-    backdrop-filter: blur(10px);
-}
+/* The .top-header block that used to open this section is gone along with the
+   bar itself. It was `position: fixed`, so unlike the legacy shell's static
+   .navbar it did NOT free its own space on removal — every offset derived from
+   var(--header-height) further down had to be reset by hand. Those resets are
+   marked "header removed" where they appear.
 
-body[data-user-role] .header-left,
-body[data-user-role] .header-right {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-}
+   Also deleted with it: .header-left/.header-right (flex wrappers that no
+   longer wrap anything), .header-title, .header-notifications, .notify-btn,
+   .notify-badge, .header-user, .header-avatar, .user-info, .user-name,
+   .user-role, and the leftover .theme-toggle-* rules. All of them were styling
+   nodes that only ever existed inside header.blade.php. Nothing in the sidebar
+   or main content used them — the Blade sidebar names its own classes and
+   reaches Account/Logout through nav items, not a user chip.
 
-body[data-user-role] .header-title {
-    font-size: 1.05rem;
-    font-weight: 800;
-    color: var(--shell-text-strong);
-    letter-spacing: 0.01em;
-}
+   --header-height itself is deliberately KEPT: sidebar.css still uses it to
+   size the sidebar's own brand block. Only the offsets go. */
 
+/* header removed: the button now floats over the light workspace instead of
+   sitting inside the bar (positioning is in sidebar.css, shared by both
+   shells). Colours pinned to match the legacy shell's copy in styles.css so the
+   same control looks the same whichever shell rendered the page — the --shell-*
+   tokens it used to read were chosen against the header's own surface. */
 body[data-user-role] .sidebar-toggle-mobile {
     display: none;
     width: 42px;
     height: 42px;
-    border: 1px solid var(--shell-border);
+    border: 1px solid rgba(124, 58, 237, 0.24);
     border-radius: 12px;
-    background: var(--shell-panel-bg);
-    color: var(--shell-text-strong);
+    background: #ffffff;
+    color: #5b21b6;
     align-items: center;
     justify-content: center;
     cursor: pointer;
@@ -86,114 +83,18 @@ body[data-user-role] .sidebar-toggle-mobile svg {
     height: 22px;
 }
 
-body[data-user-role] .header-notifications {
-    display: flex;
-    align-items: center;
-}
-
-body[data-user-role] .notify-btn {
-    position: relative;
-    width: 42px;
-    height: 42px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid var(--shell-border);
-    border-radius: 12px;
-    background: var(--shell-panel-bg);
-    color: var(--shell-text-strong);
-    cursor: pointer;
-}
-
-body[data-user-role] .theme-toggle-button {
-    width: 42px;
-    height: 42px;
-    border: 1px solid var(--shell-border);
-    border-radius: 12px;
-    background: var(--shell-panel-bg);
-    color: var(--shell-text-strong);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: transform 0.2s ease, opacity 0.2s ease;
-}
-
-body[data-user-role] .theme-toggle-button:hover,
-body[data-user-role] .notify-btn:hover,
 body[data-user-role] .sidebar-toggle-mobile:hover {
     transform: translateY(-1px);
     opacity: 0.95;
 }
 
-body[data-user-role] .theme-toggle-icon {
-    width: 20px;
-    height: 20px;
-}
-
-body[data-user-role] .notify-btn svg {
-    width: 20px;
-    height: 20px;
-}
-
-body[data-user-role] .notify-badge {
-    position: absolute;
-    top: -6px;
-    right: -6px;
-    min-width: 18px;
-    height: 18px;
-    padding: 0 5px;
-    border-radius: 999px;
-    background: #ef4444;
-    color: #fff;
-    font-size: 11px;
-    font-weight: 800;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    box-shadow: 0 6px 14px rgba(239, 68, 68, 0.35);
-}
-
-body[data-user-role] .header-user {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    color: var(--shell-text-strong);
-}
-
-body[data-user-role] .header-avatar {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    background: var(--shell-avatar-bg);
-    color: var(--shell-avatar-text);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 18px;
-    font-weight: 700;
-}
-
-body[data-user-role] .user-info {
-    display: flex;
-    flex-direction: column;
-    line-height: 1.2;
-}
-
-body[data-user-role] .user-name {
-    font-size: 0.95rem;
-    font-weight: 700;
-    color: var(--shell-text-strong);
-}
-
-body[data-user-role] .user-role {
-    font-size: 0.8rem;
-    color: var(--shell-text-muted);
-}
-
 body[data-user-role] .main-content {
     margin-left: var(--sidebar-width);
-    padding: calc(var(--header-height) + 24px) 24px 32px;
+    /* header removed: the top padding was calc(var(--header-height) + 24px),
+       clearing the fixed bar. With no bar there is nothing to clear, so this is
+       now just the content's own 24px breathing room — content starts at the
+       top of the viewport instead of 76px down. */
+    padding: 24px 24px 32px;
     min-height: 100vh;
 }
 
@@ -208,34 +109,35 @@ body[data-user-role] .app-footer {
     color: var(--shell-footer-text);
 }
 
+/* Sidebar chrome inside the Blade shell. These three used to assign light-
+   surface colours (indigo brand text, black section labels); against the dark
+   purple rail they were illegible, so they now defer to the sidebar's own
+   tokens. Main content is unaffected — every selector here is sidebar-only. */
 :root[data-theme-resolved='light'] .sidebar-header {
-    border-bottom-color: rgba(124, 58, 237, 0.16);
+    border-bottom-color: var(--sidebar-divider);
 }
 
 :root[data-theme-resolved='light'] .system-name {
-    color: #312e81;
+    color: var(--sidebar-profile-name);
 }
 
 :root[data-theme-resolved='light'] .nav-section-label {
-    color: #000000;
+    color: var(--sidebar-text-muted);
 }
 
+/* header removed: these two were pushed down by the fixed bar and shortened to
+   match. The rail and its overlay now start at y=0 and run the full viewport
+   height, so the sidebar occupies the space the header used to take. */
 body[data-user-role] .sidebar {
-    top: var(--header-height);
-    height: calc(100vh - var(--header-height));
+    top: 0;
+    height: 100vh;
 }
 
 body[data-user-role] .sidebar-overlay {
-    top: var(--header-height);
+    top: 0;
 }
 
 @media (max-width: 768px) {
-    body[data-user-role] .top-header {
-        left: 0;
-        width: 100%;
-        padding: 0 14px 0 10px;
-    }
-
     body[data-user-role] .sidebar-toggle-mobile {
         display: inline-flex;
     }
@@ -246,7 +148,10 @@ body[data-user-role] .sidebar-overlay {
     }
 
     body[data-user-role] .main-content {
-        padding: calc(var(--header-height) + 16px) 14px 24px;
+        /* header removed: was calc(var(--header-height) + 16px). The extra top
+           room now goes to the floating menu button instead — see the
+           .sidebar-toggle-mobile block in sidebar.css. */
+        padding: 74px 14px 24px;
     }
 
     body[data-user-role] .main-content > .container,
@@ -261,30 +166,20 @@ body[data-user-role] .sidebar-overlay {
         padding-right: 0;
     }
 
+    /* header removed: same reset as the desktop rules above. */
     body[data-user-role] .sidebar {
-        top: var(--header-height);
-        height: calc(100vh - var(--header-height));
+        top: 0;
+        height: 100vh;
     }
 
     body[data-user-role] .sidebar-overlay {
-        top: var(--header-height);
+        top: 0;
     }
 }
 
 @media (max-width: 480px) {
-    body[data-user-role] .top-header {
-        left: 0;
-        padding: 0 10px;
-    }
-
-    body[data-user-role] .header-title {
-        font-size: 0.95rem;
-    }
-
-    body[data-user-role] .header-user .user-info {
-        display: none;
-    }
-
+    /* header removed: the .top-header / .header-title / .header-user overrides
+       that were here styled nodes that no longer exist. */
     body[data-user-role] .main-content {
         padding-left: 10px;
         padding-right: 10px;

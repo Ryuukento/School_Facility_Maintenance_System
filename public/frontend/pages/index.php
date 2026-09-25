@@ -24,20 +24,13 @@ if (isset($_SESSION['auth_user']) || isset($_SESSION['user'])) {
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="<?php echo htmlspecialchars(public_url('/frontend/assets/css/styles.css?v=20260415-1')); ?>">
-    <link rel="stylesheet" href="<?php echo htmlspecialchars(public_url('/frontend/assets/css/color-scheme.css?v=20260415-1')); ?>">
-    <link rel="stylesheet" href="<?php echo htmlspecialchars(public_url('/frontend/assets/css/login.css?v=20260415-1')); ?>">
+    <link rel="stylesheet" href="<?php echo htmlspecialchars(public_url('/frontend/assets/css/styles.css?v=20260921-2')); ?>">
+    <link rel="stylesheet" href="<?php echo htmlspecialchars(public_url('/frontend/assets/css/color-scheme.css?v=20260921-2')); ?>">
+    <link rel="stylesheet" href="<?php echo htmlspecialchars(public_url('/frontend/assets/css/login.css?v=20260923-1')); ?>">
 </head>
 <body>
 
 <main class="login-container">
-    <header class="page-auth-header">
-        <img src="<?php echo htmlspecialchars(public_url('/frontend/assets/images/logo.png')); ?>" alt="School Logo" class="page-auth-logo">
-        <div class="page-auth-text">
-            <span class="page-auth-title">School Facility Maintenance</span>
-            <span class="page-auth-subtitle">Philippine College of Science &amp; Technology</span>
-        </div>
-    </header>
     <div class="card">
         <section class="form-panel">
             <div class="form-panel-inner">
@@ -50,29 +43,40 @@ if (isset($_SESSION['auth_user']) || isset($_SESSION['user'])) {
                 </div>
 
                 <form id="login-form" autocomplete="off">
+                    <span class="signin-accent-line" aria-hidden="true"></span>
                     <h2 class="auth-title">Sign In</h2>
-                    <p class="auth-subtitle">Use your school account credentials to continue</p>
+                    <p class="auth-subtitle">Access your account to continue</p>
 
                     <div class="form-group">
-                        <label for="email">Username</label>
-                        <input
-                            type="text"
-                            id="email"
-                            name="email"
-                            placeholder="Enter your username"
-                            autocomplete="off"
-                            value=""
-                            required>
+                        <label for="username">Username</label>
+                        <div class="input-icon-wrapper">
+                            <svg class="input-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+                                <path d="M12 12C14.4853 12 16.5 9.98528 16.5 7.5C16.5 5.01472 14.4853 3 12 3C9.51472 3 7.5 5.01472 7.5 7.5C7.5 9.98528 9.51472 12 12 12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M4 20.4C4.8 17 8.1 14.5 12 14.5C15.9 14.5 19.2 17 20 20.4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                            <input
+                                type="text"
+                                id="username"
+                                name="username"
+                                placeholder="Enter your username"
+                                autocomplete="off"
+                                value=""
+                                required>
+                        </div>
                     </div>
 
                     <div class="form-group">
                         <label for="password">Password</label>
                         <div class="password-field-wrapper">
+                            <svg class="input-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+                                <rect x="5" y="10.5" width="14" height="10" rx="2" stroke="currentColor" stroke-width="2"/>
+                                <path d="M8 10.5V7.5C8 5.29086 9.79086 3.5 12 3.5C14.2091 3.5 16 5.29086 16 7.5V10.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            </svg>
                             <input
                                 type="password"
                                 id="password"
                                 name="password"
-                                placeholder="Password"
+                                placeholder="Enter your password"
                                 autocomplete="new-password"
                                 value=""
                                 required>
@@ -93,7 +97,13 @@ if (isset($_SESSION['auth_user']) || isset($_SESSION['user'])) {
                         <button type="button" class="forgot-password-link" id="show-forgot-password-btn">Forgot password?</button>
                     </div>
 
-                    <button type="submit" class="btn btn-primary btn-block" id="login-btn">Sign In</button>
+                    <button type="submit" class="btn btn-primary btn-block" id="login-btn">
+                        <svg class="btn-arrow-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+                            <path d="M5 12H19" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M13 6L19 12L13 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        <span>Sign In</span>
+                    </button>
                 </form>
 
                 <form id="forgot-password-form" class="form-hidden" autocomplete="off">
@@ -138,6 +148,26 @@ if (isset($_SESSION['auth_user']) || isset($_SESSION['user'])) {
                         <div class="field-error-text">Name must contain only letters, spaces, and hyphens (no numbers)</div>
                     </div>
 
+                    <div class="form-group" id="register-username-group">
+                        <label for="register_username">Username</label>
+                        <input
+                            type="text"
+                            id="register_username"
+                            name="register_username"
+                            placeholder="e.g. juan_dela_cruz"
+                            autocomplete="off"
+                            autocapitalize="off"
+                            autocorrect="off"
+                            spellcheck="false"
+                            readonly
+                            value=""
+                            required>
+                        <!-- TASK 81 Part 1 — this is the identifier login() authenticates
+                             against; same required/min:3/max:50/unique rule as the
+                             Administrator-facing Create User modal (users.php). -->
+                        <div class="field-error-text">Username must be 3-50 characters: letters, numbers, and underscores only</div>
+                    </div>
+
                     <div class="form-group" id="register-email-group">
                         <label for="register_email">Email</label>
                         <input
@@ -149,6 +179,9 @@ if (isset($_SESSION['auth_user']) || isset($_SESSION['user'])) {
                             readonly
                             value=""
                             required>
+                        <!-- Email is no longer the login identifier (see username field
+                             above) but stays required: still used for contact / account
+                             recovery notifications (see forgotPasswordRequest() flow). -->
                         <div class="field-error-text">Please enter a valid email address</div>
                     </div>
 
@@ -188,25 +221,75 @@ if (isset($_SESSION['auth_user']) || isset($_SESSION['user'])) {
                     <button type="button" class="btn btn-secondary btn-block" id="show-login-btn">Back to Sign In</button>
 
                 </form>
+
+                <!-- TASK F (login redesign v2) — "Secure Access" divider
+                     row, per spec section 11. Sits outside all three forms
+                     (like the footer below it) so it's always visible
+                     regardless of which one is active. The flanking lines
+                     are purely decorative (aria-hidden); "Secure Access"
+                     itself is left readable to assistive tech since it's
+                     a real trust/status message, not decoration. -->
+                <div class="secure-access-row">
+                    <span class="secure-access-line" aria-hidden="true"></span>
+                    <span class="secure-access-text">Secure Access</span>
+                    <span class="secure-access-line" aria-hidden="true"></span>
+                </div>
+
+                <!-- TASK #16B — small, muted footer at the bottom of the
+                     right panel. Sits outside all three forms so it stays
+                     visible regardless of which one is active; purely
+                     decorative, no functional element, no ARIA needed.
+                     TASK F (login redesign v2): no dynamic-year mechanism
+                     existed anywhere in this page prior to this task (this
+                     was verified before editing, per the brief's explicit
+                     instruction to preserve one if it existed) -- the year
+                     stays the same static "2026" it already was; only the
+                     trailing "All rights reserved." copy is new. -->
+                <p class="auth-footer">&copy; 2026 Philippine College of Science &amp; Technology. All rights reserved.</p>
             </div>
         </section>
 
         <aside class="pitch-panel">
             <div class="pitch-content">
-                <div class="form-brand">
-                    <img src="<?php echo htmlspecialchars(public_url('/frontend/assets/images/logo.png')); ?>" alt="School Logo">
-                    <div class="form-brand-text">
-                        <div class="form-brand-name">Philippine College of Science &amp; Technology</div>
-                        <div class="form-brand-subtitle">Institutional Facility Management System</div>
+                <!-- TASK F (login redesign v2) — top tagline and bottom
+                     campus-life text now flank .pitch-brand-group as its
+                     siblings. .pitch-brand-group centers itself vertically
+                     via its own `margin: auto 0` (see login.css), which
+                     absorbs all of .pitch-content's free space and
+                     naturally pins these two new siblings to the panel's
+                     top and bottom edges -- no extra positioning needed. -->
+                <p class="pitch-tagline">SERVICE &bull; FACILITIES &bull; A BETTER CAMPUS</p>
+
+                <!-- Branding refinement: the logo, school name/subtitle, and
+                     system title now live together in one grouped, centered
+                     composition (.pitch-brand-group) instead of being split
+                     to the top and bottom of the panel via the old
+                     space-between layout. The system title is no longer
+                     wrapped in its own bordered/boxed container -- it's
+                     plain text under a thin divider, integrated with the
+                     rest of the branding. See login.css's "LEFT PANEL
+                     BRANDING REFINEMENT" block for the styling and for why
+                     .pitch-image-wrap's old rules were left in place
+                     (inert) elsewhere in that file. -->
+                <div class="pitch-brand-group">
+                    <div class="form-brand">
+                        <img src="<?php echo htmlspecialchars(public_url('/frontend/assets/images/logo.png')); ?>" alt="School Logo">
+                        <div class="form-brand-text">
+                            <div class="form-brand-name">Philippine College of Science &amp; Technology</div>
+                            <div class="form-brand-subtitle">Institutional Facility Management System</div>
+                        </div>
                     </div>
+                    <span class="pitch-divider" aria-hidden="true"></span>
+                    <p class="pitch-system-title">PHILCST CENTRALIZED SCHOOL FACILITY MAINTENANCE REPORT MANAGEMENT SYSTEM</p>
                 </div>
-                <div class="pitch-image-wrap">
-                    <img
-                        id="auth-pitch-image"
-                        src="<?php echo htmlspecialchars(public_url('/frontend/assets/images/3.jpg')); ?>"
-                        alt="PhilCST Campus"
-                        loading="lazy">
-                </div>
+
+                <!-- No existing project image was a suitable "campus/
+                     building" photo (see login.css's comment above
+                     .pitch-campus-text for the asset survey) -- per the
+                     brief's explicit instruction not to invent/download one,
+                     this is plain script-style text on the panel's own dark
+                     gradient rather than an image treatment. -->
+                <p class="pitch-campus-text">A Better Learning Environment</p>
             </div>
         </aside>
 
@@ -228,7 +311,7 @@ if (isset($_SESSION['auth_user']) || isset($_SESSION['user'])) {
     };
 </script>
 <script src="<?php echo htmlspecialchars(public_url('/frontend/assets/js/utils.js?v=20260816')); ?>"></script>
-<script src="<?php echo htmlspecialchars(public_url('/frontend/assets/js/api.js?v=20260816')); ?>"></script>
+<script src="<?php echo htmlspecialchars(public_url('/frontend/assets/js/api.js?v=20260820')); ?>"></script>
 
 <script>
 // Disable zoom and scroll jumping on all devices
@@ -256,11 +339,12 @@ document.addEventListener('keydown', (event) => {
 
 // Prevent browser autofill from populating login fields
 document.addEventListener('DOMContentLoaded', () => {
-    const emailInput = document.getElementById('email');
+    const usernameInput = document.getElementById('username');
     const passwordInput = document.getElementById('password');
     const rememberMeInput = document.getElementById('remember_me');
     const registerInputIds = [
         'register_full_name',
+        'register_username',
         'register_email',
         'register_password',
         'register_confirm_password',
@@ -269,10 +353,10 @@ document.addEventListener('DOMContentLoaded', () => {
         'forgot_password',
         'forgot_confirm_password'
     ];
-    if (emailInput) {
-        emailInput.value = '';
-        emailInput.readOnly = true;
-        emailInput.addEventListener('focus', () => { emailInput.readOnly = false; }, { once: true });
+    if (usernameInput) {
+        usernameInput.value = '';
+        usernameInput.readOnly = true;
+        usernameInput.addEventListener('focus', () => { usernameInput.readOnly = false; }, { once: true });
     }
     if (passwordInput) {
         passwordInput.value = '';
@@ -280,24 +364,24 @@ document.addEventListener('DOMContentLoaded', () => {
         passwordInput.addEventListener('focus', () => { passwordInput.readOnly = false; }, { once: true });
     }
 
-    if (emailInput && rememberMeInput) {
-        const rememberedEmail = localStorage.getItem('sfms_remembered_email');
-        if (rememberedEmail) {
-            emailInput.value = rememberedEmail;
+    if (usernameInput && rememberMeInput) {
+        const rememberedUsername = localStorage.getItem('sfms_remembered_username');
+        if (rememberedUsername) {
+            usernameInput.value = rememberedUsername;
             rememberMeInput.checked = true;
         }
 
         rememberMeInput.addEventListener('change', () => {
-            if (rememberMeInput.checked && emailInput.value.trim()) {
-                localStorage.setItem('sfms_remembered_email', emailInput.value.trim());
+            if (rememberMeInput.checked && usernameInput.value.trim()) {
+                localStorage.setItem('sfms_remembered_username', usernameInput.value.trim());
             } else if (!rememberMeInput.checked) {
-                localStorage.removeItem('sfms_remembered_email');
+                localStorage.removeItem('sfms_remembered_username');
             }
         });
 
-        emailInput.addEventListener('input', () => {
+        usernameInput.addEventListener('input', () => {
             if (rememberMeInput.checked) {
-                localStorage.setItem('sfms_remembered_email', emailInput.value.trim());
+                localStorage.setItem('sfms_remembered_username', usernameInput.value.trim());
             }
         });
     }
@@ -313,15 +397,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
 });
 
-// Ensure API is defined globally
-window.API = window.API || {
+// FORGOT PASSWORD FIX: this used to be `window.API = window.API || { ... }`.
+// api.js is loaded above (line ~254) and, since TASK 98.2 added
+// `window.API = API;` at the end of that file, window.API was ALWAYS already
+// truthy by the time this ran. The `||` therefore short-circuited and this
+// entire object literal was silently discarded — including register() and
+// forgotPasswordRequest(), which exist ONLY here and not in api.js.
+// Result: clicking "Submit Request" threw
+// `window.API.forgotPasswordRequest is not a function`, the handler's catch
+// showed the generic "Could not submit request." message, and no HTTP request
+// was ever sent (hence zero forgot_password_request entries in laravel.log).
+// Merge instead of replace: whatever api.js already exposes still wins, so
+// login() and every shared method behave exactly as before; only the methods
+// that are genuinely missing get filled in. See the Object.assign() below.
+const AUTH_PAGE_API = {
     baseURL: '<?php echo htmlspecialchars(rtrim(public_url('/api'), '/')); ?>',
-    async login(email, password) {
+    async login(username, password) {
         const response = await fetch(`${this.baseURL}/auth/login`, {
             method: 'POST',
             credentials: 'include',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, password })
+            body: JSON.stringify({ username, password })
         });
 
         const raw = await response.text();
@@ -357,12 +453,12 @@ window.API = window.API || {
         if (!data.success) throw new Error(data.message);
         return data;
     },
-    async forgotPasswordRequest(email) {
+    async forgotPasswordRequest(username) {
         const response = await fetch(`${this.baseURL}/auth/forgot_password_request`, {
             method: 'POST',
             credentials: 'include',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: email })
+            body: JSON.stringify({ username: username })
         });
         const raw = await response.text();
         let data;
@@ -380,6 +476,14 @@ window.API = window.API || {
         return data;
     }
 };
+
+// Existing window.API members (from api.js) take precedence, so nothing that
+// currently works changes. Only the methods api.js does not define —
+// register() and forgotPasswordRequest() — are added from AUTH_PAGE_API.
+// Both baseURL values resolve to the identical string
+// ('/School_Facility_Maintenance_System/api'), so `this.baseURL` inside the
+// restored methods is unaffected by api.js's copy winning.
+window.API = Object.assign(AUTH_PAGE_API, window.API || {});
 
 // Ensure Session is defined globally
 window.Session = window.Session || {
@@ -406,7 +510,7 @@ const alertContainer = document.getElementById('alert-container');
 const authCard = document.querySelector('.login-container .card');
 const loginPasswordInput = document.getElementById('password');
 const toggleLoginPasswordBtn = document.getElementById('toggle-login-password');
-const loginEmailInput = document.getElementById('email');
+const loginUsernameInput = document.getElementById('username');
 const loginBtn = document.getElementById('login-btn');
 const rememberMeInput = document.getElementById('remember_me');
 
@@ -417,16 +521,16 @@ const LOGIN_LOCK_DURATION_KEY_PREFIX = 'sfms_login_lock_duration_seconds:';
 const LOGIN_DEFAULT_BUTTON_TEXT = loginBtn ? loginBtn.innerHTML : 'Sign In';
 let loginLockInterval = null;
 
-function normalizeLoginLockEmail(email) {
-    return String(email || '').trim().toLowerCase();
+function normalizeLoginLockUsername(username) {
+    return String(username || '').trim().toLowerCase();
 }
 
-function getLoginLockStorageKey(email) {
-    return LOGIN_LOCK_STORAGE_KEY_PREFIX + normalizeLoginLockEmail(email);
+function getLoginLockStorageKey(username) {
+    return LOGIN_LOCK_STORAGE_KEY_PREFIX + normalizeLoginLockUsername(username);
 }
 
-function getLoginLockDurationKey(email) {
-    return LOGIN_LOCK_DURATION_KEY_PREFIX + normalizeLoginLockEmail(email);
+function getLoginLockDurationKey(username) {
+    return LOGIN_LOCK_DURATION_KEY_PREFIX + normalizeLoginLockUsername(username);
 }
 
 function formatCountdown(totalSeconds) {
@@ -437,9 +541,9 @@ function formatCountdown(totalSeconds) {
 }
 
 function setLoginControlsDisabled(disabled) {
-    if (loginEmailInput) {
-        loginEmailInput.disabled = disabled;
-        loginEmailInput.readOnly = disabled;
+    if (loginUsernameInput) {
+        loginUsernameInput.disabled = disabled;
+        loginUsernameInput.readOnly = disabled;
     }
 
     if (loginPasswordInput) {
@@ -460,11 +564,11 @@ function setLoginControlsDisabled(disabled) {
     }
 }
 
-function clearLoginLockState(email = '') {
-    const normalizedEmail = normalizeLoginLockEmail(email);
-    if (normalizedEmail) {
-        localStorage.removeItem(getLoginLockStorageKey(normalizedEmail));
-        localStorage.removeItem(getLoginLockDurationKey(normalizedEmail));
+function clearLoginLockState(username = '') {
+    const normalizedUsername = normalizeLoginLockUsername(username);
+    if (normalizedUsername) {
+        localStorage.removeItem(getLoginLockStorageKey(normalizedUsername));
+        localStorage.removeItem(getLoginLockDurationKey(normalizedUsername));
     }
 
     // Cleanup legacy keys from older builds where lockout was global.
@@ -498,14 +602,14 @@ function renderLoginLockAlert(countdown, progressPercent) {
     `;
 }
 
-function startLoginLockTimer(retryAfterSeconds, durationSeconds = null, email = '') {
-    const normalizedEmail = normalizeLoginLockEmail(email);
+function startLoginLockTimer(retryAfterSeconds, durationSeconds = null, username = '') {
+    const normalizedUsername = normalizeLoginLockUsername(username);
     const parsedRetry = Math.max(1, Number(retryAfterSeconds) || 300);
     const parsedDuration = Math.max(1, Number(durationSeconds) || parsedRetry);
     const lockUntilMs = Date.now() + (parsedRetry * 1000);
-    if (normalizedEmail) {
-        localStorage.setItem(getLoginLockStorageKey(normalizedEmail), String(lockUntilMs));
-        localStorage.setItem(getLoginLockDurationKey(normalizedEmail), String(parsedDuration));
+    if (normalizedUsername) {
+        localStorage.setItem(getLoginLockStorageKey(normalizedUsername), String(lockUntilMs));
+        localStorage.setItem(getLoginLockDurationKey(normalizedUsername), String(parsedDuration));
     }
 
     if (loginLockInterval) {
@@ -517,7 +621,7 @@ function startLoginLockTimer(retryAfterSeconds, durationSeconds = null, email = 
         const remainingSeconds = Math.ceil((lockUntilMs - Date.now()) / 1000);
 
         if (remainingSeconds <= 0) {
-            clearLoginLockState(normalizedEmail);
+            clearLoginLockState(normalizedUsername);
             alertContainer.innerHTML = '<div class="alert alert-success">Login lock has ended. You can try again now.</div>';
             return;
         }
@@ -537,29 +641,29 @@ function startLoginLockTimer(retryAfterSeconds, durationSeconds = null, email = 
 }
 
 function restoreLoginLockTimer() {
-    const email = normalizeLoginLockEmail(loginEmailInput ? loginEmailInput.value : '');
+    const username = normalizeLoginLockUsername(loginUsernameInput ? loginUsernameInput.value : '');
 
     // Remove legacy global lock keys from older builds.
     localStorage.removeItem(LOGIN_LOCK_STORAGE_KEY_LEGACY);
     localStorage.removeItem(LOGIN_LOCK_DURATION_KEY_LEGACY);
 
-    if (!email) {
+    if (!username) {
         return;
     }
 
-    const lockUntilMs = Number(localStorage.getItem(getLoginLockStorageKey(email)) || 0);
+    const lockUntilMs = Number(localStorage.getItem(getLoginLockStorageKey(username)) || 0);
     if (!lockUntilMs) {
         return;
     }
 
     const remainingSeconds = Math.ceil((lockUntilMs - Date.now()) / 1000);
-    const durationSeconds = Number(localStorage.getItem(getLoginLockDurationKey(email)) || remainingSeconds);
+    const durationSeconds = Number(localStorage.getItem(getLoginLockDurationKey(username)) || remainingSeconds);
     if (remainingSeconds <= 0) {
-        clearLoginLockState(email);
+        clearLoginLockState(username);
         return;
     }
 
-    startLoginLockTimer(remainingSeconds, durationSeconds, email);
+    startLoginLockTimer(remainingSeconds, durationSeconds, username);
 }
 
 function updatePasswordToggleIcon(toggleButton, passwordInput) {
@@ -604,7 +708,7 @@ function showRegisterForm() {
 
     registerForm.reset();
 
-    ['register_full_name', 'register_email', 'register_password', 'register_confirm_password'].forEach((id) => {
+    ['register_full_name', 'register_username', 'register_email', 'register_password', 'register_confirm_password'].forEach((id) => {
         const input = document.getElementById(id);
         if (!input) return;
 
@@ -654,39 +758,39 @@ showLoginForm();
 document.getElementById('login-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     
-    const email = document.getElementById('email').value.trim();
-    const normalizedEmail = normalizeLoginLockEmail(email);
+    const username = document.getElementById('username').value.trim();
+    const normalizedUsername = normalizeLoginLockUsername(username);
     const password = document.getElementById('password').value;
     const rememberMe = document.getElementById('remember_me')?.checked;
-    const lockUntilMs = Number(localStorage.getItem(getLoginLockStorageKey(normalizedEmail)) || 0);
+    const lockUntilMs = Number(localStorage.getItem(getLoginLockStorageKey(normalizedUsername)) || 0);
     if (lockUntilMs > Date.now()) {
         const remainingSeconds = Math.ceil((lockUntilMs - Date.now()) / 1000);
-        const durationSeconds = Number(localStorage.getItem(getLoginLockDurationKey(normalizedEmail)) || remainingSeconds);
-        startLoginLockTimer(remainingSeconds, durationSeconds, normalizedEmail);
+        const durationSeconds = Number(localStorage.getItem(getLoginLockDurationKey(normalizedUsername)) || remainingSeconds);
+        startLoginLockTimer(remainingSeconds, durationSeconds, normalizedUsername);
         return;
     }
-    
+
     alertContainer.innerHTML = '';
-    
-    if (!email || !password) {
-        alertContainer.innerHTML = '<div class="alert alert-danger">Email and password are required</div>';
+
+    if (!username || !password) {
+        alertContainer.innerHTML = '<div class="alert alert-danger">Username and password are required</div>';
         return;
     }
-    
+
     const originalText = loginBtn ? loginBtn.innerHTML : LOGIN_DEFAULT_BUTTON_TEXT;
     loginBtn.innerHTML = 'Logging in...';
     loginBtn.disabled = true;
-    
+
     try {
-        const response = await window.API.login(email, password);
-        
+        const response = await window.API.login(username, password);
+
         if (response.success) {
-            clearLoginLockState(normalizedEmail);
+            clearLoginLockState(normalizedUsername);
 
             if (rememberMe) {
-                localStorage.setItem('sfms_remembered_email', email);
+                localStorage.setItem('sfms_remembered_username', username);
             } else {
-                localStorage.removeItem('sfms_remembered_email');
+                localStorage.removeItem('sfms_remembered_username');
             }
 
             window.Session.set('user', response.data.user);
@@ -711,7 +815,7 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
 
         if (Number(error?.status) === 429) {
             const retryAfterSeconds = Number(error?.data?.retry_after_seconds || 300);
-            startLoginLockTimer(retryAfterSeconds, retryAfterSeconds, normalizedEmail);
+            startLoginLockTimer(retryAfterSeconds, retryAfterSeconds, normalizedUsername);
             return;
         }
 
@@ -728,6 +832,10 @@ restoreLoginLockTimer();
 // Validation helper functions
 function isValidEmail(email) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function isValidUsername(username) {
+    return /^[a-z][a-z_]{2,49}$/.test(username);
 }
 
 function getPasswordStrength(password) {
@@ -748,6 +856,7 @@ function getPasswordStrength(password) {
 function updateFieldValidation(fieldId, isValid) {
     const groupMap = {
         register_full_name: 'register-name-group',
+        register_username: 'register-username-group',
         register_email: 'register-email-group',
         register_password: 'register-password-group',
         register_confirm_password: 'register-confirm-password-group'
@@ -806,6 +915,10 @@ function validateRegisterField(fieldId) {
             const name = field.value.trim();
             isValid = name.length >= 2 && isValidFullName(name);
         }
+    } else if (fieldId === 'register_username') {
+        if (field.value) {
+            isValid = isValidUsername(field.value.trim().toLowerCase());
+        }
     } else if (fieldId === 'register_email') {
         if (field.value) {
             isValid = isValidEmail(field.value.trim());
@@ -824,6 +937,9 @@ function validateRegisterField(fieldId) {
 document.getElementById('register_full_name').addEventListener('blur', () => validateRegisterField('register_full_name'));
 document.getElementById('register_full_name').addEventListener('change', () => validateRegisterField('register_full_name'));
 
+document.getElementById('register_username').addEventListener('blur', () => validateRegisterField('register_username'));
+document.getElementById('register_username').addEventListener('change', () => validateRegisterField('register_username'));
+
 document.getElementById('register_email').addEventListener('blur', () => validateRegisterField('register_email'));
 document.getElementById('register_email').addEventListener('change', () => validateRegisterField('register_email'));
 
@@ -837,6 +953,7 @@ document.getElementById('register-form').addEventListener('submit', async (e) =>
     e.preventDefault();
 
     const fullName = document.getElementById('register_full_name').value.trim();
+    const username = document.getElementById('register_username').value.trim().toLowerCase();
     const email = document.getElementById('register_email').value.trim();
     const password = document.getElementById('register_password').value;
     const confirmPassword = document.getElementById('register_confirm_password').value;
@@ -854,6 +971,14 @@ document.getElementById('register-form').addEventListener('submit', async (e) =>
         errorMessages.push('Name must contain only letters, spaces, apostrophes, and hyphens (no numbers).');
     } else {
         updateFieldValidation('register_full_name', true);
+    }
+
+    if (!isValidUsername(username)) {
+        updateFieldValidation('register_username', false);
+        hasErrors = true;
+        errorMessages.push('Username must be 3-50 characters: letters and underscores only (e.g. juan_dela_cruz).');
+    } else {
+        updateFieldValidation('register_username', true);
     }
 
     if (!isValidEmail(email)) {
@@ -893,6 +1018,7 @@ document.getElementById('register-form').addEventListener('submit', async (e) =>
     try {
         await window.API.register({
             full_name: fullName,
+            username,
             email,
             password
         });
@@ -900,6 +1026,7 @@ document.getElementById('register-form').addEventListener('submit', async (e) =>
         alertContainer.innerHTML = '<div class="alert alert-success">Registration submitted. Please wait for Administrator approval.</div>';
         registerForm.reset();
         document.getElementById('register-name-group').classList.remove('form-field-valid', 'form-field-error');
+        document.getElementById('register-username-group').classList.remove('form-field-valid', 'form-field-error');
         document.getElementById('register-email-group').classList.remove('form-field-valid', 'form-field-error');
         document.getElementById('register-password-group').classList.remove('form-field-valid', 'form-field-error');
         document.getElementById('register-confirm-password-group').classList.remove('form-field-valid', 'form-field-error');
@@ -915,10 +1042,10 @@ document.getElementById('register-form').addEventListener('submit', async (e) =>
 
 if (notifySuperAdminBtn) {
     notifySuperAdminBtn.addEventListener('click', async () => {
-        const forgotEmailInput = document.getElementById('forgot_email');
-        const email = forgotEmailInput ? forgotEmailInput.value.trim() : '';
+        const forgotUsernameInput = document.getElementById('forgot_email');
+        const username = forgotUsernameInput ? forgotUsernameInput.value.trim() : '';
 
-        if (!email || email.length < 3) {
+        if (!username || username.length < 3) {
             alertContainer.innerHTML = '<div class="alert alert-danger">Please enter your username.</div>';
             return;
         }
@@ -928,7 +1055,7 @@ if (notifySuperAdminBtn) {
         notifySuperAdminBtn.innerHTML = 'Submitting...';
 
         try {
-            const response = await window.API.forgotPasswordRequest(email);
+            const response = await window.API.forgotPasswordRequest(username);
             // Always show a clear, consistent message regardless of API response
             alertContainer.innerHTML = `<div class="alert alert-success" style="text-align:center;padding:16px;">
                 <strong>&#10003; Request Submitted Successfully</strong><br>

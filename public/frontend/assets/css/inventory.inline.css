@@ -455,6 +455,13 @@
     color: #ffffff;
 }
 
+.inventory-modal-subtitle {
+    margin: 4px 0 0;
+    font-size: 13px;
+    line-height: 1.45;
+    color: rgba(238, 243, 255, 0.65);
+}
+
 .inventory-modal-close {
     border: 0;
     background: transparent;
@@ -798,7 +805,11 @@ main.inventory-page .table tbody tr:hover td {
 :root[data-theme-resolved='light'] main.inventory-page .inventory-status-card,
 :root[data-theme-resolved='light'] .inventory-modal-content {
     background: #ffffff !important;
-    border-color: #e5e7eb !important;
+    /* (0,4,1) — this outranks the per-page card rules in inventory-redesign.css
+       and replacement-tracking.inline.css, so while it held a literal grey it
+       was the rule that actually painted every card on the Inventory and
+       Replacement Tracking pages. Now on the shared container token. */
+    border-color: var(--purple-border, #e5e7eb) !important;
     box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08) !important;
 }
 
@@ -820,7 +831,7 @@ main.inventory-page .table tbody tr:hover td {
 :root[data-theme-resolved='light'] main.inventory-page .inventory-category-card,
 :root[data-theme-resolved='light'] main.inventory-page .summary-card,
 :root[data-theme-resolved='light'] main.inventory-page .inventory-status-card {
-    border-color: #e5e7eb !important;
+    border-color: var(--purple-border, #e5e7eb) !important;
 }
 
 :root[data-theme-resolved='light'] main.inventory-page .inventory-category-card-icon,
@@ -829,12 +840,29 @@ main.inventory-page .table tbody tr:hover td {
     border-color: #d1d5db !important;
 }
 
+/* Cell rules follow the page's purple accent family instead of the slate
+   #e5e7eb. This rule is the one that had to change: it carries !important at
+   (0,5,3), so it owned every cell border on the page and the token applied to
+   `.inventory-items-table` over in inventory-redesign.css never reached the
+   screen. Split in two so the thead separator can stay a touch stronger than
+   the row rules.
+
+   The var() fallbacks are the old value verbatim, so if this sheet is ever
+   loaded without inventory-redesign.css (which is where the --inventory-*
+   tokens are declared) the cells render exactly as they did before. Nothing
+   else in the declaration changed — background and colour are untouched, and
+   the status badges still paint over these cells. */
 :root[data-theme-resolved='light'] main.inventory-page .table,
-:root[data-theme-resolved='light'] main.inventory-page .table thead th,
+:root[data-theme-resolved='light'] main.inventory-page .table thead th {
+    background: #ffffff !important;
+    color: #111827 !important;
+    border-color: var(--inventory-card-divider, #e5e7eb) !important;
+}
+
 :root[data-theme-resolved='light'] main.inventory-page .table tbody td {
     background: #ffffff !important;
     color: #111827 !important;
-    border-color: #e5e7eb !important;
+    border-color: var(--inventory-table-rule, #e5e7eb) !important;
 }
 
 :root[data-theme-resolved='light'] main.inventory-page .table tbody tr:nth-child(even) td,
@@ -852,14 +880,20 @@ main.inventory-page .table tbody tr:hover td {
 :root[data-theme-resolved='light'] .inventory-modal-content textarea {
     background: #ffffff !important;
     color: #111827 !important;
-    border-color: #d1d5db !important;
+    border-color: var(--purple-control, #d1d5db) !important;
 }
 
 :root[data-theme-resolved='light'] .inventory-modal-header,
 :root[data-theme-resolved='light'] .inventory-modal-footer,
 :root[data-theme-resolved='light'] .inventory-modal-body {
     background: #ffffff !important;
-    border-color: #e5e7eb !important;
+    /* Interior dividers of the modal shell, so these take the lighter token —
+       the modal's own outer edge is the one that gets --purple-border. */
+    border-color: var(--purple-border-light, #e5e7eb) !important;
+}
+
+:root[data-theme-resolved='light'] .inventory-modal-header .inventory-modal-subtitle {
+    color: #6b7280 !important;
 }
 
 :root[data-theme-resolved='light'] .inventory-modal-close {

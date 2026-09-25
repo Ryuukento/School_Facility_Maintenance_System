@@ -31,9 +31,16 @@ class AnalyticsReportController extends Controller
         $departments = \Illuminate\Support\Facades\DB::table('departments')->select(['department_id', 'name'])->orderBy('name')->get();
         $rooms = \Illuminate\Support\Facades\DB::table('rooms')->select(['id', 'name'])->orderBy('name')->get();
 
+        // TASK 13 PHASE 8 (Repair retirement) — the 'repairs' entry (the
+        // repair_requests.repair_status vocabulary) was removed here. It fed
+        // the status filter of the retired Repair Report only, and no frontend
+        // reads this payload's `statuses` key at all.
+        //
+        // 'items' is KEPT IN FULL, including 'for_repair'. That is an
+        // inventory item CONDITION from the items table's own status
+        // vocabulary, not a Repair Request status — it merely shares the word.
         $statuses = [
             'items' => ['available', 'low_stock', 'out_of_stock', 'damaged', 'for_repair'],
-            'repairs' => ['pending', 'assigned', 'in_progress', 'completed', 'archived'],
         ];
 
         return $this->ok('Options', ['categories' => $categories, 'departments' => $departments, 'rooms' => $rooms, 'statuses' => $statuses]);
@@ -60,12 +67,11 @@ class AnalyticsReportController extends Controller
         return $this->ok('Dispatch report', $data);
     }
 
-    public function repairReport(Request $request)
-    {
-        $filters = $request->only(['date_from', 'date_to', 'department_id', 'room_id']);
-        $data = $this->service->repairReport($filters);
-        return $this->ok('Repair report', $data);
-    }
+    // TASK 13 PHASE 8 (Repair retirement) — repairReport() was removed here
+    // along with its GET /api/analytics/repair-report route and the
+    // AnalyticsService method behind it. dispatchReport() above and
+    // replacementReport() below are Dispatch and Damage Report data
+    // respectively and are untouched.
 
     public function replacementReport(Request $request)
     {
@@ -88,12 +94,9 @@ class AnalyticsReportController extends Controller
         return $this->ok('Top requested items', $data);
     }
 
-    public function topRepaired(Request $request)
-    {
-        $filters = $request->only(['date_from', 'date_to']);
-        $data = $this->service->topRepairedItems($filters);
-        return $this->ok('Top repaired items', $data);
-    }
+    // TASK 13 PHASE 8 (Repair retirement) — topRepaired() was removed here
+    // along with its GET /api/analytics/top-repaired route.
+    // topRequested() above is the Inventory/Dispatch metric and stays.
 
     public function monthlyComparison(Request $request)
     {
@@ -123,7 +126,9 @@ class AnalyticsReportController extends Controller
 
     public function semesterDetail(Request $request)
     {
-        $year = max(2020, min((int) $request->integer('year', (int) now()->year), (int) now()->year));
-        return $this->ok('Semester detail', $this->service->semesterDetail($year));
+        // No $year param: the configured academic period (school_settings —
+        // the same source as the Dashboard's "Current Academic Session"
+        // card) is the single source of truth, and there is only one.
+        return $this->ok('Semester detail', $this->service->semesterDetail());
     }
 }

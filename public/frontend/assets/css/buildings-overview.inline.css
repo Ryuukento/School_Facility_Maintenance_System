@@ -146,7 +146,9 @@
     font-size: 28px;
     font-weight: 600;
     cursor: pointer;
-    color: #9ca3af;
+    /* Readability fix (2026-09-22): was #9ca3af (~2.5:1 on the white modal),
+       under WCAG's 3:1 floor for UI controls. */
+    color: #6b7280;
     transition: color 0.2s ease, transform 0.2s ease;
 }
 
@@ -286,7 +288,7 @@
     min-height: 46px;
     border-radius: 999px;
     background: #ffffff;
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--purple-control, #e5e7eb);
     color: #111827;
     box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.03);
 }
@@ -308,7 +310,7 @@
 }
 
 .room-category-filter {
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--purple-control, #e5e7eb);
     background: #ffffff;
     color: #6b7280;
     border-radius: 999px;
@@ -660,14 +662,15 @@
 /* Light theme overrides for Buildings Overview */
 :root[data-theme-resolved='light'] .buildings-page-container .card {
     background: #ffffff !important;
-    border: 1px solid #e5e7eb !important;
+    border: 1px solid var(--purple-border, #e5e7eb) !important;
     box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08) !important;
 }
 
+/* Interior dividers — lighter token, see the note in styles.css. */
 :root[data-theme-resolved='light'] .buildings-page-container .card-header,
 :root[data-theme-resolved='light'] .buildings-page-container .card-body {
     background: #ffffff !important;
-    border-color: #e5e7eb !important;
+    border-color: var(--purple-border-light, #e5e7eb) !important;
 }
 
 :root[data-theme-resolved='light'] .buildings-page-container #overviewTitle {

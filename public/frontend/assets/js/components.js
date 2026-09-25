@@ -69,12 +69,18 @@
         if (!json) return [];
         if (Array.isArray(json)) return json;
         if (json.data) {
+            if (Array.isArray(json.data.buildings)) return json.data.buildings;
             if (Array.isArray(json.data.departments)) return json.data.departments;
             if (Array.isArray(json.data.rooms)) return json.data.rooms;
             if (Array.isArray(json.data.users)) return json.data.users;
             if (Array.isArray(json.data.items)) return json.data.items;
             if (Array.isArray(json.data.reports)) return json.data.reports;
-            if (Array.isArray(json.data.repairs)) return json.data.repairs;
+            // TASK 13 PHASE 8 (Repair retirement) — the `repairs` probe was
+            // removed from this chain (and from the unwrapped chain below).
+            // The only payload that ever carried a `repairs` key was the
+            // deleted RepairController's index response; every other key in
+            // both chains belongs to an endpoint that still exists, so the
+            // fallthrough order for all remaining shapes is unchanged.
             if (Array.isArray(json.data.receipts)) return json.data.receipts;
             if (Array.isArray(json.data.data)) return json.data.data; // paginator
         }
@@ -82,7 +88,6 @@
         if (Array.isArray(json.rooms)) return json.rooms;
         if (Array.isArray(json.users)) return json.users;
         if (Array.isArray(json.reports)) return json.reports;
-        if (Array.isArray(json.repairs)) return json.repairs;
         return [];
     }
 
@@ -103,6 +108,7 @@
             this.displayKey = opts.displayKey || 'name';
             this.pageSize = opts.pageSize || 50;
             this.debounceMs = opts.debounceMs || 250;
+            this.onSelect = typeof opts.onSelect === 'function' ? opts.onSelect : null;
             this.list = null;
             this.timeout = null;
             this.init();
@@ -173,8 +179,8 @@
             if(!items || items.length === 0){ this.list.style.display='none'; return; }
             items.forEach(it=>{
                 const row = document.createElement('div'); row.className='search-item'; row.style.padding='8px'; row.style.cursor='pointer';
-                row.textContent = (it[this.displayKey] || '') + (it.code ? (' — ' + it.code) : '');
-                row.addEventListener('click', ()=>{ this.input.value = it[this.displayKey] || ''; this.hidden.value = it.id || it.department_id || it.user_id || it.room_id || ''; this.list.style.display='none'; });
+                row.textContent = (it[this.displayKey] || '') + ((it.code || it.asset_code) ? (' — ' + (it.code || it.asset_code)) : '');
+                row.addEventListener('click', ()=>{ this.input.value = it[this.displayKey] || ''; this.hidden.value = it.id || it.department_id || it.user_id || it.room_id || ''; this.list.style.display='none'; if (this.onSelect) this.onSelect(it); });
                 this.list.appendChild(row);
             });
             this.list.style.display = 'block';
@@ -184,16 +190,15 @@
     Components.SearchableSelect = SearchableSelect;
     Components.fetchJson = fetchJson;
     Components.resolveAppUrl = resolveAppUrl;
-    Components.toast = function(message, type='info', duration=4000){ if(window.UI && typeof UI.toast === 'function'){ UI.toast(message,type,duration); } else { console.log(type.toUpperCase(), message); } };
-    Components.confirm = function(message, yesLabel='Yes', noLabel='No'){ if(window.UI && typeof UI.systemConfirm === 'function'){ return UI.systemConfirm(message, yesLabel, noLabel); } return Promise.resolve(confirm(message)); };
-    Components.alert = function(message, type='info'){
-        if(window.UI && typeof UI.systemAlert === 'function'){ return UI.systemAlert(message, type); }
-        const _div = document.createElement('div');
-        _div.style.cssText = 'position:fixed;top:80px;right:20px;z-index:9999;background:#dc2626;color:white;padding:12px 20px;border-radius:8px;font-size:14px;box-shadow:0 4px 12px rgba(0,0,0,0.3);max-width:350px;';
-        _div.textContent = message;
-        document.body.appendChild(_div);
-        setTimeout(() => _div.remove(), 4000);
-    };
+    // UI_BROWSER_DIALOG_REPLACEMENT — Components.toast/confirm/alert are thin,
+    // page-facing wrappers around the single reusable UI.systemConfirm /
+    // UI.systemAlert / UI.toast modal system defined in utils.js. utils.js is
+    // loaded on every page before this file (see includes/footer.php), so
+    // `window.UI` is always present here; no window.alert/window.confirm
+    // fallback is used.
+    Components.toast = function(message, type='info', duration=4000){ UI.toast(message, type, duration); };
+    Components.confirm = function(message, yesLabel='Yes', noLabel='No', variant='danger'){ return UI.systemConfirm(message, yesLabel, noLabel, variant); };
+    Components.alert = function(message, type='info'){ return UI.systemAlert(message, type); };
 
     Components.setLoading = function(button, loading=true){ if(!button) return; if(loading){ button.dataset.origText = button.textContent; button.disabled = true; button.textContent = 'Please wait...'; } else { if(button.dataset.origText) button.textContent = button.dataset.origText; button.disabled = false; } };
 

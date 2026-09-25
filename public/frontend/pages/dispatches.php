@@ -12,20 +12,22 @@ if (!isset($_SESSION['user']) && !isset($_SESSION['auth_user'])) {
 $_dspUser = $_SESSION['user'] ?? $_SESSION['auth_user'] ?? [];
 $_dspRole = strtolower(trim((string)($_dspUser['role'] ?? '')));
 
-// TASK 13 — Dispatch creation is now Head Maintenance's alone. Creating a
-// dispatch means choosing the Release Personnel for it, and an Administrator
-// is explicitly not permitted to assign personnel. Keeping super_admin here
-// would surface a "New Dispatch" button that leads to a page which now
-// rejects them (dispatch-create.php) and an endpoint that now 403s
-// (EnsureRole:maintenance_admin on POST /api/dispatches), so all three gates
-// are aligned on the same single role.
-$canCreateDispatch = ($_dspRole === 'maintenance_admin');
+// TASK 41 — Administrator Create Dispatch Without Approval. Both Head
+// Maintenance and Administrator may now create dispatches; they follow
+// different workflows (Head -> requires approval, Administrator -> skips it),
+// but the button and the create page are shared.
+//
+// All four gates stay aligned on this same role list: this button, the
+// dispatch-create.php page guard, EnsureRole:maintenance_admin,super_admin on
+// POST /api/dispatches, and DispatchAuthorizationService::canCreateDispatch().
+$canCreateDispatch = in_array($_dspRole, ['maintenance_admin', 'super_admin'], true);
 
 $pageTitle = 'Dispatches - SFMS';
 include __DIR__ . '/../includes/header.php';
 ?>
 
 <main class="container dispatches-page" style="margin-top:16px;">
+    <h1 class="print-only" style="display:none; margin: 0 0 16px; font-size: 20px; font-weight: 700;">Dispatch Report</h1>
     <section class="dispatches-page__header">
         <div class="dispatches-page__title-group">
             <p class="dispatches-page__eyebrow">Inventory Deployment</p>
@@ -236,7 +238,7 @@ function dspDepartmentCell(row) {
 
     return `
         <div class="dispatches-cell-icon-row">
-            <span class="dispatches-cell-icon" aria-hidden="true">🏢</span>
+            <span class="dispatches-cell-icon" aria-hidden="true">${window.UIIcons ? window.UIIcons.svg('building', { size: 14 }) : ''}</span>
             <span class="dispatches-cell-primary">${dspEscapeHtml(name)}</span>
         </div>
     `;
@@ -1229,11 +1231,150 @@ document.addEventListener('DOMContentLoaded', () => {
 </style>
 
 <style media="print">
-  aside, nav, .sidebar, header,
-  #dispatch-search, #dispatch-status,
+  /* Page chrome — sidebar/nav/top bar are already hidden globally by
+     sidebar.css's own @media print block; the rules below cover what that
+     shared block does not: this page's own header/toolbar/pagination/
+     modal, the utility bar, and the mobile hamburger toggle (sidebar.css's
+     print block only hides .sidebar-toggle, not the actual
+     #sidebarToggleMobile / .sidebar-toggle-mobile button rendered by
+     sidebar.php, so it was slipping through onto the printed page). */
+  aside, nav, .sidebar, header, .utility-bar,
+  #sidebarToggleMobile,
+  .sidebar-toggle-mobile,
+  .dispatches-page__header,
+  .dispatches-toolbar,
+  .dispatches-pagination,
+  #dispatch-items-modal,
+  .app-footer,
   .btn { display: none !important; }
-  .table { width: 100%; min-width: 0 !important; }
+
+  .print-only { display: block !important; }
+
+  /* Action column is web-only (View button/link) — never part of the
+     printed report. Targets the existing markup classes from
+     loadDispatches(); no HTML/JS change needed. */
+  .dispatches-table__action-head,
+  .dispatches-table__action-cell { display: none !important; }
+
+  /* styles.css's body[data-user-role] main.container rule (and
+     utility-bar.css's matching padding-top rule) reserve a 260px sidebar
+     gutter and a fixed-utility-bar top offset — both still applied here
+     since only the sidebar/utility-bar *elements* are hidden above, not
+     the space this page's <main> was pushed over to leave for them. Left
+     unreset, the table was rendering into a ~775px-wide column instead of
+     the full page, which is what was forcing every column below its
+     content's minimum width and breaking words vertically. */
+  body[data-user-role] main.dispatches-page,
+  main.dispatches-page {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    min-height: 0 !important;
+  }
+
+  .dispatches-panel,
+  .dispatches-table-panel {
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: transparent !important;
+  }
+
+  .dispatches-table-panel__header {
+    display: none;
+  }
+
+  /* Let the table use the full printable width instead of the 1040px
+     workstation min-width (dispatches.php:813-823) that previously forced
+     horizontal overflow/cut-off columns when printed. */
+  .dispatches-page .table-responsive {
+    overflow: visible !important;
+    padding-top: 0 !important;
+  }
+
+  .dispatches-page .dispatches-table {
+    width: 100% !important;
+    min-width: 0 !important;
+    table-layout: fixed;
+    border: 1px solid #999 !important;
+    border-radius: 0 !important;
+    font-size: 10.5px;
+  }
+
+  .dispatches-page .dispatches-table th,
+  .dispatches-page .dispatches-table td {
+    border: 1px solid #ccc !important;
+    padding: 6px 8px !important;
+    white-space: normal !important;
+    overflow-wrap: break-word;
+    word-break: break-word;
+  }
+
+  .dispatches-page .dispatches-table th {
+    background: #f0f0f0 !important;
+    color: #000 !important;
+    white-space: normal !important;
+  }
+
   body { background: white; color: black; }
+
+  /* table-layout: fixed sizes columns from these percentages instead of
+     the screen-mode content widths, so the 8 remaining columns (the 9th,
+     Action, is display:none above and contributes no column) always sum
+     to exactly one page width regardless of cell content length. Items
+     and the two people columns get the most room since they carry the
+     longest wrapped text; Status/Room/Date need the least. */
+  .dispatches-page .dispatches-table th:nth-child(1),
+  .dispatches-page .dispatches-table td:nth-child(1) { width: 12%; }
+  .dispatches-page .dispatches-table th:nth-child(2),
+  .dispatches-page .dispatches-table td:nth-child(2) { width: 12%; }
+  .dispatches-page .dispatches-table th:nth-child(3),
+  .dispatches-page .dispatches-table td:nth-child(3) { width: 10%; }
+  .dispatches-page .dispatches-table th:nth-child(4),
+  .dispatches-page .dispatches-table td:nth-child(4) { width: 20%; }
+  .dispatches-page .dispatches-table th:nth-child(5),
+  .dispatches-page .dispatches-table td:nth-child(5) { width: 8%; }
+  .dispatches-page .dispatches-table th:nth-child(6),
+  .dispatches-page .dispatches-table td:nth-child(6) { width: 14%; }
+  .dispatches-page .dispatches-table th:nth-child(7),
+  .dispatches-page .dispatches-table td:nth-child(7) { width: 14%; }
+  .dispatches-page .dispatches-table th:nth-child(8),
+  .dispatches-page .dispatches-table td:nth-child(8) { width: 10%; }
+
+  /* These screen-mode min-widths (190/130/190/120px) are what fights
+     table-layout: fixed and forces the table past the page width — reset
+     them so the percentage widths above are the only sizing in effect. */
+  .dispatches-page .dispatches-table__code-cell,
+  .dispatches-page .dispatches-table__items-cell,
+  .dispatches-page .dispatches-table__assignee-cell,
+  .dispatches-page .dispatches-table__date-cell {
+    min-width: 0 !important;
+  }
+
+  /* These were sized/truncated for a fixed-pixel screen column; in a
+     percentage-wide print column they need to wrap instead of ellipsing
+     or clipping. */
+  .dispatches-code-secondary {
+    max-width: none !important;
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+  }
+
+  .dispatches-assignee-state {
+    white-space: normal !important;
+  }
+
+  /* Eight remaining columns (Dispatch Code, Department, Room, Items,
+     Status, Release Personnel, Approved By, Date) are too wide for
+     portrait — landscape gives each column room to wrap without
+     shrinking text past readability. */
+  @page {
+    size: landscape;
+    margin: 12mm;
+  }
 </style>
 
 <?php include __DIR__ . '/../includes/footer.php'; ?>

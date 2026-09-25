@@ -12,8 +12,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     
     <!-- Styles -->
-    <link rel="stylesheet" href="{{ asset('frontend/assets/css/styles.css?v=20260415-5') }}">
-    <link rel="stylesheet" href="{{ asset('frontend/assets/css/color-scheme.css') }}">
+    <link rel="stylesheet" href="{{ asset('frontend/assets/css/styles.css?v=20260921-2') }}">
+    <link rel="stylesheet" href="{{ asset('frontend/assets/css/color-scheme.css?v=20260921-2') }}">
     <link rel="stylesheet" href="{{ asset('frontend/assets/css/login.css?v=20260415-1') }}">
     @yield('styles')
 </head>

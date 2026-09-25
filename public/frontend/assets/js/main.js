@@ -2,113 +2,45 @@
  * Page initialization scripts
  */
 
+/**
+ * LIGHT IS THE ONLY THEME.
+ *
+ * This used to be a full light/dark manager: it read a saved preference from
+ * three localStorage keys, resolved an 'auto' mode against
+ * prefers-color-scheme, subscribed to OS theme changes, rendered a sun/moon
+ * icon and bound the header toggle. All of that is gone, because a theme the
+ * user cannot choose does not need a chooser.
+ *
+ * What is deliberately NOT done here:
+ *
+ *  - Saved preferences are not read. A user who once chose dark has that value
+ *    still sitting in localStorage; ignoring it is precisely what makes light
+ *    unconditional for them.
+ *  - Saved preferences are not deleted either. Clearing them would be a write
+ *    on every page load to no visible end, and keeping them costs nothing now
+ *    that nothing reads them.
+ *  - prefers-color-scheme is not consulted, so an OS or browser set to dark no
+ *    longer influences the page.
+ *
+ * applyMode() and init() are kept as a tiny shim rather than deleted outright
+ * because main.js is loaded on every legacy page and window.ThemeManager is a
+ * global; any straggling caller now gets a harmless no-op that re-asserts
+ * light instead of a TypeError.
+ */
 const ThemeManager = {
-    storageKey: 'sfmsThemeMode',
-    legacyStorageKeys: ['sfms_settings_theme', 'sfms_theme_mode'],
-    mediaQuery: null,
-    mediaListener: null,
+    mode: 'light',
 
-    getSavedMode() {
-        const candidates = [this.storageKey, ...this.legacyStorageKeys];
-
-        for (const key of candidates) {
-            const stored = localStorage.getItem(key);
-            if (['light', 'dark', 'auto'].includes(stored)) {
-                return stored;
-            }
-        }
-
-        return 'dark';
-    },
-
-    resolveMode(mode) {
-        if (mode === 'auto') {
-            const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-            return prefersDark ? 'dark' : 'light';
-        }
-        return mode;
-    },
-
-    applyMode(mode, options = {}) {
-        const { persist = true } = options;
-        const safeMode = ['light', 'dark', 'auto'].includes(mode) ? mode : 'light';
-        const resolved = this.resolveMode(safeMode);
+    applyMode() {
         const root = document.documentElement;
 
-        if (persist) {
-            localStorage.setItem(this.storageKey, safeMode);
-            this.legacyStorageKeys.forEach((key) => {
-                localStorage.setItem(key, safeMode);
-            });
-        }
-
-        root.setAttribute('data-theme-mode', safeMode);
-        root.setAttribute('data-theme-resolved', resolved);
-        root.setAttribute('data-theme', resolved);
-        root.style.colorScheme = resolved === 'dark' ? 'dark' : 'light';
-
-        this.updateToggleButtons(resolved);
-    },
-
-    toggleMode() {
-        const currentMode = this.getSavedMode();
-        const nextMode = currentMode === 'dark' ? 'light' : 'dark';
-        this.applyMode(nextMode);
-        return nextMode;
-    },
-
-    getToggleIcon(mode) {
-        if (mode === 'dark') {
-            return '<svg class="theme-toggle-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false"><path d="M21 12.79A9 9 0 1 1 11.21 3 7.5 7.5 0 0 0 21 12.79Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-        }
-
-        return '<svg class="theme-toggle-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/><path d="M12 2V4M12 20V22M4.93 4.93L6.34 6.34M17.66 17.66L19.07 19.07M2 12H4M20 12H22M4.93 19.07L6.34 17.66M17.66 6.34L19.07 4.93" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
-    },
-
-    updateToggleButtons(resolvedMode) {
-        const buttons = document.querySelectorAll('[data-theme-toggle]');
-        if (!buttons.length) return;
-
-        buttons.forEach((button) => {
-            const nextMode = resolvedMode === 'dark' ? 'light' : 'dark';
-            button.innerHTML = this.getToggleIcon(resolvedMode);
-            button.setAttribute('aria-label', `Switch to ${nextMode} mode`);
-            button.setAttribute('title', `Switch to ${nextMode} mode`);
-            button.setAttribute('data-theme-current', resolvedMode);
-        });
-    },
-
-    bindToggleButtons() {
-        document.querySelectorAll('[data-theme-toggle]').forEach((button) => {
-            if (button.dataset.themeToggleBound === '1') return;
-            button.dataset.themeToggleBound = '1';
-            button.addEventListener('click', () => {
-                this.toggleMode();
-            });
-        });
+        root.setAttribute('data-theme-mode', 'light');
+        root.setAttribute('data-theme-resolved', 'light');
+        root.setAttribute('data-theme', 'light');
+        root.style.colorScheme = 'light';
     },
 
     init() {
-        this.applyMode(this.getSavedMode(), { persist: true });
-        this.bindToggleButtons();
-
-        if (!window.matchMedia) return;
-
-        this.mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-
-        if (!this.mediaListener) {
-            this.mediaListener = () => {
-                if (this.getSavedMode() === 'auto') {
-                    this.applyMode('auto', { persist: false });
-                }
-            };
-        }
-
-        if (typeof this.mediaQuery.addEventListener === 'function') {
-            this.mediaQuery.addEventListener('change', this.mediaListener);
-        } else if (typeof this.mediaQuery.addListener === 'function') {
-            this.mediaQuery.addListener(this.mediaListener);
-        }
+        this.applyMode();
     }
 };
 
@@ -296,6 +228,45 @@ function initializeModals() {
             }
         });
     });
+
+    // Escape closes the topmost open modal (system alert/confirm or a .modal.show),
+    // and Tab is trapped inside it while it's open (DESIGN_SYSTEM.md §11/§18).
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            const systemModal = document.querySelector('.system-modal-overlay');
+            if (systemModal) {
+                systemModal.click();
+                return;
+            }
+
+            const openModal = document.querySelector('.modal.show');
+            if (openModal) {
+                UI.toggleModal(openModal.id, false);
+            }
+            return;
+        }
+
+        if (e.key === 'Tab') {
+            const activeModal = document.querySelector('.modal.show, .system-modal-overlay');
+            if (!activeModal) return;
+
+            const focusableEls = activeModal.querySelectorAll(
+                'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+            );
+            if (!focusableEls.length) return;
+
+            const first = focusableEls[0];
+            const last = focusableEls[focusableEls.length - 1];
+
+            if (e.shiftKey && document.activeElement === first) {
+                e.preventDefault();
+                last.focus();
+            } else if (!e.shiftKey && document.activeElement === last) {
+                e.preventDefault();
+                first.focus();
+            }
+        }
+    });
 }
 
 /**
@@ -335,11 +306,11 @@ const toastStyles = `
     .toast {
         background-color: white;
         padding: 1rem 1.5rem;
-        border-radius: 0.5rem;
-        box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
+        border-radius: var(--radius-md, 10px);
+        box-shadow: var(--shadow-lg, 0 12px 28px rgba(15, 23, 42, 0.12));
         margin-bottom: 0.5rem;
         border-left: 4px solid;
-        animation: slideIn 0.3s ease;
+        animation: slideIn var(--duration-base, 220ms) var(--motion-ease, ease);
     }
     
     .toast-success {

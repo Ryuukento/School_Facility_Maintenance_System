@@ -4,6 +4,8 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
+require_once __DIR__ . '/../../backend/config/settings.php';
+
 $_dtUser = $_SESSION['user'] ?? $_SESSION['auth_user'] ?? [];
 $_dtRole = strtolower(trim((string)($_dtUser['role'] ?? '')));
 
@@ -21,7 +23,7 @@ include __DIR__ . '/../includes/header.php';
         <div class="deployment-tracking-page__title-group">
             <p class="deployment-tracking-page__eyebrow">Released Inventory Visibility</p>
             <h1 class="deployment-tracking-page__title">Deployment Tracking</h1>
-            <p class="deployment-tracking-page__description">Every released dispatch item, with its source purchase receipt where available.</p>
+            <p class="deployment-tracking-page__description">Every deployed item — via Dispatch or Direct Room Deployment — with its source purchase receipt where available.</p>
         </div>
     </section>
 
@@ -31,7 +33,7 @@ include __DIR__ . '/../includes/header.php';
                 <h2 class="deployment-tracking-panel__title">All Deployed Items</h2>
                 <p class="deployment-tracking-panel__description">Track deployed inventory by room, department, dispatch, and purchase source.</p>
             </div>
-            <p id="dt-result-count" class="deployment-tracking-panel__count text-muted">Loading results...</p>
+            <p id="dt-result-count" class="deployment-tracking-panel__count text-muted" role="status" aria-live="polite">Loading results...</p>
         </div>
 
         <div class="deployment-tracking-toolbar">
@@ -57,7 +59,14 @@ include __DIR__ . '/../includes/header.php';
         </div>
 
         <div id="dt-deployed-container" class="deployment-tracking-table-shell">
-            <div class="ui-empty-state"><strong>Loading deployed items...</strong></div>
+            <div class="ui-empty-state ui-fade-in" aria-live="polite">
+                <strong>Loading deployed items...</strong>
+                <div class="ui-skeleton-list" style="margin-top: 12px;">
+                    <div class="ui-skeleton-row w-90"></div>
+                    <div class="ui-skeleton-row w-75"></div>
+                    <div class="ui-skeleton-row w-55"></div>
+                </div>
+            </div>
         </div>
     </section>
 
@@ -85,6 +94,7 @@ include __DIR__ . '/../includes/header.php';
         <div id="dt-or-results" class="deployment-tracking-trace-results">
             <div class="ui-empty-state">
                 <strong>Enter an OR number above to trace items.</strong>
+                <span>Partial matches are supported.</span>
             </div>
         </div>
     </section>
@@ -107,8 +117,44 @@ function dtMutedDash() {
     return '<span class="deployment-tracking-muted-cell">&mdash;</span>';
 }
 
+/**
+ * Loading-state markup. Mirrors getDispatchLoadingMarkup() in dispatches.php
+ * exactly (same .ui-empty-state/.ui-fade-in wrapper, same .ui-skeleton-list
+ * row widths) — reusing the shared skeleton components already defined in
+ * styles.css and already consumed by Dispatches and Inventory, rather than
+ * the plain "Loading..." text this page previously showed on every re-fetch.
+ * `message` is parameterised (Dispatches hardcodes its own) so this one
+ * helper can serve both the deployed-items table and the OR-number search,
+ * keeping their wording — and the initial PHP-rendered state above — in sync
+ * instead of drifting into different phrasing per call site.
+ */
+function dtLoadingMarkup(message) {
+    return `
+        <div class="ui-empty-state ui-fade-in" aria-live="polite">
+            <strong>${dtEscapeHtml(message)}</strong>
+            <div class="ui-skeleton-list" style="margin-top: 12px;">
+                <div class="ui-skeleton-row w-90"></div>
+                <div class="ui-skeleton-row w-75"></div>
+                <div class="ui-skeleton-row w-55"></div>
+            </div>
+        </div>
+    `;
+}
+
+/**
+ * Text cell renderer.
+ *
+ * `variant` drives the Section 4 hierarchy — previously every emphasised cell
+ * used one 700-weight treatment, so Item Name, Source OR and Dispatch Code all
+ * shouted equally and nothing read as primary:
+ *   'item'   — the row's subject. Largest, heaviest, full text colour.
+ *   'code'   — identifiers (OR / dispatch code). Accent-coloured, 600.
+ *   'muted'  — supporting detail (supplier, department). Faint.
+ *   default  — plain body text.
+ * `strong: true` is kept as an alias for 'item' so existing calls stay valid.
+ */
 function dtTextCell(value, options = {}) {
-    const strong = Boolean(options.strong);
+    const variant = options.variant || (options.strong ? 'item' : '');
     const fallback = options.fallback || dtMutedDash();
 
     if (value === null || value === undefined || value === '') {
@@ -116,28 +162,88 @@ function dtTextCell(value, options = {}) {
     }
 
     const content = dtEscapeHtml(value);
-    return strong ? `<strong class="deployment-tracking-emphasis-cell">${content}</strong>` : content;
+    // Kept as <strong> rather than <span>: this is how the cell was already
+    // marked up, and dropping it would quietly change the semantics exposed to
+    // assistive tech in a pass that is supposed to be visual only.
+    if (variant === 'item') return `<strong class="deployment-tracking-item-cell">${content}</strong>`;
+    if (variant === 'code') return `<span class="deployment-tracking-code-cell">${content}</span>`;
+    if (variant === 'muted') return `<span class="deployment-tracking-muted-cell">${content}</span>`;
+    // 'primary' — a populated value that isn't the row subject or an
+    // identifier, but still shouldn't read as unstyled filler text (e.g.
+    // Room/Lab). Mirrors .dispatches-cell-primary, which Dispatches applies
+    // to every one of its non-subject cells (Department, Room, Approver...)
+    // so nothing in that table ever renders as bare text. Deployment
+    // Tracking's Room/Lab column previously fell through to the `default`
+    // branch below with zero class — the only cell in the row with no
+    // weight/size treatment at all, which broke the row's visual rhythm.
+    if (variant === 'primary') return `<span class="deployment-tracking-cell-primary">${content}</span>`;
+    return content;
 }
 
+// Finding #2 (Task 26.1) — was a bare `toLocaleDateString()` with no options,
+// which renders as a raw locale-numeric date ("8/5/2026") — ambiguous
+// internationally (M/D/Y vs D/M/Y) and visibly different from every date on
+// the Dispatches page. Matched to dspFormatDateParts()'s exact date options
+// in dispatches.php so both pages render "Aug 05, 2026" identically.
 function dtFormatDate(d) {
     if (!d) return dtMutedDash();
     try {
-        return dtEscapeHtml(new Date(d).toLocaleDateString());
+        return dtEscapeHtml(new Date(d).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }));
     } catch (e) {
         return dtEscapeHtml(String(d));
     }
 }
 
+/**
+ * Dispatch status badge.
+ *
+ * These are dispatch workflow statuses — the same domain values Dispatches
+ * renders — so they now use the shared `.badge badge-{status}` classes from
+ * color-scheme.css instead of the palette this page used to hardcode. That
+ * hardcoded set disagreed with Dispatches (it painted "released" blue where
+ * Dispatches paints it green), which is exactly the inconsistency this pass
+ * exists to remove. Markup mirrors dspStatusBadge() in dispatches.php.
+ */
 function dtStatusBadge(status) {
-    const normalized = String(status || 'unknown').toLowerCase().replace(/[^a-z0-9-]/g, '');
-    const label = String(status || 'Unknown').replace(/\b\w/g, (c) => c.toUpperCase());
-    return `<span class="deployment-status-badge" data-status="${dtEscapeHtml(normalized)}">${dtEscapeHtml(label)}</span>`;
+    const normalized = String(status || '').toLowerCase().replace(/[^a-z0-9-]/g, '');
+    const label = String(status || '').replace(/\b\w/g, (c) => c.toUpperCase());
+    return `<span class="badge badge-${dtEscapeHtml(normalized)} deployment-status-badge" data-status="${dtEscapeHtml(normalized)}">`
+        + '<span class="deployment-status-dot" aria-hidden="true"></span>'
+        + `${dtEscapeHtml(label || 'Unknown')}</span>`;
 }
 
+/**
+ * Receipt posted/draft badge. Purchase Receipts renders this pair with inline
+ * styles rather than a reusable class, so there is no class there to reuse —
+ * mapping to the shared success/warning variants keeps the same green/amber
+ * semantics while staying theme-aware.
+ */
 function dtReceiptBadge(status) {
-    const normalized = status === 'posted' ? 'posted' : 'draft';
-    const label = normalized === 'posted' ? 'Posted' : 'Draft';
-    return `<span class="deployment-receipt-badge" data-status="${normalized}">${label}</span>`;
+    const posted = status === 'posted';
+    const variant = posted ? 'badge-success' : 'badge-warning';
+    return `<span class="badge ${variant} deployment-status-badge" data-status="${posted ? 'posted' : 'draft'}">`
+        + '<span class="deployment-status-dot" aria-hidden="true"></span>'
+        + `${posted ? 'Posted' : 'Draft'}</span>`;
+}
+
+/**
+ * Deployment-source badge (TASK 36 PHASE 2). Distinguishes the two
+ * legitimate-but-separate deployment workflows on sight: dispatch-sourced
+ * rows (`deployment_source === 'dispatch'`) versus room_asset rows created
+ * by the Deploy-to-Room flow (`deployment_source === 'direct'`). Deliberately
+ * never labels a 'direct' row with a dispatch code or vice versa — see
+ * DeploymentTrackingController::index() for why a direct deployment never
+ * has a real dispatch_code to show. Uses the same shared `.badge` variants
+ * as dtStatusBadge()/dtReceiptBadge() above rather than introducing new
+ * one-off styling.
+ */
+function dtDeploymentSourceBadge(source) {
+    const isDirect = source === 'direct';
+    const variant = isDirect ? 'badge-info' : 'badge-primary';
+    const label = isDirect ? 'Direct Room Deployment' : 'Dispatch';
+    return `<span class="badge ${variant} deployment-status-badge" data-source="${dtEscapeHtml(source || 'dispatch')}">`
+        + '<span class="deployment-status-dot" aria-hidden="true"></span>'
+        + `${label}</span>`;
 }
 
 function dtNotify(message, type = 'danger') {
@@ -174,11 +280,12 @@ async function searchByOr() {
     const resultsEl = document.getElementById('dt-or-results');
 
     if (!q) {
-        resultsEl.innerHTML = '<div class="ui-empty-state"><strong>Enter an OR number above to trace items.</strong></div>';
+        resultsEl.innerHTML = '<div class="ui-empty-state"><strong>Enter an OR number above to trace items.</strong>'
+            + '<span>Partial matches are supported.</span></div>';
         return;
     }
 
-    resultsEl.innerHTML = '<div class="ui-empty-state"><strong>Searching...</strong></div>';
+    resultsEl.innerHTML = dtLoadingMarkup('Searching receipts...');
 
     try {
         const params = new URLSearchParams({ q });
@@ -217,29 +324,29 @@ async function searchByOr() {
         }
 
         html += '<div class="table-responsive"><table class="table deployment-tracking-table deployment-tracking-table--trace"><thead><tr>'
-            + '<th>OR Number</th>'
-            + '<th>Supplier</th>'
-            + '<th>Date Received</th>'
-            + '<th>Item Name</th>'
-            + '<th>Qty Received</th>'
-            + '<th>Deployed To</th>'
-            + '<th>Dispatch Code</th>'
-            + '<th>Dispatch Status</th>'
+            + '<th scope="col">OR Number</th>'
+            + '<th scope="col">Supplier</th>'
+            + '<th scope="col">Date Received</th>'
+            + '<th scope="col" class="deployment-tracking-table__item-head">Item Name</th>'
+            + '<th scope="col" class="deployment-tracking-table__qty">Qty Received</th>'
+            + '<th scope="col">Deployed To</th>'
+            + '<th scope="col">Dispatch Code</th>'
+            + '<th scope="col">Dispatch Status</th>'
             + '</tr></thead><tbody>';
 
         rows.forEach((row) => {
             const deployedTo = row.room_name
                 ? `<div class="deployment-tracking-location-cell">${dtEscapeHtml(row.room_name)}${row.department_name ? `<span>${dtEscapeHtml(row.department_name)}</span>` : ''}</div>`
-                : '<span class="deployment-tracking-muted-cell deployment-tracking-muted-cell--italic">In Bodega / Not Deployed</span>';
+                : '<span class="deployment-tracking-muted-cell deployment-tracking-muted-cell--italic">In Inventory / Not Deployed</span>';
 
             html += '<tr>';
-            html += `<td>${dtTextCell(row.or_number, { strong: true })}</td>`;
-            html += `<td>${dtTextCell(row.supplier_name)}</td>`;
-            html += `<td>${dtFormatDate(row.receipt_date)}</td>`;
-            html += `<td>${dtTextCell(row.receipt_item_name, { strong: true })}</td>`;
+            html += `<td>${dtTextCell(row.or_number, { variant: 'code' })}</td>`;
+            html += `<td>${dtTextCell(row.supplier_name, { variant: 'muted' })}</td>`;
+            html += `<td class="deployment-tracking-table__date-cell">${dtFormatDate(row.receipt_date)}</td>`;
+            html += `<td class="deployment-tracking-table__item-cell">${dtTextCell(row.receipt_item_name, { variant: 'item' })}</td>`;
             html += `<td class="deployment-tracking-table__qty">${dtTextCell(row.quantity_received)} ${dtTextCell(row.unit || 'pc', { fallback: 'pc' })}</td>`;
             html += `<td>${deployedTo}</td>`;
-            html += `<td>${dtTextCell(row.dispatch_code)}</td>`;
+            html += `<td>${dtTextCell(row.dispatch_code, { variant: 'code' })}</td>`;
             html += `<td>${row.dispatch_status ? dtStatusBadge(row.dispatch_status) : dtMutedDash()}</td>`;
             html += '</tr>';
         });
@@ -247,14 +354,15 @@ async function searchByOr() {
         html += '</tbody></table></div>';
         resultsEl.innerHTML = html;
     } catch (err) {
-        resultsEl.innerHTML = '<div class="ui-empty-state"><strong>Search failed.</strong></div>';
+        resultsEl.innerHTML = '<div class="ui-empty-state"><strong>Search failed.</strong>'
+            + '<span>Check your connection and try the search again.</span></div>';
         dtNotify(err.message || 'Unable to search.');
     }
 }
 
 async function loadDeployed() {
     const container = document.getElementById('dt-deployed-container');
-    container.innerHTML = '<div class="ui-empty-state"><strong>Loading...</strong></div>';
+    container.innerHTML = dtLoadingMarkup('Loading deployed items...');
 
     const q = document.getElementById('dt-search').value.trim();
     const roomId = document.getElementById('dt-room').value;
@@ -312,31 +420,47 @@ async function loadDeployed() {
             return;
         }
 
-        let html = '<div class="table-responsive"><table class="table deployment-tracking-table"><thead><tr>'
-            + '<th>Item Name</th>'
-            + '<th>Qty Deployed</th>'
-            + '<th>Source OR</th>'
-            + '<th>Supplier</th>'
-            + '<th>Date Received</th>'
-            + '<th>Room / Lab</th>'
-            + '<th>Department</th>'
-            + '<th>Dispatch Code</th>'
-            + '<th>Dispatch Date</th>'
-            + '<th>Status</th>'
+        let html = '<div class="table-responsive"><table class="table deployment-tracking-table deployment-tracking-table--deployed"><thead><tr>'
+            + '<th scope="col" class="deployment-tracking-table__item-head">Item Name</th>'
+            // TASK 36 PHASE 2 — Deployment Type / Asset Code are new,
+            // additive columns distinguishing the two deployment workflows
+            // now unioned into this response (see DeploymentTrackingController
+            // ::index()). Asset Code is only ever populated for 'direct' rows
+            // (room_asset items); dispatch rows render the existing muted-dash
+            // fallback via dtTextCell(), same as every other empty cell here.
+            + '<th scope="col">Deployment Type</th>'
+            + '<th scope="col">Asset Code</th>'
+            + '<th scope="col" class="deployment-tracking-table__qty">Qty Deployed</th>'
+            + '<th scope="col">Source OR</th>'
+            + '<th scope="col">Supplier</th>'
+            + '<th scope="col">Date Received</th>'
+            + '<th scope="col">Room / Lab</th>'
+            + '<th scope="col">Department</th>'
+            + '<th scope="col">Dispatch Code</th>'
+            + '<th scope="col">Dispatch Date</th>'
+            // Status intentionally omitted here — loadDeployed() never sends a
+            // `status` filter and DeploymentTrackingController::index() defaults
+            // it to 'released', so every row in this table would always render
+            // the same badge. A column that never varies is pure noise against
+            // the "information density / scannability" goals of this pass. The
+            // Trace-by-OR table below keeps its own Dispatch Status column
+            // (`dtStatusBadge(row.dispatch_status)` in searchByOr()) since that
+            // one genuinely varies per traced item.
             + '</tr></thead><tbody>';
 
         rows.forEach((row) => {
             html += '<tr>';
-            html += `<td>${dtTextCell(row.item_name, { strong: true })}</td>`;
+            html += `<td class="deployment-tracking-table__item-cell">${dtTextCell(row.item_name, { variant: 'item' })}</td>`;
+            html += `<td>${dtDeploymentSourceBadge(row.deployment_source)}</td>`;
+            html += `<td>${dtTextCell(row.asset_code, { variant: 'code' })}</td>`;
             html += `<td class="deployment-tracking-table__qty">${dtTextCell(row.dispatched_qty)}</td>`;
-            html += `<td>${dtTextCell(row.source_or, { strong: true })}</td>`;
-            html += `<td>${dtTextCell(row.source_supplier)}</td>`;
-            html += `<td>${dtFormatDate(row.source_receipt_date)}</td>`;
-            html += `<td>${dtTextCell(row.room_name)}</td>`;
-            html += `<td>${dtTextCell(row.department_name)}</td>`;
-            html += `<td>${dtTextCell(row.dispatch_code, { strong: true })}</td>`;
-            html += `<td>${dtFormatDate(row.dispatch_date)}</td>`;
-            html += `<td>${dtStatusBadge(row.dispatch_status)}</td>`;
+            html += `<td>${dtTextCell(row.source_or, { variant: 'code' })}</td>`;
+            html += `<td>${dtTextCell(row.source_supplier, { variant: 'muted' })}</td>`;
+            html += `<td class="deployment-tracking-table__date-cell">${dtFormatDate(row.source_receipt_date)}</td>`;
+            html += `<td>${dtTextCell(row.room_name, { variant: 'primary' })}</td>`;
+            html += `<td>${dtTextCell(row.department_name, { variant: 'muted' })}</td>`;
+            html += `<td>${dtTextCell(row.dispatch_code, { variant: 'code' })}</td>`;
+            html += `<td class="deployment-tracking-table__date-cell">${dtFormatDate(row.dispatch_date)}</td>`;
             html += '</tr>';
         });
 
@@ -344,7 +468,8 @@ async function loadDeployed() {
         container.innerHTML = html;
     } catch (err) {
         dtSetResultCount('Unable to load results');
-        container.innerHTML = '<div class="ui-empty-state"><strong>Failed to load deployed items.</strong></div>';
+        container.innerHTML = '<div class="ui-empty-state"><strong>Failed to load deployed items.</strong>'
+            + '<span>Check your connection and try again.</span></div>';
         dtNotify(err.message || 'Unable to load.');
     }
 }
@@ -357,7 +482,8 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('dt-or-clear-btn').addEventListener('click', () => {
         document.getElementById('dt-or-input').value = '';
         document.getElementById('dt-or-results').innerHTML =
-            '<div class="ui-empty-state"><strong>Enter an OR number above to trace items.</strong></div>';
+            '<div class="ui-empty-state"><strong>Enter an OR number above to trace items.</strong>'
+            + '<span>Partial matches are supported.</span></div>';
     });
 
     document.getElementById('dt-search').addEventListener('keydown', (e) => {
@@ -385,6 +511,8 @@ document.addEventListener('DOMContentLoaded', () => {
     --deployment-border-strong: #cbd5e1;
     --deployment-text: #0f172a;
     --deployment-text-muted: #64748b;
+    --deployment-text-faint: #94a3b8;
+    --deployment-accent: #7c3aed;
     --deployment-row-odd: #ffffff;
     --deployment-row-even: #f8fafc;
     --deployment-row-hover: #f5f3ff;
@@ -400,6 +528,8 @@ document.addEventListener('DOMContentLoaded', () => {
     --deployment-border-strong: #31415d;
     --deployment-text: #e2e8f0;
     --deployment-text-muted: #94a3b8;
+    --deployment-text-faint: #64748b;
+    --deployment-accent: #a78bfa;
     --deployment-row-odd: #0f172a;
     --deployment-row-even: #111c31;
     --deployment-row-hover: #16233d;
@@ -452,15 +582,20 @@ document.addEventListener('DOMContentLoaded', () => {
     justify-content: space-between;
     align-items: end;
     gap: 18px;
-    padding: 24px 24px 18px;
+    padding: 26px 26px 18px;
     border-bottom: 1px solid var(--deployment-border);
     background: var(--deployment-surface);
 }
 
+/* font-weight is declared explicitly to match .dispatches-table-panel__title.
+   Without it these <h2>s inherit the shared h1-h6 rule in styles.css, which
+   pairs Poppins with a different weight than the Dispatches panel headings —
+   the two pages' section titles did not read as the same component. */
 .deployment-tracking-panel__title,
 .deployment-tracking-trace-panel__title {
     margin: 0;
     font-size: 1.08rem;
+    font-weight: 700;
     color: var(--deployment-text);
 }
 
@@ -481,7 +616,7 @@ document.addEventListener('DOMContentLoaded', () => {
 .deployment-tracking-trace-toolbar {
     display: grid;
     gap: 14px;
-    padding: 22px 24px;
+    padding: 22px 26px;
     border-bottom: 1px solid var(--deployment-border);
     background: color-mix(in srgb, var(--deployment-surface) 86%, var(--deployment-surface-muted));
 }
@@ -515,6 +650,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 .deployment-tracking-toolbar__control {
     width: 100%;
+    padding: 0 14px;
     background: var(--deployment-surface);
     color: var(--deployment-text);
     border: 1px solid var(--deployment-border-strong);
@@ -559,21 +695,45 @@ document.addEventListener('DOMContentLoaded', () => {
     border-color: #a78bfa;
 }
 
+/* Section 9 — the buttons already matched Dispatches on height, padding, radius
+   and hover, but neither page declared a visible keyboard focus ring on them.
+   Added here rather than in the shared .btn rule, which is off-limits. */
+.deployment-tracking-page__primary-action:focus-visible,
+.deployment-tracking-page__ghost-action:focus-visible {
+    outline: 2px solid #7c3aed;
+    outline-offset: 2px;
+}
+
+/* 26px gutters throughout, matching the Dispatches panel rhythm (this page
+   was on 24px, which read as a subtly different container width side by side). */
 .deployment-tracking-table-shell,
 .deployment-tracking-trace-results {
-    padding: 0 24px 24px;
+    padding: 0 26px 26px;
 }
 
 .deployment-tracking-trace-panel__hint {
-    margin: 0;
-    padding: 16px 24px 0;
+    margin: 0 0 4px;
+    padding: 16px 26px 0;
     color: var(--deployment-text-muted);
     font-size: 0.88rem;
 }
 
+/* Section 5 — empty states.
+   Built on the shared .ui-empty-state component (styles.css), which already
+   supplies the dashed border, 12px radius and centred text. What is added here
+   is the Inventory Reports *proportion*: the tall 60px well, a 14px/600 title
+   and a faint supporting line. The .ir-empty rules themselves cannot be reused
+   directly — they are scoped under .ir-page inside inventory-reports.php, and
+   lifting them into a shared stylesheet is out of bounds for this pass. */
 .deployment-tracking-table-shell .ui-empty-state,
 .deployment-tracking-trace-results .ui-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
     margin-top: 24px;
+    padding: 60px 24px;
     background: color-mix(in srgb, var(--deployment-surface-muted) 88%, transparent);
     border-color: var(--deployment-border-strong);
     color: var(--deployment-text-muted);
@@ -581,18 +741,47 @@ document.addEventListener('DOMContentLoaded', () => {
 
 .deployment-tracking-table-shell .ui-empty-state strong,
 .deployment-tracking-trace-results .ui-empty-state strong {
+    margin-bottom: 0;
+    font-size: 14px;
+    font-weight: 600;
     color: var(--deployment-text);
+}
+
+.deployment-tracking-table-shell .ui-empty-state span,
+.deployment-tracking-trace-results .ui-empty-state span {
+    font-size: 13px;
+    color: var(--deployment-text-faint);
+}
+
+/* Finding #1 (Task 26.1) follow-up — this page's empty-state override above
+   is `display:flex; align-items:center`, so it shrink-wraps its children to
+   their own content width. That's invisible for the plain-text empty states
+   it was written for, but .ui-skeleton-list (a percentage-width grid, w-90/
+   w-75/w-55) needs an actual pixel width to resolve those percentages
+   against — inside a shrink-wrapped flex child it has none, so the skeleton
+   bars rendered at ~0px. Dispatches never hit this because its equivalent
+   .ui-empty-state override doesn't force flex/center layout, so its skeleton
+   list is a normal block that stretches full-width by default. Restoring
+   that same full-width behavior here, scoped to just the skeleton list.
+   Confirmed via live screenshot before and after this fix. */
+.deployment-tracking-table-shell .ui-skeleton-list,
+.deployment-tracking-trace-results .ui-skeleton-list {
+    width: 100%;
 }
 
 .deployment-tracking-page .table-responsive {
     width: 100%;
     overflow-x: auto;
-    padding-top: 24px;
+    padding-top: 22px;
 }
 
+/* min-width recalibrated after removing the redundant Status column from the
+   main table (see loadDeployed()) — this table is now 9 columns, the same
+   count as .dispatches-table, so it's set to the same 1040px floor rather
+   than the 1140px that was sized for the old 10-column layout. */
 .deployment-tracking-page .deployment-tracking-table {
     width: 100%;
-    min-width: 1100px;
+    min-width: 1040px;
     margin: 0;
     border-collapse: separate;
     border-spacing: 0;
@@ -602,25 +791,55 @@ document.addEventListener('DOMContentLoaded', () => {
     overflow: hidden;
 }
 
+/* TASK 36 PHASE 2 — loadDeployed()'s table gained two additive columns
+   (Deployment Type, Asset Code) so it now has 11 vs. the base rule's 9-column
+   1040px floor. Scoped to the `--deployed` modifier only (applied solely to
+   the main deployed-items table, not the Trace-by-OR table below, which is
+   unaffected by this task and keeps the 9-column comment above unchanged for
+   its own sizing). */
+.deployment-tracking-page .deployment-tracking-table--deployed {
+    min-width: 1280px;
+}
+
 .deployment-tracking-page .deployment-tracking-table thead,
 .deployment-tracking-page .deployment-tracking-table thead tr,
 .deployment-tracking-page .deployment-tracking-table thead th {
-    display: table-header-group;
     background: var(--deployment-surface-header);
+}
+
+/* BUGFIX — the combined rule above must NOT carry a shared `display` value.
+   It previously set `display: table-header-group` on thead, thead tr AND
+   thead th together; only `tr` was ever corrected back to `table-row`
+   afterward, so every <th> kept `table-header-group`, which is only valid on
+   a <thead> itself. The browser then pulled each <th> out of normal table
+   flow and stacked all ten headers into one collapsed column instead of a
+   row — the actual on-screen bug this page shipped with. Mirrors dispatches.php
+   (dispatches-table thead / thead tr / thead th), which sets these three
+   display values as three separate rules for exactly this reason. */
+.deployment-tracking-page .deployment-tracking-table thead {
+    display: table-header-group;
 }
 
 .deployment-tracking-page .deployment-tracking-table thead tr {
     display: table-row;
 }
 
+.deployment-tracking-page .deployment-tracking-table thead th {
+    display: table-cell;
+}
+
+/* Header typography matched to .dispatches-table th (dispatches.php) exactly —
+   11.5px / 700 / 0.07em / uppercase / muted. The page previously used 13px
+   sentence-case at 0.01em, which was the most obvious tell that this table
+   belonged to a different design generation than Dispatches. */
 .deployment-tracking-page .deployment-tracking-table th {
-    padding: 14px 16px;
+    padding: 16px 18px;
     border: 0;
     border-bottom: 1px solid var(--deployment-border);
-    font-size: 13px;
+    font-size: 11.5px;
     font-weight: 700;
-    letter-spacing: 0.01em;
-    text-transform: none;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
     color: var(--deployment-text-muted);
     white-space: nowrap;
 }
@@ -645,21 +864,76 @@ document.addEventListener('DOMContentLoaded', () => {
 
 .deployment-tracking-page .deployment-tracking-table td {
     display: table-cell;
-    padding: 15px 16px;
+    padding: 18px;
     border: 0;
     border-bottom: 1px solid var(--deployment-border);
     background: transparent;
     color: var(--deployment-text);
     vertical-align: middle;
+    line-height: 1.35;
 }
 
 .deployment-tracking-page .deployment-tracking-table tbody tr:last-child td {
     border-bottom: 0;
 }
 
-.deployment-tracking-emphasis-cell {
-    color: var(--deployment-text);
+/* Section 4 — data hierarchy.
+   Item Name is the row subject and is the only cell allowed full weight at the
+   larger size. Identifiers sit one step below in the accent colour (same role
+   .dispatches-code-primary plays in Dispatches), and supporting detail drops to
+   the faint tone so the eye lands on the item first. */
+.deployment-tracking-item-cell {
+    font-size: 14.5px;
     font-weight: 700;
+    color: var(--deployment-text);
+    letter-spacing: -0.005em;
+}
+
+.deployment-tracking-table__item-head,
+.deployment-tracking-table__item-cell {
+    min-width: 210px;
+}
+
+/* Dispatches' equivalent free-text field (the Items column's secondary
+   line) is capped with max-width + ellipsis so no single row can widen the
+   whole table. Item Name here had no such ceiling: with table-layout:auto,
+   one long unbroken value (e.g. a "smoke-item-1782275354" style seed row)
+   forces that column — and therefore every row's width — wider globally.
+   Ellipsis isn't appropriate here (unlike Dispatches' secondary line, this
+   IS the row's primary identifying text, so truncating it would hide the
+   one thing a user is scanning for); instead the column is capped and long
+   values wrap onto a second line within it, which keeps the table's overall
+   width predictable without hiding data. */
+.deployment-tracking-table__item-cell {
+    max-width: 340px;
+}
+
+.deployment-tracking-item-cell {
+    overflow-wrap: anywhere;
+}
+
+.deployment-tracking-code-cell {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--deployment-accent);
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+}
+
+/* Baseline treatment for a populated-but-not-emphasised value (currently
+   Room/Lab). Sized/weighted to match .dispatches-cell-primary exactly, so
+   this is the same visual "floor" every Dispatches cell already sits on —
+   no cell in this table should render as plain unstyled text. */
+.deployment-tracking-cell-primary {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--deployment-text);
+}
+
+.deployment-tracking-table__date-cell {
+    color: var(--deployment-text-faint);
+    white-space: nowrap;
+    min-width: 120px;
 }
 
 .deployment-tracking-muted-cell {
@@ -670,79 +944,80 @@ document.addEventListener('DOMContentLoaded', () => {
     font-style: italic;
 }
 
-.deployment-tracking-table__qty {
+/* BUGFIX — was a bare single-class selector (specificity 0,0,1,0), which lost
+   to the shared `.table th, .table td { text-align: left; }` rule in
+   styles.css (specificity 0,0,1,1). Every other structural rule in this file
+   is deliberately prefixed with `.deployment-tracking-page .deployment-tracking-table`
+   to outrank the shared table styles — this was the one column where that
+   prefix was missing, so Qty Deployed / Qty Received rendered left-aligned
+   instead of centered despite the CSS "declaring" center. Confirmed via
+   getComputedStyle() against the live page before this fix. */
+.deployment-tracking-page .deployment-tracking-table .deployment-tracking-table__qty {
     text-align: center;
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
 }
 
+/* Two-line location cell, sized to .dispatches-cell-primary / -secondary so the
+   room-over-department stack reads identically in both modules. The secondary
+   line moves from 0.82rem to a flat 12px: the rem values elsewhere on this page
+   are deliberate (they mirror Dispatches' panel typography), but inside the
+   table Dispatches works in px, and mixing the two scales here made the
+   sub-label drift against the equivalent Dispatches cell. */
 .deployment-tracking-location-cell {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 3px;
     line-height: 1.35;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--deployment-text);
 }
 
 .deployment-tracking-location-cell span {
-    color: var(--deployment-text-muted);
-    font-size: 0.82rem;
+    color: var(--deployment-text-faint);
+    font-size: 12px;
+    font-weight: 400;
 }
 
-.deployment-status-badge,
-.deployment-receipt-badge {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    padding: 5px 10px;
-    border-radius: 999px;
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.01em;
-    white-space: nowrap;
-    border: 1px solid transparent;
-}
-
-.deployment-status-badge[data-status='released'] {
-    background: rgba(37, 99, 235, 0.12);
-    color: #2563eb;
-    border-color: rgba(37, 99, 235, 0.2);
-}
-
-.deployment-status-badge[data-status='approved'] {
-    background: rgba(5, 150, 105, 0.12);
-    color: #059669;
-    border-color: rgba(5, 150, 105, 0.2);
-}
-
-.deployment-status-badge[data-status='pending'] {
-    background: rgba(217, 119, 6, 0.14);
-    color: #b45309;
-    border-color: rgba(217, 119, 6, 0.2);
-}
-
-.deployment-status-badge[data-status='cancelled'] {
-    background: rgba(220, 38, 38, 0.12);
-    color: #dc2626;
-    border-color: rgba(220, 38, 38, 0.2);
-}
-
-.deployment-status-badge:not([data-status='released']):not([data-status='approved']):not([data-status='pending']):not([data-status='cancelled']) {
+/* Status badges.
+   Colour now comes entirely from the shared .badge / .badge-{status} classes
+   (styles.css + color-scheme.css) — the same source Dispatches draws from — so
+   the twelve colour declarations that used to live here are gone. What remains
+   is only the pill geometry, mirroring .dispatches-status-badge so the two
+   pages produce an identical shape. The !important flags match Dispatches and
+   are needed to beat the shared .badge defaults (8px radius, 4px 10px). */
+/* Neutral fallback for a status with no shared .badge-{status} class (e.g. a
+   null dispatch_status, which renders as "Unknown"). Wrapped in :where() so it
+   carries zero specificity — .badge-released and friends are also single-class
+   selectors, and this page's <style> block loads after color-scheme.css, so a
+   normal rule here would outrank and flatten the shared status colours. */
+:where(.deployment-status-badge) {
     background: rgba(100, 116, 139, 0.14);
     color: var(--deployment-text-muted);
-    border-color: rgba(100, 116, 139, 0.22);
+    border: 1px solid rgba(100, 116, 139, 0.22);
 }
 
-.deployment-receipt-badge[data-status='posted'] {
-    background: rgba(5, 150, 105, 0.12);
-    color: #059669;
-    border-color: rgba(5, 150, 105, 0.2);
+.deployment-status-badge {
+    display: inline-flex !important;
+    align-items: center;
+    padding: 6px 12px !important;
+    border-radius: 999px !important;
+    font-size: 11px !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.03em !important;
+    text-transform: none !important;
+    box-shadow: none;
 }
 
-.deployment-receipt-badge[data-status='draft'] {
-    background: rgba(217, 119, 6, 0.14);
-    color: #b45309;
-    border-color: rgba(217, 119, 6, 0.2);
+.deployment-status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    display: inline-block;
+    margin-right: 6px;
+    flex-shrink: 0;
 }
 
 .deployment-tracking-receipt-grid {
@@ -817,6 +1092,12 @@ document.addEventListener('DOMContentLoaded', () => {
         min-width: 980px;
     }
 
+    /* TASK 36 PHASE 2 — mobile counterpart to the desktop --deployed
+       min-width override above. */
+    .deployment-tracking-page .deployment-tracking-table--deployed {
+        min-width: 1180px;
+    }
+
     .deployment-tracking-page .deployment-tracking-table thead {
         display: table-header-group !important;
     }
@@ -828,10 +1109,26 @@ document.addEventListener('DOMContentLoaded', () => {
         border-radius: 0;
     }
 
+    /* These !important flags counter the global stacked-card table rules in
+       color-scheme.css (@media max-width:768px), which convert any .table into
+       blocks with padding-left:50% and an attr(data-label) pseudo-element. This
+       table emits no data-label attributes, so the stacked mode would render
+       blank labels — the overrides keep it a real table that scrolls instead.
+       The padding shorthand is restated in full because the shared rule sets
+       `padding: 8px 12px`, and overriding padding-left alone left cells with
+       mismatched 16px/12px gutters and 8px vertical breathing room. */
+    .deployment-tracking-page .deployment-tracking-table th,
     .deployment-tracking-page .deployment-tracking-table td {
         display: table-cell !important;
         text-align: left !important;
-        padding-left: 16px !important;
+        padding: 14px 16px !important;
+    }
+
+    /* Re-asserted after the blanket left-align above, which would otherwise
+       strip the numeric column's centring on mobile only. */
+    .deployment-tracking-page .deployment-tracking-table th.deployment-tracking-table__qty,
+    .deployment-tracking-page .deployment-tracking-table td.deployment-tracking-table__qty {
+        text-align: center !important;
     }
 
     .deployment-tracking-page .deployment-tracking-table td::before,

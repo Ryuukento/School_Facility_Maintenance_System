@@ -20,12 +20,25 @@ trait BuildsSharedTestSchema
         Schema::create('users', function (Blueprint $table): void {
             $table->increments('user_id');
             $table->string('full_name');
-            $table->string('email')->unique();
+            $table->string('username', 100)->nullable()->unique();
+            // Nullable to match the real schema. Migration
+            // 2026_09_08_000100_add_out_of_band_user_and_report_columns
+            // relaxes users.email to NULL because the Add New User modal has
+            // no email field at all and UserController::store() persists null
+            // when none is supplied. Leaving this NOT NULL made every test
+            // that actually completes a POST /api/users fail with an SQLite
+            // integrity-constraint error instead of exercising the endpoint.
+            $table->string('email')->nullable()->unique();
             $table->string('password');
             $table->string('role', 50)->default('maintenance_admin');
             $table->unsignedInteger('department_id')->nullable();
             $table->string('status', 50)->default('active');
             $table->string('avatar')->nullable();
+            // Present in the real schema since migration
+            // 2026_09_08_000100_add_out_of_band_user_and_report_columns and
+            // written by UserController::store(); it was simply missing from
+            // this shared blueprint. Nullable, matching that migration.
+            $table->string('designation', 100)->nullable();
             $table->timestamps();
         });
     }
@@ -103,6 +116,13 @@ trait BuildsSharedTestSchema
             $table->increments('report_id');
             $table->string('title');
             $table->longText('description');
+            // Problem Type (2026_09_20_000100_add_problem_type_to_maintenance_reports_table).
+            // Nullable here for the same reason it is nullable in the real
+            // migration: existing rows and the internal creators (PM, dispatch,
+            // asset-damage) carry no problem type, and "required" is enforced
+            // at the Create Report boundary rather than by the schema.
+            $table->string('problem_type', 50)->nullable();
+            $table->string('problem_type_other', 100)->nullable();
             $table->string('location')->nullable();
             $table->string('priority', 20)->default('medium');
             $table->string('status', 20)->default('submitted');
@@ -118,6 +138,55 @@ trait BuildsSharedTestSchema
             $table->dateTime('need_change_approved_at')->nullable();
             $table->dateTime('need_change_deducted_at')->nullable();
             $table->string('completion_proof_image')->nullable();
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * TASK 13 — the dispatches/dispatch_items blueprints were duplicated
+     * byte-for-byte across every dispatch Feature test, so adding a column to
+     * the real schema meant editing three files and silently failing wherever
+     * one was missed. They live here now, mirroring the real migrations:
+     * the base dispatches table plus Task 3's audit columns, Task 4's
+     * release_remarks, and Task 13's release_assigned_* assignment columns
+     * (2026_08_03_000100_add_release_assignment_to_dispatches_table).
+     */
+    protected function createDispatchesTable(): void
+    {
+        Schema::create('dispatches', function (Blueprint $table): void {
+            $table->increments('id');
+            $table->string('dispatch_code', 50)->unique();
+            $table->unsignedInteger('department_id')->nullable();
+            // TASK 3 — Dispatch Personnel Audit Trail.
+            $table->unsignedInteger('requested_by')->nullable();
+            $table->unsignedInteger('approved_by')->nullable();
+            $table->timestamp('approved_at')->nullable();
+            $table->unsignedInteger('released_by')->nullable();
+            // TASK 4 — Approve & Release Workflow.
+            $table->text('release_remarks')->nullable();
+            // TASK 13 — Dispatch Release Assignment Workflow.
+            $table->unsignedInteger('release_assigned_to')->nullable();
+            $table->unsignedInteger('release_assigned_by')->nullable();
+            $table->timestamp('release_assigned_at')->nullable();
+            $table->unsignedInteger('receiver_user_id')->nullable();
+            $table->unsignedInteger('room_id')->nullable();
+            $table->unsignedInteger('repair_request_id')->nullable();
+            $table->unsignedInteger('damage_report_id')->nullable();
+            $table->unsignedInteger('report_id')->nullable();
+            $table->unsignedInteger('purchase_receipt_id')->nullable();
+            $table->string('status', 20)->default('pending');
+            $table->text('notes')->nullable();
+            $table->timestamps();
+        });
+    }
+
+    protected function createDispatchItemsTable(): void
+    {
+        Schema::create('dispatch_items', function (Blueprint $table): void {
+            $table->increments('id');
+            $table->unsignedInteger('dispatch_id');
+            $table->unsignedInteger('item_id');
+            $table->integer('quantity');
             $table->timestamps();
         });
     }

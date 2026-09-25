@@ -21,7 +21,19 @@ class AnalyticsIntegrationTest extends TestCase
             $this->assertArrayHasKey('damaged_trends', $json['data']);
     }
 
-    public function test_top_requested_and_repaired_endpoints(): void
+    /**
+     * TASK 13 PHASE 8 — split from test_top_requested_and_repaired_endpoints().
+     *
+     * The original test exercised two endpoints in one method. topRepaired()
+     * was deleted with the rest of the Repair analytics, so the combined test
+     * could no longer run at all — and simply deleting it would have taken
+     * the still-valid topRequested() coverage down with it.
+     *
+     * topRequested() is the Inventory/Dispatch metric ("items most often
+     * requested"). It is NOT a Repair metric despite sitting next to one, and
+     * the brief requires it be preserved.
+     */
+    public function test_top_requested_endpoint(): void
     {
         $this->withoutMiddleware();
         app()->instance(\App\Services\AnalyticsService::class, AnalyticsMocks::top());
@@ -31,12 +43,61 @@ class AnalyticsIntegrationTest extends TestCase
             $j1 = json_decode($r1->getContent(), true);
             $this->assertArrayHasKey('data', $j1);
             $this->assertArrayHasKey('top_requested', $j1['data']);
+    }
 
-            $r2 = $controller->topRepaired(new \Illuminate\Http\Request());
-            $this->assertEquals(200, $r2->getStatusCode());
-            $j2 = json_decode($r2->getContent(), true);
-            $this->assertArrayHasKey('data', $j2);
-            $this->assertArrayHasKey('top_repaired', $j2['data']);
+    /**
+     * TASK 13 PHASE 8 — the other half of the split above, inverted.
+     *
+     * Rather than dropping the topRepaired() expectation outright, the
+     * retirement is pinned at both layers it existed in: the controller
+     * action and the service method behind it. Asserting against the REAL
+     * classes rather than the mock is the point — AnalyticsMocks::top() would
+     * happily answer a topRepaired() call, so mocking here would hide a
+     * resurrection instead of catching it.
+     */
+    public function test_the_top_repaired_endpoint_is_retired(): void
+    {
+        $this->assertFalse(
+            method_exists(\App\Http\Controllers\Api\AnalyticsReportController::class, 'topRepaired'),
+            'AnalyticsReportController::topRepaired() was removed in Task 13.'
+        );
+
+        $this->assertFalse(
+            method_exists(\App\Services\AnalyticsService::class, 'topRepairedItems'),
+            'AnalyticsService::topRepairedItems() was removed in Task 13.'
+        );
+
+        // The neighbouring Inventory metric must not have been taken with it.
+        $this->assertTrue(
+            method_exists(\App\Services\AnalyticsService::class, 'topRequestedItems'),
+            'topRequestedItems() is an Inventory metric and must survive the Repair retirement.'
+        );
+    }
+
+    /**
+     * TASK 13 PHASE 8 — the Repair Report endpoint and its service method are
+     * retired, while the reports sitting either side of it in the same
+     * controller — Dispatch and Replacement/Damage — are explicitly kept by
+     * the brief. Pinning all of them together is what stops a later cleanup
+     * pass matching on "report" and removing the wrong one.
+     */
+    public function test_the_repair_report_is_retired_but_its_neighbours_remain(): void
+    {
+        $this->assertFalse(
+            method_exists(\App\Http\Controllers\Api\AnalyticsReportController::class, 'repairReport'),
+            'AnalyticsReportController::repairReport() was removed in Task 13.'
+        );
+        $this->assertFalse(
+            method_exists(\App\Services\AnalyticsService::class, 'repairReport'),
+            'AnalyticsService::repairReport() was removed in Task 13.'
+        );
+
+        foreach (['dispatchReport', 'replacementReport', 'overview', 'semesterDetail'] as $kept) {
+            $this->assertTrue(
+                method_exists(\App\Services\AnalyticsService::class, $kept),
+                "AnalyticsService::{$kept}() is not a Repair metric and must survive Task 13."
+            );
+        }
     }
 
     public function test_low_stock_filters_and_empty_handling(): void

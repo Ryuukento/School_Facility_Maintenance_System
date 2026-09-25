@@ -31,10 +31,16 @@ class EnsureApiAuthenticated
         // leak a raw SQLSTATE foreign-key error instead of failing
         // gracefully. Checked once here — the single place already gating
         // every authenticated route — rather than re-checked per controller.
+        //
+        // Also rejects a session whose user still exists but is no longer
+        // 'active' (e.g. deactivated by an Administrator after the session
+        // was established). AuthController::login() already refuses to
+        // authenticate a pending/inactive user; a session predating the
+        // deactivation must not be able to keep bypassing that same check.
         $sessionUser = $request->session()->get('auth_user') ?? $request->session()->get('user');
         $userId = is_array($sessionUser) ? ($sessionUser['user_id'] ?? null) : null;
 
-        if ($userId === null || !User::query()->whereKey($userId)->exists()) {
+        if ($userId === null || strtolower((string) User::query()->whereKey($userId)->value('status')) !== 'active') {
             $request->session()->forget('auth_user');
             $request->session()->forget('user');
             $request->session()->forget('user_id');

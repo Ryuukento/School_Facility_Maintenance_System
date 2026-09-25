@@ -1,5 +1,15 @@
-/* Final light-mode polish for authenticated pages. */
+/* Final light-mode polish for authenticated pages.
 
+   NOTE ON REACH: this sheet is linked by the Blade shell
+   (resources/views/layouts/app.blade.php) only — the legacy PHP shell in
+   includes/header.php does not load it. Its selectors sit at (0,4,1), which
+   outranks the equivalent (0,3,0) rules in styles.css, so on Blade pages
+   THIS is the declaration that paints the container edge. Both files are
+   pointed at the same --purple-* tokens so the two shells agree. */
+
+/* Major container tier: cards, panels and the modal shell all take the same
+   lavender outer edge. The modal BACKGROUND stays white — only the frame is
+   purple. */
 :root[data-theme-resolved='light'] body[data-user-role] .card,
 :root[data-theme-resolved='light'] body[data-user-role] .report-card,
 :root[data-theme-resolved='light'] body[data-user-role] .dashboard-card,
@@ -9,7 +19,7 @@
 :root[data-theme-resolved='light'] body[data-user-role] .table-responsive {
     background: #ffffff !important;
     color: #111827 !important;
-    border: 1px solid #e5e7eb !important;
+    border: 1px solid var(--purple-border, #e5e7eb) !important;
     box-shadow: 0 10px 28px rgba(15, 23, 42, 0.08) !important;
 }
 
@@ -19,7 +29,8 @@
 :root[data-theme-resolved='light'] body[data-user-role] .card-footer,
 :root[data-theme-resolved='light'] body[data-user-role] .modal-footer {
     background: #ffffff !important;
-    border-color: #e5e7eb !important;
+    /* Interior dividers (header/footer rules), not outer edges — lighter token. */
+    border-color: var(--purple-border-light, #e5e7eb) !important;
     color: #111827 !important;
 }
 
@@ -49,7 +60,7 @@
 :root[data-theme-resolved='light'] body[data-user-role] .modal-content textarea {
     background: #ffffff !important;
     color: #111827 !important;
-    border-color: #d1d5db !important;
+    border-color: var(--purple-control, #d1d5db) !important;
 }
 
 :root[data-theme-resolved='light'] body[data-user-role] .card .btn,

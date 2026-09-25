@@ -33,12 +33,19 @@ class AuthController extends Controller
 
     public function login(Request $request)
     {
+        // TASK 81 Part 1 — Username Standardization. Login now authenticates
+        // by username ONLY. Email is no longer an accepted login identifier
+        // (it remains on the user record purely for contact / notification
+        // purposes — see register() below and ARCHITECTURE.md's auth
+        // section). A value that happens to look like an email address will
+        // simply fail to match any username and be rejected like any other
+        // wrong credential, by design.
         $validated = $request->validate([
-            'email'    => ['required', 'string', 'min:3', 'max:255'],
+            'username' => ['required', 'string', 'min:3', 'max:255'],
             'password' => ['required', 'string'],
         ]);
 
-        $identifier  = $validated['email'];
+        $identifier  = strtolower(trim($validated['username']));
         $throttleKey = $this->throttleKey($identifier, (string) $request->ip());
 
         if (RateLimiter::tooManyAttempts($throttleKey, self::MAX_LOGIN_ATTEMPTS)) {
@@ -50,12 +57,10 @@ class AuthController extends Controller
             ]);
         }
 
-        // Accept username OR email — try email first, then username
-        $user = User::query()->where('email', $identifier)->first()
-             ?? User::query()->where('username', $identifier)->first();
+        $user = User::query()->where('username', $identifier)->first();
 
         if (!$user || !Hash::check($validated['password'], $user->password)) {
-            return $this->failedLoginResponse($throttleKey, 'Invalid username/email or password', 401);
+            return $this->failedLoginResponse($throttleKey, 'Invalid username or password', 401);
         }
 
         if (strtolower((string)$user->status) === 'pending') {
@@ -71,6 +76,9 @@ class AuthController extends Controller
         }
 
         RateLimiter::clear($throttleKey);
+
+        // Regenerate the session ID on successful login to prevent session fixation.
+        $request->session()->regenerate();
 
         $sessionUser = [
             'user_id'       => $user->user_id,
@@ -117,8 +125,17 @@ class AuthController extends Controller
 
     public function register(Request $request)
     {
+        // TASK 81 Part 1 — Username Standardization. Self-registration must
+        // now also collect a username (the field login() authenticates
+        // against), matching the same required/min:3/max:50/unique rule
+        // UserController::store() already enforces for Administrator-created
+        // accounts. Email stays required too — it is not the login
+        // identifier anymore, but it is still a real, independent user
+        // attribute (contact info; see class doc + forgotPasswordRequest()
+        // below), so it is deliberately NOT removed here.
         $validator = Validator::make($request->all(), [
             'full_name' => ['required', 'string', 'max:255', "regex:/^(?=.*\\p{L})[\\p{L} .'-]+$/u"],
+            'username' => ['required', 'string', 'min:3', 'max:50', 'unique:users,username'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
             'password' => ['required', 'string', 'min:8'],
         ], [
@@ -140,6 +157,7 @@ class AuthController extends Controller
 
         $user = User::query()->create([
             'full_name' => $validated['full_name'],
+            'username' => strtolower(trim($validated['username'])),
             'email' => $validated['email'],
             'password' => Hash::make($validated['password']),
             'role' => 'user',
@@ -159,6 +177,7 @@ class AuthController extends Controller
 
         return $this->ok('Registration submitted. Your account is pending Administrator approval.', [
             'user_id' => $user->user_id,
+            'username' => $user->username,
             'email' => $user->email,
             'status' => $user->status,
         ], 201);
@@ -167,11 +186,11 @@ class AuthController extends Controller
     public function forgotPasswordRequest(Request $request)
     {
         $validated = $request->validate([
-            'email' => ['required', 'email'],
+            'username' => ['required', 'string', 'min:3', 'max:255'],
         ]);
 
-        $email = strtolower(trim($validated['email']));
-        $throttleKey = 'forgot-password-request|' . $email . '|' . (string)$request->ip();
+        $username = strtolower(trim($validated['username']));
+        $throttleKey = 'forgot-password-request|' . $username . '|' . (string)$request->ip();
 
         if (RateLimiter::tooManyAttempts($throttleKey, 1)) {
             return $this->fail('Please wait before sending another reset request.', 429, [
@@ -181,9 +200,9 @@ class AuthController extends Controller
 
         RateLimiter::hit($throttleKey, self::RESET_REQUEST_LOCKOUT_SECONDS);
 
-        $user = User::query()->where('email', $email)->first();
+        $user = User::query()->where('username', $username)->first();
         if (!$user) {
-            return $this->ok('If this email is registered, Administrator has been notified.');
+            return $this->ok('If this account is registered, Administrator has been notified.');
         }
 
         try {
@@ -208,6 +227,11 @@ class AuthController extends Controller
                     'message' => ($user->full_name ?: $user->email) . ' requested a password reset. Please update the password in User Management.',
                     'is_read' => 0,
                     'created_at' => now(),
+                    // TASK 17 — Notification Deep Linking: this notification is
+                    // about the requesting user's account, so the admin can
+                    // deep-link straight to it in User Management.
+                    'entity_type' => 'user',
+                    'entity_id' => $user->user_id,
                 ];
 
                 if ($hasReportIdColumn) {
@@ -230,7 +254,7 @@ class AuthController extends Controller
             return $this->ok('Administrator has been notified to reset your password.');
         } catch (\Throwable $e) {
             \Log::warning('Password reset request notification exception', [
-                'email' => $email,
+                'username' => $username,
                 'error' => $e->getMessage(),
             ]);
             return $this->fail('Unable to notify Administrator right now. Please try again later.', 500);

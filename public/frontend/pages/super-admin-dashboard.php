@@ -20,28 +20,25 @@ if (!isset($_SESSION['user']) || $_SESSION['user']['role'] !== 'super_admin') {
 }
 
 $pageTitle = 'System Administration Dashboard';
+$pageStylesheets = [
+    '../assets/css/maintenance-dashboard.css',
+    '/School_Facility_Maintenance_System/frontend/assets/css/super-admin-dashboard.inline.css?v=20260921-2',
+    '/School_Facility_Maintenance_System/frontend/assets/css/enterprise-dashboard.css?v=20260726-1',
+];
+// chart-lite.js loaded by header.php — do not load again here
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo $pageTitle; ?></title>
-    <link rel="stylesheet" href="../assets/css/maintenance-dashboard.css">
-    <script src="/School_Facility_Maintenance_System/frontend/assets/js/chart-lite.js?v=20260504-5"></script>
-    <link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/super-admin-dashboard.inline.css?v=20260424-1">
-</head>
-<body>
-    <!-- Include Header/Navigation -->
-    <?php include '../includes/header.php'; ?>
+<?php
+    // Include Header/Navigation
+    include '../includes/header.php';
+?>
     
     <div class="system-dashboard">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
+        <div class="dashboard-page-header">
             <div>
-                <h1>System Administration Dashboard</h1>
-                <p class="dashboard-subtitle">System-wide overview and statistics</p>
+                <h1 class="dashboard-page-header-title">System Administration Dashboard</h1>
+                <p class="dashboard-page-header-subtitle">System-wide overview and statistics</p>
             </div>
-            <div style="display: flex; gap: 10px; align-items: center;">
+            <div class="dashboard-page-header-actions">
                 <label for="dashboard-month-picker" style="font-size:13px;margin-right:6px;">Browse by Month:</label>
                 <select id="dashboard-month-picker" style="padding:6px 10px;border-radius:6px;">
                     <!-- Month options will be populated by JS -->
@@ -49,8 +46,8 @@ $pageTitle = 'System Administration Dashboard';
                 <select id="dashboard-year-picker" style="padding:6px 10px;border-radius:6px;">
                     <!-- Year options will be populated by JS -->
                 </select>
-                <a href="/School_Facility_Maintenance_System/frontend/pages/maintenance-reports-list.php?last_month=1" class="btn btn-primary" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; text-decoration: none; border-radius: 6px; background: #8F00CC; color: white; font-weight: 500; white-space: nowrap;">
-                    <span>📅</span> Last Month Reports
+                <a href="/School_Facility_Maintenance_System/frontend/pages/reports.php?last_month=1" class="btn btn-primary" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; text-decoration: none; border-radius: 6px; font-weight: 500; white-space: nowrap;">
+                    <?php echo ui_icon('calendar'); ?> Last Month Reports
                 </a>
             </div>
         </div>
@@ -94,7 +91,7 @@ $pageTitle = 'System Administration Dashboard';
         <!-- Reports Overview Section -->
         <div class="overview-section" style="margin-bottom: 30px;">
             <div class="overview-card" style="grid-column: 1 / -1;">
-                <div class="overview-title">ðŸ“Š Reports Overview by Status</div>
+                <div class="overview-title"><?php echo ui_icon('bar-chart'); ?> Reports Overview by Status</div>
                 <div id="reportsOverviewContainer" style="display: flex; flex-wrap: wrap; gap: 12px; padding-top: 5px;">
                     <div class="loading">Loading reports overview...</div>
                 </div>
@@ -127,7 +124,7 @@ $pageTitle = 'System Administration Dashboard';
 
         <!-- Last Month Reports Section -->
         <div class="recent-activity-section">
-            <div class="recent-activity-title">ðŸ“… Last Month Reports</div>
+            <div class="recent-activity-title"><?php echo ui_icon('calendar'); ?> Last Month Reports</div>
             
             <!-- Filter Options -->
             <div class="last-month-filters">
@@ -317,25 +314,11 @@ $pageTitle = 'System Administration Dashboard';
         let latestChartData = null;
         const APP_BASE = '/School_Facility_Maintenance_System';
 
+        // The system is light-only. This used to fall back to a saved theme
+        // preference and then to prefers-color-scheme; both are gone, so the
+        // chart palette is simply the light palette.
         function getResolvedTheme() {
-            const rootTheme = document.documentElement.getAttribute('data-theme-resolved');
-            if (rootTheme === 'dark' || rootTheme === 'light') {
-                return rootTheme;
-            }
-
-            try {
-                const mode = localStorage.getItem('sfms_settings_theme')
-                    || localStorage.getItem('sfms_theme_mode')
-                    || localStorage.getItem('sfmsThemeMode')
-                    || 'light';
-                if (mode === 'auto') {
-                    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-                }
-
-                return mode === 'dark' ? 'dark' : 'light';
-            } catch (error) {
-                return 'light';
-            }
+            return 'light';
         }
 
         function getChartPalette() {
@@ -542,6 +525,14 @@ $pageTitle = 'System Administration Dashboard';
             }
         }
 
+        // TASK 7.1 — the stat chips below were entity-encoded emoji
+        // ('&#128101;' 👥, '&#128196;' 📄, '&#127970;' 🏢, '&#9203;' ⏳,
+        // '&#128295;' 🔧, '&#9888;' ⚠). They are decorative: every chip sits
+        // beside its own .stat-label text, so they stay aria-hidden.
+        function saIcon(name) {
+            return window.UIIcons ? window.UIIcons.svg(name, { size: 24 }) : '';
+        }
+
         function renderStatistics(data) {
             if (!data.success) {
                 document.getElementById('statsContainer').innerHTML = '<div style="color: #ef4444; padding: 20px;">Failed to load statistics. Please refresh the page.</div>';
@@ -552,7 +543,7 @@ $pageTitle = 'System Administration Dashboard';
             container.innerHTML = `
                 <div class="stat-card users">
                     <div class="stat-head">
-                        <span class="stat-icon-chip" aria-hidden="true">&#128101;</span>
+                        <span class="stat-icon-chip">${saIcon('users')}</span>
                         <div class="stat-label">Total Users</div>
                     </div>
                     <div class="stat-value">${data.totalUsers}</div>
@@ -565,7 +556,7 @@ $pageTitle = 'System Administration Dashboard';
 
                 <div class="stat-card reports">
                     <div class="stat-head">
-                        <span class="stat-icon-chip" aria-hidden="true">&#128196;</span>
+                        <span class="stat-icon-chip">${saIcon('file-text')}</span>
                         <div class="stat-label">Total Reports</div>
                     </div>
                     <div class="stat-value">${data.totalReports}</div>
@@ -576,7 +567,7 @@ $pageTitle = 'System Administration Dashboard';
 
                 <div class="stat-card departments">
                     <div class="stat-head">
-                        <span class="stat-icon-chip" aria-hidden="true">&#127970;</span>
+                        <span class="stat-icon-chip">${saIcon('building')}</span>
                         <div class="stat-label">Departments</div>
                     </div>
                     <div class="stat-value">${data.totalDepartments}</div>
@@ -587,7 +578,7 @@ $pageTitle = 'System Administration Dashboard';
 
                 <div class="stat-card buildings stat-card-clickable stat-card-action" role="button" tabindex="0" data-href="/School_Facility_Maintenance_System/frontend/pages/buildings-overview.php" aria-label="Open buildings overview">
                     <div class="stat-head">
-                        <span class="stat-icon-chip" aria-hidden="true">&#127970;</span>
+                        <span class="stat-icon-chip">${saIcon('building')}</span>
                         <div class="stat-label">Buildings Overview</div>
                     </div>
                     <div class="stat-value">${data.buildingsOverview || 0}</div>
@@ -598,7 +589,7 @@ $pageTitle = 'System Administration Dashboard';
 
                 <div class="stat-card pending">
                     <div class="stat-head">
-                        <span class="stat-icon-chip" aria-hidden="true">&#9203;</span>
+                        <span class="stat-icon-chip">${saIcon('clock')}</span>
                         <div class="stat-label">Pending Tasks</div>
                     </div>
                     <div class="stat-value">${data.pendingReports}</div>
@@ -609,7 +600,7 @@ $pageTitle = 'System Administration Dashboard';
 
                 <div class="stat-card in-progress">
                     <div class="stat-head">
-                        <span class="stat-icon-chip" aria-hidden="true">&#128295;</span>
+                        <span class="stat-icon-chip">${saIcon('wrench')}</span>
                         <div class="stat-label">In Progress</div>
                     </div>
                     <div class="stat-value">${data.inProgressReports || 0}</div>
@@ -620,7 +611,7 @@ $pageTitle = 'System Administration Dashboard';
 
                 <div class="stat-card overdue">
                     <div class="stat-head">
-                        <span class="stat-icon-chip" aria-hidden="true">&#9888;</span>
+                        <span class="stat-icon-chip">${saIcon('alert-triangle')}</span>
                         <div class="stat-label">Overdue</div>
                     </div>
                     <div class="stat-value">${data.overdueReports}</div>
@@ -631,7 +622,7 @@ $pageTitle = 'System Administration Dashboard';
 
                 <div class="stat-card completed">
                     <div class="stat-head">
-                        <span class="stat-icon-chip" aria-hidden="true">&#10004;</span>
+                        <span class="stat-icon-chip">${saIcon('check-circle')}</span>
                         <div class="stat-label">Completed</div>
                     </div>
                     <div class="stat-value">${data.completedThisMonth}</div>
@@ -651,12 +642,12 @@ $pageTitle = 'System Administration Dashboard';
             if (!container) return;
 
             const statusConfig = [
-                { key: 'submitted',   label: 'Submitted',   color: '#3b82f6', icon: 'ðŸ“‹' },
-                { key: 'assigned',    label: 'Assigned',    color: '#f59e0b', icon: 'ðŸ‘¤' },
-                { key: 'in_progress', label: 'In Progress', color: '#8b5cf6', icon: 'ðŸ”§' },
-                { key: 'completed',   label: 'Completed',   color: '#10b981', icon: 'âœ…' },
-                { key: 'closed',      label: 'Closed',      color: '#6b7280', icon: 'ðŸ”’' },
-                { key: 'cancelled',   label: 'Cancelled',   color: '#ef4444', icon: 'âŒ' }
+                { key: 'submitted',   label: 'Submitted',   color: '#3b82f6', icon: 'clipboard-list' },
+                { key: 'assigned',    label: 'Assigned',    color: '#f59e0b', icon: 'user' },
+                { key: 'in_progress', label: 'In Progress', color: '#8b5cf6', icon: 'wrench' },
+                { key: 'completed',   label: 'Completed',   color: '#10b981', icon: 'check-circle' },
+                { key: 'closed',      label: 'Closed',      color: '#6b7280', icon: 'lock' },
+                { key: 'cancelled',   label: 'Cancelled',   color: '#ef4444', icon: 'x-circle' }
             ];
 
             const totalReports = data.totalReports || 0;
@@ -676,7 +667,7 @@ $pageTitle = 'System Administration Dashboard';
                         box-shadow: 0 1px 4px rgba(0,0,0,0.06);
                     ">
                         <div style="font-size: 12px; color: #6b7280; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;">
-                            ${s.icon} ${s.label}
+                            ${saIcon(s.icon)} ${s.label}
                         </div>
                         <div style="font-size: 28px; font-weight: 700; color: ${s.color}; line-height: 1;">${count}</div>
                         <div style="font-size: 12px; color: #9ca3af; margin-top: 5px;">${pct}% of total</div>
@@ -846,7 +837,15 @@ $pageTitle = 'System Administration Dashboard';
                     datasets: [{
                         label: 'Reports',
                         data: data.priorityChart.data,
-                        backgroundColor: ['#94a3b8', '#3b82f6', '#f59e0b', '#ef4444', '#991b1b'],
+                        // TASK 53 — this was a hardcoded 5-slot positional array
+                        // that ignored the backend's own data.priorityChart.colors
+                        // (which correctly maps each label to its semantic color
+                        // by key, not by position). Since the backend's label
+                        // order depends on which priorities actually occurred
+                        // that month (via ORDER BY FIELD(...)), a positional
+                        // array silently mis-colored bars whenever the present
+                        // priorities/order didn't match what this array assumed.
+                        backgroundColor: data.priorityChart.colors,
                         borderColor: '#ffffff',
                         borderWidth: 1,
                         barThickness: 70,
@@ -858,12 +857,38 @@ $pageTitle = 'System Administration Dashboard';
                     maintainAspectRatio: false,
                     onClick: (event, elements) => {
                         if (!elements || !elements.length) {
+                            // Not on a bar — let the click keep bubbling to the
+                            // enclosing .chart-card-clickable wrapper, which
+                            // opens the unfiltered reports list. That is the
+                            // intended fallback for "clicked the card, not a bar".
                             return;
                         }
 
+                        // TASK 53 — this canvas sits INSIDE a
+                        // .chart-card-clickable wrapper (see the markup above)
+                        // whose own bubbling click handler assigns
+                        // window.location.href from data-href — the UNFILTERED
+                        // reports.php. Without this stopPropagation that
+                        // wrapper ran immediately after this handler and
+                        // overwrote the filtered URL assigned below (last
+                        // assignment wins), so every bar click silently landed
+                        // on the unfiltered list and the per-priority
+                        // navigation never actually took effect.
+                        if (event && event.native && event.native.stopPropagation) {
+                            event.native.stopPropagation();
+                        }
+
+                        // TASK 53 — this previously used a hardcoded
+                        // ['low','medium','high','critical','urgent'] array
+                        // indexed by bar position, which never actually matched
+                        // the backend's real label order (ORDER BY
+                        // FIELD(priority,'critical','urgent','high','medium','low')),
+                        // so clicking a bar could navigate to a completely
+                        // different priority than the one clicked. Reading the
+                        // priority directly from this bar's own label is
+                        // correct regardless of ordering.
                         const idx = elements[0].index;
-                        const priorities = ['low', 'medium', 'high', 'critical', 'urgent'];
-                        const priority = priorities[idx] || priorities[Math.min(idx, priorities.length - 1)];
+                        const priority = (data.priorityChart.labels?.[idx] || '').toLowerCase();
                         if (!priority) {
                             return;
                         }
@@ -1020,7 +1045,7 @@ $pageTitle = 'System Administration Dashboard';
                 deptList.innerHTML = data.departmentUsers
                     .map(dept => `
                         <li>
-                            <span class="name">${dept.name}</span>
+                            <span class="name">${UI.escapeHtml(dept.name)}</span>
                             <span class="count">${dept.count || 0} user${dept.count != 1 ? 's' : ''}</span>
                         </li>
                     `)
@@ -1035,7 +1060,7 @@ $pageTitle = 'System Administration Dashboard';
                 staffList.innerHTML = data.activeStaff
                     .map(staff => `
                         <li>
-                            <span class="name">${staff.full_name}</span>
+                            <span class="name">${UI.escapeHtml(staff.full_name)}</span>
                             <span class="count">${staff.assigned_count} assigned</span>
                         </li>
                     `)
@@ -1062,11 +1087,11 @@ $pageTitle = 'System Administration Dashboard';
                     
                     return `
                         <li class="activity-item">
-                            <span class="activity-badge">${activity.action}</span>
+                            <span class="activity-badge">${UI.escapeHtml(activity.action)}</span>
                             <div class="activity-content">
-                                <div class="activity-user">${activity.full_name || 'System'}</div>
-                                <div class="activity-detail">${activity.details}</div>
-                                <div class="activity-time">${timeAgo}</div>
+                                <div class="activity-user">${UI.escapeHtml(activity.full_name) || 'System'}</div>
+                                <div class="activity-detail">${UI.escapeHtml(activity.details)}</div>
+                                <div class="activity-time">${UI.escapeHtml(timeAgo)}</div>
                             </div>
                         </li>
                     `;
@@ -1256,11 +1281,11 @@ $pageTitle = 'System Administration Dashboard';
 
                 html += `<tr style="background: ${rowBg}; border-bottom: 1px solid ${borderColor};">`;
                 html += `<td class="cell-emphasis" style="padding: 12px; color: ${textPrimary}; border-color: ${borderColor}; font-weight: 600;">#${report.report_id}</td>`;
-                html += `<td class="cell-emphasis" style="padding: 12px; color: ${textPrimary}; border-color: ${borderColor}; font-weight: 600;">${report.title}</td>`;
-                html += `<td class="cell-muted" style="padding: 12px; color: ${textMuted}; border-color: ${borderColor};">${report.location}</td>`;
-                html += `<td style="padding: 12px; border-color: ${borderColor};"><span style="background: ${priorityColor}; color: white; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600;">${report.priority.toUpperCase()}</span></td>`;
-                html += `<td style="padding: 12px; border-color: ${borderColor};"><span style="background: ${statusColor}; color: white; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600;">${report.status.replace('_', ' ').toUpperCase()}</span></td>`;
-                html += `<td class="cell-muted" style="padding: 12px; color: ${textMuted}; border-color: ${borderColor};">${report.assigned_name || 'Unassigned'}</td>`;
+                html += `<td class="cell-emphasis" style="padding: 12px; color: ${textPrimary}; border-color: ${borderColor}; font-weight: 600;">${UI.escapeHtml(report.title)}</td>`;
+                html += `<td class="cell-muted" style="padding: 12px; color: ${textMuted}; border-color: ${borderColor};">${UI.escapeHtml(report.location)}</td>`;
+                html += `<td style="padding: 12px; border-color: ${borderColor};"><span style="background: ${priorityColor}; color: white; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600;">${UI.escapeHtml(report.priority.toUpperCase())}</span></td>`;
+                html += `<td style="padding: 12px; border-color: ${borderColor};"><span style="background: ${statusColor}; color: white; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600;">${UI.escapeHtml(report.status.replace('_', ' ').toUpperCase())}</span></td>`;
+                html += `<td class="cell-muted" style="padding: 12px; color: ${textMuted}; border-color: ${borderColor};">${UI.escapeHtml(report.assigned_name) || 'Unassigned'}</td>`;
                 html += `<td class="cell-muted" style="padding: 12px; color: ${textMuted}; border-color: ${borderColor};">${createdDate}</td>`;
                 html += `<td style="padding: 12px; border-color: ${borderColor};"><a href="/School_Facility_Maintenance_System/frontend/pages/maintenance-report-detail.php?id=${report.report_id}" class="last-month-view-link" style="color: ${viewText}; text-decoration: none; font-weight: 600; border: 1px solid #8A2BE2; padding: 6px 14px; border-radius: 6px; display: inline-block; background: ${viewBg};">View</a></td>`;
                 html += '</tr>';

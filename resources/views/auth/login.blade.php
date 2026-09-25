@@ -152,7 +152,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const emailInput = document.getElementById('email');
     const passwordInput = document.getElementById('password');
     const rememberMeInput = document.getElementById('remember_me');
-    
+
     if (emailInput) {
         emailInput.readOnly = true;
         emailInput.addEventListener('focus', () => { emailInput.readOnly = false; }, { once: true });
@@ -162,6 +162,74 @@ document.addEventListener('DOMContentLoaded', () => {
         passwordInput.addEventListener('focus', () => { passwordInput.readOnly = false; }, { once: true });
     }
 });
+
+// Mobile only: keep the focused field visible above the on-screen keyboard.
+// Android Chrome shrinks the visual viewport (not the layout viewport) when
+// the keyboard opens, so a fixed-height/short-content page like this login
+// form has no scroll room for the browser to bring the field above the
+// keyboard on its own. We measure the keyboard via the VisualViewport API,
+// reserve that much scroll room, and re-run scrollIntoView once the
+// keyboard finishes animating in.
+(function keyboardAwareScroll() {
+    const isMobile = () => window.matchMedia('(max-width: 900px)').matches;
+    let activeField = null;
+
+    function updateKeyboardOffset() {
+        if (!window.visualViewport) return;
+        const offset = Math.max(0, window.innerHeight - window.visualViewport.height);
+        document.documentElement.style.setProperty('--kb-offset', offset + 'px');
+
+        // Require a meaningful offset so the Android address-bar show/hide
+        // (~50-100px) isn't mistaken for the keyboard opening.
+        if (isMobile() && activeField && offset > 150) {
+            document.body.classList.add('keyboard-open');
+        } else {
+            document.body.classList.remove('keyboard-open');
+        }
+    }
+
+    function scrollActiveFieldIntoView() {
+        if (activeField) {
+            activeField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    }
+
+    function handleFocus(e) {
+        if (!isMobile()) return;
+        activeField = e.target;
+        // Give the keyboard time to start animating in before measuring/scrolling.
+        setTimeout(() => {
+            updateKeyboardOffset();
+            scrollActiveFieldIntoView();
+        }, 300);
+    }
+
+    function handleBlur() {
+        if (!isMobile()) return;
+        activeField = null;
+        // Delay so focus moving to the next field in the same form doesn't flicker.
+        setTimeout(() => {
+            const stillInForm = document.activeElement
+                && document.activeElement.closest('#login-form, #register-form');
+            if (!stillInForm) {
+                document.body.classList.remove('keyboard-open');
+                document.documentElement.style.setProperty('--kb-offset', '0px');
+            }
+        }, 50);
+    }
+
+    document.querySelectorAll('#login-form input, #register-form input').forEach((input) => {
+        input.addEventListener('focus', handleFocus);
+        input.addEventListener('blur', handleBlur);
+    });
+
+    if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', () => {
+            updateKeyboardOffset();
+            if (activeField) scrollActiveFieldIntoView();
+        });
+    }
+})();
 
 // Handle login form
 document.getElementById('login-form').addEventListener('submit', async (e) => {

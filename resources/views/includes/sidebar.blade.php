@@ -3,7 +3,30 @@
     $sessionRole = strtolower((string)($sessionUser['role'] ?? ''));
 @endphp
 
+{{-- Relocated out of the removed top header (includes/header.blade.php). Same
+     id and class as before, so sidebar.js binds it unchanged. Below 768px the
+     desktop .sidebar-toggle is hidden and the rail is parked off-canvas, so
+     without this button there is no way to open navigation on a small screen.
+     Placed before <aside> to preserve the .sidebar + .sidebar-overlay
+     adjacency selector; hidden above 768px. --}}
+<button id="sidebarToggleMobile" class="sidebar-toggle-mobile" type="button" aria-label="Toggle navigation menu" title="Toggle navigation menu">
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+        <path d="M4 6H20M4 12H20M4 18H20" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </svg>
+</button>
+
 <aside class="sidebar" id="sidebar">
+    {{-- Same PHILCST crest, same asset, same markup and classes as
+         includes/sidebar.php, so the shared sidebar.css styles both shells
+         identically. This shell never had a .sidebar-brand of its own — its
+         branding lived in includes/header.blade.php, which was deleted when the
+         top bar was removed, leaving it with no branding at all. --}}
+    <div class="sidebar-brand">
+        <img src="{{ asset('frontend/assets/images/logo.png') }}"
+             alt="PHILCST Centralized School Facility Maintenance Reporting System"
+             class="sidebar-brand-logo" />
+    </div>
+
     <!-- Sidebar Toggle Button (Mobile) -->
     <button class="sidebar-toggle" id="sidebarToggle" aria-label="Toggle sidebar">
         <span class="hamburger-icon">

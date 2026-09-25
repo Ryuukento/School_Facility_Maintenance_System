@@ -12,6 +12,18 @@ document.addEventListener('DOMContentLoaded', function() {
     const navItems = document.querySelectorAll('.nav-item');
     const isForceProfileSetup = document.body?.dataset?.forceProfileSetup === '1';
 
+    // Tracks the last width we actually reacted to, so resize events that only
+    // change window.innerHeight (e.g. a mobile browser's URL/address bar
+    // hiding or showing while the user scrolls) don't trigger a layout
+    // recalculation. Real resizes/orientation changes always change innerWidth.
+    let lastKnownWidth = window.innerWidth;
+
+    // Pages without the shared sidebar (e.g. the login page) still load this
+    // script via footer.php — bail out instead of throwing on missing #sidebar.
+    if (!sidebar) {
+        return;
+    }
+
     // ========================================
     // INITIALIZATION
     // ========================================
@@ -108,8 +120,18 @@ document.addEventListener('DOMContentLoaded', function() {
             link.addEventListener('click', handleNavLinkClick);
         });
 
-        // Window resize listener for responsive behavior
-        window.addEventListener('resize', setResponsiveMode);
+        // TASK 6 — expandable nav parents (Inventory submenu).
+        // Bound separately from handleNavLinkClick: the parent is a <button>
+        // with no href, so that handler returns early on it and the two never
+        // fight over the active state.
+        document.querySelectorAll('.nav-parent-toggle').forEach((toggle) => {
+            toggle.addEventListener('click', handleNavParentToggle);
+        });
+
+        // Window resize listener for responsive behavior.
+        // Gated on innerWidth so mobile browser chrome (URL bar) show/hide,
+        // which only changes innerHeight, doesn't trigger a recalculation.
+        window.addEventListener('resize', handleResize);
 
         // Close sidebar on escape key
         document.addEventListener('keydown', function(e) {
@@ -117,6 +139,33 @@ document.addEventListener('DOMContentLoaded', function() {
                 closeSidebar();
             }
         });
+    }
+
+    /**
+     * TASK 6 — expand/collapse a nav parent (e.g. Inventory).
+     *
+     * The parent row is an expander only; it deliberately does not navigate,
+     * because the section lists its own landing page ("Inventory") as the first
+     * child. PHP renders the section already open when the current page is one
+     * of its children, so this only handles the user toggling it by hand.
+     *
+     * Keyboard support is the sidebar's existing one: the parent carries
+     * .nav-link, so the arrow-key handler below moves focus to it and
+     * Enter/Space call .click(), which lands here.
+     *
+     * @param {Event} e - The click event
+     */
+    function handleNavParentToggle(e) {
+        e.preventDefault();
+
+        const parent = this.closest('.nav-parent');
+
+        if (!parent) {
+            return;
+        }
+
+        const isOpen = parent.classList.toggle('nav-parent-open');
+        this.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
     }
 
     /**
@@ -170,6 +219,9 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         sidebar.classList.toggle('collapsed');
+        if (sidebarToggle) {
+            sidebarToggle.setAttribute('aria-expanded', sidebar.classList.contains('collapsed') ? 'false' : 'true');
+        }
     }
 
     /**
@@ -222,14 +274,39 @@ document.addEventListener('DOMContentLoaded', function() {
                 sidebarToggleMobile.setAttribute('aria-expanded', 'false');
             }
         } else {
-            // Desktop mode: show full sidebar
-            sidebar.classList.remove('collapsed');
+            // Desktop mode: clear mobile-only state, but preserve the user's
+            // collapsed/expanded preference instead of resetting it on every resize.
             sidebar.classList.remove('mobile-open');
             document.body.classList.remove('sidebar-mobile-open');
             if (sidebarToggleMobile) {
                 sidebarToggleMobile.setAttribute('aria-expanded', 'false');
             }
+            if (sidebarToggle) {
+                sidebarToggle.setAttribute('aria-expanded', sidebar.classList.contains('collapsed') ? 'false' : 'true');
+            }
         }
+    }
+
+    /**
+     * Resize event handler wrapper.
+     *
+     * Mobile browsers fire 'resize' when their URL/address bar auto-hides or
+     * reappears during scrolling, even though the viewport WIDTH hasn't
+     * changed (only innerHeight moves as the browser chrome collapses).
+     * Running setResponsiveMode() on those events was causing unnecessary
+     * class/attribute churn on the sidebar during an ordinary scroll.
+     *
+     * Only re-run setResponsiveMode() when innerWidth actually changed —
+     * that covers real resizes, orientation changes, and desktop/tablet
+     * window resizing, all of which change innerWidth.
+     */
+    function handleResize() {
+        const currentWidth = window.innerWidth;
+        if (currentWidth === lastKnownWidth) {
+            return;
+        }
+        lastKnownWidth = currentWidth;
+        setResponsiveMode();
     }
 
     // ========================================
@@ -256,6 +333,9 @@ document.addEventListener('DOMContentLoaded', function() {
         if (isCollapsed) {
             sidebar.classList.add('collapsed');
         }
+        if (sidebarToggle) {
+            sidebarToggle.setAttribute('aria-expanded', isCollapsed ? 'false' : 'true');
+        }
     }
 
     /**
@@ -265,6 +345,9 @@ document.addEventListener('DOMContentLoaded', function() {
     if (sidebarHeader && !isMobileView()) {
         sidebarHeader.addEventListener('dblclick', function() {
             sidebar.classList.toggle('collapsed');
+            if (sidebarToggle) {
+                sidebarToggle.setAttribute('aria-expanded', sidebar.classList.contains('collapsed') ? 'false' : 'true');
+            }
             saveSidebarPreference();
         });
     }

@@ -16,7 +16,7 @@ class DepartmentController extends Controller
      * GET /api/departments
      *
      * Query params:
-     *   q        – optional search string (matches name or code, case-insensitive)
+     *   q        – optional search string (matches name, case-insensitive)
      *   per_page – items per page, 1–200, default 20
      *   page     – page number, default 1
      *
@@ -35,11 +35,14 @@ class DepartmentController extends Controller
             ->orderBy('name');
 
         if ($q !== '') {
+            // HIGH_PRIORITY_FIX_4 — the departments table has no `code` column
+            // (see database/migrations/2026_03_27_000100_create_departments_table.php);
+            // the prior orWhereRaw('code LIKE ...') condition referenced a
+            // non-existent column and would throw a SQL error on any ?q= request.
+            // No equivalent field exists, so the invalid condition is removed
+            // rather than replaced; search now matches on `name` only.
             $like = '%' . strtolower($q) . '%';
-            $query->where(function ($sub) use ($like) {
-                $sub->whereRaw('LOWER(name) LIKE ?', [$like])
-                    ->orWhereRaw("LOWER(COALESCE(code, '')) LIKE ?", [$like]);
-            });
+            $query->whereRaw('LOWER(name) LIKE ?', [$like]);
         }
 
         $total       = $query->count();

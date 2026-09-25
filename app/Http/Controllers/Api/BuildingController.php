@@ -31,6 +31,13 @@ class BuildingController extends Controller
      *
      * Response shape:
      *   { success, message, data: { buildings: [{id, name, description, floor_count, room_count}], pagination } }
+     *
+     * room_count only counts active rooms (r.is_active = 1 is applied in the
+     * JOIN's ON clause, not a WHERE, so buildings with zero active rooms
+     * still appear with room_count = 0 instead of being dropped). Rooms are
+     * soft-deactivated rather than hard-deleted (see RoomController), so
+     * without this the count would include rooms no longer meant to surface
+     * in normal building/room-picker UIs.
      */
     public function index(Request $request): JsonResponse
     {
@@ -52,7 +59,10 @@ class BuildingController extends Controller
                 DB::raw('COUNT(DISTINCT r.id) as room_count'),
             ])
             ->leftJoin('floors as f', 'b.id', '=', 'f.building_id')
-            ->leftJoin('rooms as r',  'b.id', '=', 'r.building_id')
+            ->leftJoin('rooms as r', function ($join) {
+                $join->on('b.id', '=', 'r.building_id')
+                     ->where('r.is_active', 1);
+            })
             ->groupBy('b.id', 'b.name', 'b.description')
             ->orderByDesc('b.created_at')
             ->skip(($page - 1) * $perPage)
@@ -75,6 +85,11 @@ class BuildingController extends Controller
      *
      * Response shape:
      *   { success, message, data: { floors: [{id, name, description, building_id, room_count, item_count}] } }
+     *
+     * room_count/item_count only reflect active rooms — see the is_active
+     * note on index() above. The rooms join filters on r.is_active in its ON
+     * clause (not a WHERE) so floors with zero active rooms still appear
+     * with room_count = 0 rather than being dropped by the LEFT JOIN.
      */
     public function floors(int $id): JsonResponse
     {
@@ -87,7 +102,10 @@ class BuildingController extends Controller
                 DB::raw('COALESCE(COUNT(DISTINCT r.id), 0) as room_count'),
                 DB::raw('COALESCE(SUM(COALESCE(i.quantity, 0)), 0) as item_count'),
             ])
-            ->leftJoin('rooms as r', 'f.id', '=', 'r.floor_id')
+            ->leftJoin('rooms as r', function ($join) {
+                $join->on('f.id', '=', 'r.floor_id')
+                     ->where('r.is_active', 1);
+            })
             ->leftJoin('items as i', 'r.id', '=', 'i.room_id')
             ->where('f.building_id', $id)
             ->groupBy('f.id', 'f.name', 'f.description', 'f.building_id')
@@ -201,7 +219,14 @@ class BuildingController extends Controller
         ]);
 
         // TASK 18 — "Building Updated" notification.
-        $this->notifyBuildingUpdated($request, $id, $name);
+        // TASK 52 — only notify on a genuine change of name/description.
+        // Re-saving the same values (e.g. an unchanged form submit) should
+        // not spam every Super Admin/Head Maintenance user, mirroring the
+        // "only notify on a genuine change" pattern already established in
+        // DispatchService::assignReleasePersonnel().
+        if ($building->name !== $name || (string) $building->description !== $description) {
+            $this->notifyBuildingUpdated($request, $id, $name);
+        }
 
         return $this->ok('Building updated successfully');
     }

@@ -38,7 +38,6 @@
         }
 
         .stat-card:hover {
-            transform: translateY(-2px);
             box-shadow: 0 12px 24px rgba(15, 23, 42, 0.12);
             border-color: rgba(143, 0, 204, 0.35);
         }
@@ -145,11 +144,11 @@
         }
 
         .chart-title {
-            color: #8F00CC;
+            color: var(--primary, #8b5cf6);
             font-size: 16px;
             font-weight: 700;
             margin-bottom: 15px;
-            border-bottom: 2px solid #e5e7eb;
+            border-bottom: 2px solid var(--border, #e5e7eb);
             padding-bottom: 10px;
         }
 
@@ -204,7 +203,7 @@
 
         .priority-chart-card {
             background: #f8fafc;
-            border: 1px solid #e5e7eb;
+            border: 1px solid var(--purple-border, #e5e7eb);
             box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
             padding: 0;
             overflow: hidden;
@@ -214,7 +213,7 @@
             color: #111827;
             margin: 0;
             padding: 22px 24px;
-            border-bottom: 1px solid #e5e7eb;
+            border-bottom: 1px solid var(--purple-border-light, #e5e7eb);
         }
 
         .priority-chart-card .chart-canvas {
@@ -230,18 +229,19 @@
         }
 
         .overview-card {
-            background: white;
+            background: var(--card-color, #ffffff);
+            border: 1px solid var(--border, #e5e7eb);
             padding: 25px;
             border-radius: 10px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
         }
 
         .overview-title {
-            color: #8F00CC;
+            color: var(--primary, #8b5cf6);
             font-size: 16px;
             font-weight: 700;
             margin-bottom: 15px;
-            border-bottom: 2px solid #e5e7eb;
+            border-bottom: 2px solid var(--border, #e5e7eb);
             padding-bottom: 10px;
         }
 
@@ -253,7 +253,7 @@
 
         .overview-list li {
             padding: 10px 0;
-            border-bottom: 1px solid #e5e7eb;
+            border-bottom: 1px solid var(--border, #e5e7eb);
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -265,13 +265,13 @@
         }
 
         .overview-list .name {
-            color: #8F00CC;
+            color: var(--primary, #8b5cf6);
             font-weight: 500;
         }
 
         .overview-list .count {
-            background: #e5e7eb;
-            color: #8F00CC;
+            background: var(--muted-card, #e5e7eb);
+            color: var(--primary, #8b5cf6);
             padding: 3px 10px;
             border-radius: 20px;
             font-size: 12px;
@@ -303,7 +303,7 @@
 
         .activity-item {
             padding: 12px 0;
-            border-bottom: 1px solid #e5e7eb;
+            border-bottom: 1px solid var(--border, #e5e7eb);
             display: flex;
             gap: 12px;
             align-items: flex-start;
@@ -315,7 +315,7 @@
         }
 
         .activity-badge {
-            background: #8F00CC;
+            background: var(--primary, #8b5cf6);
             color: white;
             padding: 4px 8px;
             border-radius: 4px;
@@ -330,13 +330,13 @@
         }
 
         .activity-user {
-            color: #8F00CC;
+            color: var(--primary, #8b5cf6);
             font-weight: 600;
             margin-bottom: 2px;
         }
 
         .activity-detail {
-            color: #6b7280;
+            color: var(--text-secondary, #6b7280);
             margin-bottom: 4px;
         }
 
@@ -373,7 +373,7 @@
 
         .last-month-filter-control {
             padding: 8px 12px;
-            border: 1px solid var(--border);
+            border: 1px solid var(--purple-control, var(--border));
             border-radius: 6px;
             font-size: 14px;
             background: var(--card-color);
@@ -396,7 +396,9 @@
             border-collapse: collapse;
             font-size: 14px;
             background: var(--card-color);
-            border: 1px solid var(--border);
+            /* Outer frame of the table = container tier. The th/td rules keep
+               their neutral separators so cells are not individually outlined. */
+            border: 1px solid var(--purple-border, var(--border));
         }
 
         .last-month-table thead tr {
@@ -645,24 +647,25 @@
 :root[data-theme-resolved='light'] .status-summary-percent,
 :root[data-theme-resolved='light'] .status-summary-empty  { color: #6b7280; }
 
+/* Activity Log container — container tier. */
 :root[data-theme-resolved='light'] .recent-activity-section {
     background: #ffffff;
-    border-color: #e5e7eb;
+    border-color: var(--purple-border, #e5e7eb);
 }
 :root[data-theme-resolved='light'] .recent-activity-title {
     color: #111827;
-    border-bottom-color: #e5e7eb;
+    border-bottom-color: var(--purple-border-light, #e5e7eb);
 }
 :root[data-theme-resolved='light'] .last-month-filter-control {
     background: #ffffff !important;
     color: #111827 !important;
-    border-color: #d1d5db !important;
+    border-color: var(--purple-control, #d1d5db) !important;
 }
 :root[data-theme-resolved='light'] .last-month-filter-control::placeholder { color: #9ca3af; }
 
 :root[data-theme-resolved='light'] #lastMonthReportsContainer .last-month-table {
     background: #ffffff !important;
-    border-color: #e5e7eb !important;
+    border-color: var(--purple-border, #e5e7eb) !important;
 }
 :root[data-theme-resolved='light'] #lastMonthReportsContainer .last-month-table thead,
 :root[data-theme-resolved='light'] #lastMonthReportsContainer .last-month-table thead tr,

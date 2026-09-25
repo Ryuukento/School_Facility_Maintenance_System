@@ -23,6 +23,48 @@ class ItemController extends Controller
     ) {
     }
 
+    /**
+     * TASK 42 — the single place that decides items.item_type.
+     *
+     * The system's invariant is `room_id IS NOT NULL <=> item_type =
+     * 'room_asset'`. It is not a convention someone assumed: migration
+     * 2026_04_23_000800_make_items_room_id_nullable.php backfilled the column
+     * with exactly these two statements when item_type was introduced —
+     *
+     *     UPDATE items SET item_type = 'room_asset'      WHERE room_id IS NOT NULL;
+     *     UPDATE items SET item_type = 'inventory_stock' WHERE room_id IS NULL;
+     *
+     * — and that migration's down() refuses to run while any NULL-room row
+     * exists, on the grounds that those rows *are* the inventory stock.
+     *
+     * The two types are different kinds of thing, not two labels for one thing:
+     *   - room_asset      = one physical unit installed in a room. Reportable as
+     *                       damaged (DamageReportService::validateDeployedItem()),
+     *                       schedulable for preventive maintenance. NOT supply.
+     *   - inventory_stock = warehouse supply. The only thing that may be
+     *                       dispatched, or consumed as a Need Change /
+     *                       damage-report replacement.
+     *
+     * store() previously omitted item_type entirely, so a room item fell through
+     * to the column default 'inventory_stock' while still carrying a room_id.
+     * That single row then satisfied *both* halves of the model at once: it was
+     * listed as the contents of the room AND offered as warehouse supply. That is
+     * the reported "duplicate" — one row wearing two hats, alongside a genuinely
+     * separate warehouse row of the same name.
+     *
+     * Deriving it here rather than accepting it from the request keeps the
+     * invariant impossible to violate through the API, and deliberately does NOT
+     * touch quantity: a room asset is recorded, not allocated out of stock, so
+     * there is nothing to deduct from (the Add Item form takes a free-text name,
+     * not a reference to an existing inventory row).
+     */
+    private static function deriveItemType(mixed $roomId): string
+    {
+        return ($roomId === null || $roomId === '' || (int) $roomId === 0)
+            ? 'inventory_stock'
+            : 'room_asset';
+    }
+
     public function index(Request $request)
     {
         $query = Item::query();
@@ -126,6 +168,10 @@ class ItemController extends Controller
         $item = DB::transaction(function () use ($validated, $initialQuantity, $request) {
             $item = Item::query()->create([
                 ...$validated,
+                // TASK 42 — item_type is derived from room_id, never accepted from
+                // the client and never left to the column default. See
+                // deriveItemType() for the invariant and why the default was wrong.
+                'item_type' => self::deriveItemType($validated['room_id'] ?? null),
                 'quantity' => 0,
                 'status' => InventoryStatusService::deriveStatus(0, (int) ($validated['reorder_level'] ?? 0)),
             ]);
@@ -187,6 +233,13 @@ class ItemController extends Controller
             'description' => ['sometimes', 'nullable', 'string'],
         ]);
 
+        // TASK 42 — room_id is editable here, so item_type must be re-derived
+        // whenever it changes; otherwise moving a row into or out of a room
+        // would leave it on the wrong side of the invariant.
+        if (array_key_exists('room_id', $validated)) {
+            $validated['item_type'] = self::deriveItemType($validated['room_id']);
+        }
+
         $item->update($validated);
 
         $this->activityLogService->log([
@@ -208,6 +261,29 @@ class ItemController extends Controller
         $hasTx = DB::table('inventory_transactions')->where('item_id', $item->id)->exists();
         if ($hasTx) {
             return $this->fail('Cannot delete item with existing inventory transactions', 400);
+        }
+
+        // TASK 50 — dispatch_items.item_id and damage_reports.item_id both
+        // carry a DB-level onDelete('restrict') foreign key (see
+        // database/migrations/2026_05_15_000400_create_dispatches_and_items.php
+        // and .../2026_05_15_000500_create_damage_reports_tables.php). Neither
+        // reference is guaranteed to have a matching inventory_transactions
+        // row: a dispatch_items row exists from the moment a Dispatch is
+        // created (DispatchService::createDispatch()), before releaseDispatch()
+        // ever writes a transaction, and a damage_reports row for a
+        // room_asset-type item never requires one at all
+        // (DamageReportService::validateDeployedItem()). Without this check,
+        // $item->delete() below would let the database's restrict constraint
+        // throw an uncaught QueryException (HTTP 500) instead of the same
+        // clean, validated 400 every other reference-check here returns.
+        $hasDispatchItem = DB::table('dispatch_items')->where('item_id', $item->id)->exists();
+        if ($hasDispatchItem) {
+            return $this->fail('Cannot delete item referenced by an existing dispatch', 400);
+        }
+
+        $hasDamageReport = DB::table('damage_reports')->where('item_id', $item->id)->exists();
+        if ($hasDamageReport) {
+            return $this->fail('Cannot delete item referenced by an existing damage report', 400);
         }
 
         $item->delete();

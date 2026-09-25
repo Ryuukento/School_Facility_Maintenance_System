@@ -139,7 +139,9 @@
     font-size: 28px;
     font-weight: 600;
     cursor: pointer;
-    color: #9ca3af;
+    /* Readability fix (2026-09-22): was #9ca3af (~2.5:1 on the white modal),
+       under WCAG's 3:1 floor for UI controls. */
+    color: #6b7280;
     transition: color 0.2s ease, transform 0.2s ease;
 }
 

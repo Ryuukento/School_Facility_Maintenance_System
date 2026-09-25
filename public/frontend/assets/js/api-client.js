@@ -69,10 +69,6 @@ class APIClient {
     async getReport(reportId) {
         return this.request(`reports?action=get&report_id=${reportId}`, 'GET');
     }
-    
-    async assignReport(reportId, assigneeId) {
-        return this.request(`reports?action=assign&report_id=${reportId}`, 'POST', { assigned_to: assigneeId });
-    }
 }
 
 // Global API client instance

@@ -11,12 +11,10 @@ use App\Models\DamageReport;
 use App\Models\InventoryStockEntry;
 use App\Models\InventoryTransaction;
 use App\Models\Item;
-use App\Models\RepairRequest;
 use App\Models\User;
 use App\Services\ActivityLogService;
 use App\Services\DamageReportService;
 use App\Services\DispatchService;
-use App\Services\RepairService;
 use Illuminate\Support\Facades\DB;
 
 function activitySmokeAssert(bool $condition, string $message): void
@@ -33,7 +31,6 @@ try {
     $activityLogService = app(ActivityLogService::class);
     $damageService = app(DamageReportService::class);
     $dispatchService = app(DispatchService::class);
-    $repairService = app(RepairService::class);
 
     $user = User::query()->first();
     if (!$user) {
@@ -160,28 +157,28 @@ try {
 
     activitySmokeAssert(ActivityLog::query()->where('action', 'CREATE_DAMAGE_REPORT')->where('entity_id', $damageReport->id)->exists(), 'Damage report creation log was not generated.');
 
-    $repair = $repairService->createRequest([
-        'damage_report_id' => $damageReport->id,
-        'repair_type' => 'diagnostic',
-        'repair_description' => 'Activity smoke repair workflow.',
-        'repair_cost' => 75,
-        'repair_date' => now()->toDateString(),
-        'notes' => 'Repair request smoke test.',
-    ], $authUser);
-
-    $repair = $repairService->assignTechnician($repair, [
-        'technician_user_id' => $user->user_id,
-        'notes' => 'Assigned in smoke test.',
-    ], $authUser);
-
-    $repair = $repairService->updateRequest($repair, [
-        'repair_status' => 'failed',
-        'repair_description' => 'Repair failed during smoke test.',
-        'repair_cost' => 75,
-        'notes' => 'Replacement required.',
-        'failure_reason' => 'Component is beyond repair.',
-    ], $authUser);
-
+    // TASK 13C (Repair retirement) — this block previously drove
+    // RepairService through createRequest -> assignTechnician ->
+    // updateRequest -> fulfillReplacement and asserted four activity
+    // actions: CREATE_REPAIR_REQUEST, ASSIGN_REPAIR_TECHNICIAN,
+    // UPDATE_REPAIR and REPLACEMENT_ACTION.
+    //
+    // RepairService and the RepairRequest/RepairHistory models were deleted
+    // in Task 13, so the first three actions no longer have ANY producer in
+    // the application — nothing emits them and no substitute can honestly
+    // stand in for them. Their assertions are therefore dropped rather than
+    // faked.
+    //
+    // REPLACEMENT_ACTION is different and is deliberately KEPT: it survives
+    // Repair retirement because DamageReportService::updateStatus() still
+    // emits it on a genuine transition to 'replaced' (see that method's
+    // activity-log call, which selects REPLACEMENT_ACTION / module
+    // 'replacement' for that status). So the coverage is re-pointed at the
+    // real surviving producer instead of being deleted with the rest.
+    //
+    // Note the entity changes with the producer: the Repair path logged
+    // entity_id = repair request id, whereas the damage-report path logs
+    // entity_type 'damage_report' and entity_id = damage report id.
     $replacementItem = Item::query()->create([
         'name' => 'activity-smoke-replacement-' . time(),
         'brand' => 'SmokeBrand',
@@ -192,16 +189,23 @@ try {
         'status' => 'available',
     ]);
 
-    $repair = $repairService->fulfillReplacement($repair, [
-        'replacement_item_id' => $replacementItem->id,
-        'replacement_quantity' => 1,
-        'notes' => 'Replacement fulfilled in smoke test.',
+    // 'pending' cannot go straight to 'replaced' under the service's
+    // STATUS_TRANSITIONS map; 'under_review' is the legal intermediate hop.
+    $damageReport = $damageService->updateStatus($damageReport, [
+        'status' => 'under_review',
+        'repair_notes' => 'Assessed during activity log smoke test.',
     ], $authUser);
 
-    activitySmokeAssert(ActivityLog::query()->where('action', 'CREATE_REPAIR_REQUEST')->where('entity_id', $repair->id)->exists(), 'Repair request creation log was not generated.');
-    activitySmokeAssert(ActivityLog::query()->where('action', 'ASSIGN_REPAIR_TECHNICIAN')->where('entity_id', $repair->id)->exists(), 'Repair assignment log was not generated.');
-    activitySmokeAssert(ActivityLog::query()->where('action', 'UPDATE_REPAIR')->where('entity_id', $repair->id)->exists(), 'Repair update log was not generated.');
-    activitySmokeAssert(ActivityLog::query()->where('action', 'REPLACEMENT_ACTION')->where('entity_id', $repair->id)->exists(), 'Replacement action log was not generated.');
+    activitySmokeAssert(ActivityLog::query()->where('action', 'UPDATE_DAMAGE_REPORT')->where('entity_id', $damageReport->id)->exists(), 'Damage report status update log was not generated.');
+
+    $damageReport = $damageService->updateStatus($damageReport, [
+        'status' => 'replaced',
+        'replacement_item_id' => $replacementItem->id,
+        'replacement_quantity' => 1,
+        'repair_notes' => 'Replacement fulfilled in smoke test.',
+    ], $authUser);
+
+    activitySmokeAssert(ActivityLog::query()->where('action', 'REPLACEMENT_ACTION')->where('entity_type', 'damage_report')->where('entity_id', $damageReport->id)->exists(), 'Replacement action log was not generated.');
 
     $logDetail = ActivityLog::query()->where('action', 'RELEASE_DISPATCH')->where('entity_id', $dispatch->id)->first();
     activitySmokeAssert((bool) $logDetail && $logDetail->module === 'dispatch', 'Dispatch log should store the correct module.');
