@@ -12,11 +12,14 @@ use Tests\TestCase;
  * 1 reports" summary plus a lone, dead page button. The requirement is that the
  * ENTIRE pagination section disappears whenever there is nothing to paginate.
  *
- * The chosen condition is "all rows fit on one page" — i.e. totalPages <= 1,
- * which is Math.max(1, Math.ceil(totalReports / rowsPerPage)) <= 1, which is
- * exactly totalReports <= rowsPerPage. At the default page size of 20 that
- * hides 0-20 reports; at the smallest selectable page size of 5 it hides 0-5
- * and shows from 6, which is the 5/6 boundary originally described.
+ * The condition was originally "all rows fit on one page" (totalPages <= 1). It
+ * was later changed on request to a fixed report-count threshold: the bar
+ * appears once the list has PAGINATION_MIN_REPORTS (10) or more reports and is
+ * hidden below that, whatever page size is selected. That also removes a trap
+ * in the old rule — choosing a page size large enough to fit every report hid
+ * the rows-per-page control itself, leaving no way to switch back. The default
+ * page size moved from 20 to 10 at the same time, so 11+ reports actually span
+ * more than one page.
  *
  * NOTE ON METHOD: All Reports pagination is implemented entirely in the
  * client-side script embedded in reports.php — there is no controller, route or
@@ -73,18 +76,27 @@ class AllReportsPaginationVisibilityTest extends TestCase
     }
 
     /**
-     * Transcription of the page-count formula that renderReportsView() uses.
-     * test_page_count_formula_is_unchanged() below pins the real source against
-     * this, so the two cannot drift apart unnoticed.
+     * The visibility threshold, read from the page itself rather than assumed.
      */
-    private function totalPagesFor(int $totalReports, int $rowsPerPage): int
+    private function minimumReportsForPagination(): int
     {
-        return max(1, (int) ceil($totalReports / $rowsPerPage));
+        $this->assertSame(
+            1,
+            preg_match('/const\s+PAGINATION_MIN_REPORTS\s*=\s*(\d+)\s*;/', $this->reportsPage(), $matches),
+            'reports.php must declare exactly one PAGINATION_MIN_REPORTS threshold.'
+        );
+
+        return (int) $matches[1];
     }
 
-    private function paginationIsVisible(int $totalReports, int $rowsPerPage): bool
+    /**
+     * Transcription of the guard in renderPagination():
+     * test_pagination_is_hidden_by_a_single_parent_condition() pins the real
+     * source against this, so the two cannot drift apart unnoticed.
+     */
+    private function paginationIsVisible(int $totalReports): bool
     {
-        return $this->totalPagesFor($totalReports, $rowsPerPage) > 1;
+        return $totalReports >= $this->minimumReportsForPagination();
     }
 
     // ---------------------------------------------------------------------
@@ -100,7 +112,7 @@ class AllReportsPaginationVisibilityTest extends TestCase
         $source = $this->renderPaginationSource();
 
         $this->assertMatchesRegularExpression(
-            '/if\s*\(\s*totalPages\s*<=\s*1\s*\)\s*\{\s*container\.innerHTML\s*=\s*\'\'\s*;\s*return\s*;\s*\}/',
+            '/if\s*\(\s*totalReports\s*<\s*PAGINATION_MIN_REPORTS\s*\)\s*\{\s*container\.innerHTML\s*=\s*\'\'\s*;\s*return\s*;\s*\}/',
             $source,
             'renderPagination() must bail out through one guard that empties the whole container.'
         );
@@ -158,7 +170,7 @@ class AllReportsPaginationVisibilityTest extends TestCase
         $this->assertStringContainsString(
             'const totalPages = Math.max(1, Math.ceil(totalReports / rowsPerPage));',
             $this->reportsPage(),
-            'totalPagesFor() in this test transcribes this formula; if it changes, update both.'
+            'The page count is still worked out once, in renderReportsView().'
         );
     }
 
@@ -167,73 +179,51 @@ class AllReportsPaginationVisibilityTest extends TestCase
     // ---------------------------------------------------------------------
 
     /**
-     * The cases the requirement calls out, at the smallest selectable page size
-     * (5): five or fewer reports hide the bar, six show it.
+     * The requirement: pagination shows from 10 reports up, and not below.
      */
-    public function test_thresholds_at_a_page_size_of_five(): void
+    public function test_the_threshold_is_ten_reports(): void
     {
-        $rowsPerPage = 5;
+        $this->assertSame(10, $this->minimumReportsForPagination());
 
-        foreach ([0, 1, 2, 4, 5] as $totalReports) {
+        foreach ([0, 1, 5, 9] as $totalReports) {
             $this->assertFalse(
-                $this->paginationIsVisible($totalReports, $rowsPerPage),
-                "With {$totalReports} reports on a page size of {$rowsPerPage}, the pagination must be hidden."
+                $this->paginationIsVisible($totalReports),
+                "With {$totalReports} reports the pagination must be hidden."
             );
         }
 
-        foreach ([6, 10, 11] as $totalReports) {
+        foreach ([10, 11, 20, 150] as $totalReports) {
             $this->assertTrue(
-                $this->paginationIsVisible($totalReports, $rowsPerPage),
-                "With {$totalReports} reports on a page size of {$rowsPerPage}, the pagination must be visible."
+                $this->paginationIsVisible($totalReports),
+                "With {$totalReports} reports the pagination must be visible."
             );
         }
     }
 
     /**
-     * Exactly at the boundary, both sides — the off-by-one that separates
-     * "everything fits" from "there is a second page".
+     * The threshold must not depend on the selected page size, otherwise
+     * choosing a large page size would hide the rows-per-page control that
+     * is needed to switch back.
      */
-    public function test_the_boundary_is_exactly_at_one_full_page(): void
+    public function test_the_guard_does_not_depend_on_page_size(): void
     {
-        foreach ([5, 7, 10, 20] as $rowsPerPage) {
-            $this->assertFalse(
-                $this->paginationIsVisible($rowsPerPage, $rowsPerPage),
-                "A single full page of {$rowsPerPage} reports still needs no pagination."
-            );
+        $source = $this->renderPaginationSource();
 
-            $this->assertTrue(
-                $this->paginationIsVisible($rowsPerPage + 1, $rowsPerPage),
-                "One report past a full page of {$rowsPerPage} spills onto page 2, so pagination must appear."
-            );
-        }
+        $start = strpos($source, 'if (totalReports < PAGINATION_MIN_REPORTS)');
+        $this->assertNotFalse($start);
+        $guardLine = substr($source, $start, strpos($source, "\n", $start) - $start);
+
+        $this->assertStringNotContainsString('rowsPerPage', $guardLine);
+        $this->assertStringNotContainsString('totalPages', $guardLine);
     }
 
     /**
-     * The same rule applied to the page size the All Reports page actually
-     * ships with, read from the source.
+     * The default page size matches the threshold, so a list just past it
+     * really does span a second page.
      */
-    public function test_thresholds_at_the_shipped_default_page_size(): void
+    public function test_the_shipped_default_page_size_is_ten(): void
     {
-        $rowsPerPage = $this->defaultRowsPerPage();
-
-        $this->assertGreaterThan(0, $rowsPerPage);
-
-        foreach ([0, 1, 5, 6] as $totalReports) {
-            $this->assertFalse(
-                $this->paginationIsVisible($totalReports, $rowsPerPage),
-                "The default page size is {$rowsPerPage}, so {$totalReports} reports fit on one page and must not show pagination."
-            );
-        }
-
-        $this->assertFalse(
-            $this->paginationIsVisible($rowsPerPage, $rowsPerPage),
-            'A single full default page must not show pagination.'
-        );
-
-        $this->assertTrue(
-            $this->paginationIsVisible($rowsPerPage * 2, $rowsPerPage),
-            'Two full default pages must show pagination.'
-        );
+        $this->assertSame(10, $this->defaultRowsPerPage());
     }
 
     // ---------------------------------------------------------------------

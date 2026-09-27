@@ -41,6 +41,7 @@ class ReportCompletionNotificationTest extends TestCase
             'created_by' => $ownerId,
             'assigned_to' => $staffId,
             'status' => 'in_progress',
+            'completion_proof_image' => '/frontend/uploads/completion-proofs/test-proof.jpg', // 2026-09-27: completing requires proof
             'location' => 'Building A - Room 101',
             'title' => 'Broken Aircon',
         ]);
@@ -70,7 +71,8 @@ class ReportCompletionNotificationTest extends TestCase
     public function test_closing_a_report_notifies_the_owner_exactly_once(): void
     {
         $ownerId = $this->seedUser(['role' => 'maintenance_staff']);
-        $adminId = $this->seedUser(['role' => 'super_admin']);
+        // 2026-09-27: Head Maintenance closes; the Administrator only cancels.
+        $adminId = $this->seedUser(['role' => 'maintenance_admin']);
         $reportId = $this->seedReport([
             'created_by' => $ownerId,
             'assigned_to' => null,
@@ -78,7 +80,7 @@ class ReportCompletionNotificationTest extends TestCase
         ]);
 
         $response = $this
-            ->actingAsSessionUser($adminId, 'super_admin')
+            ->actingAsSessionUser($adminId, 'maintenance_admin')
             ->patchJson("/api/reports/{$reportId}", ['status' => 'closed']);
 
         $response->assertOk();
@@ -97,6 +99,7 @@ class ReportCompletionNotificationTest extends TestCase
             'created_by' => $ownerId,
             'assigned_to' => $staffId,
             'status' => 'in_progress',
+            'completion_proof_image' => '/frontend/uploads/completion-proofs/test-proof.jpg', // 2026-09-27: completing requires proof
         ]);
 
         $client = $this->actingAsSessionUser($staffId, 'maintenance_staff');

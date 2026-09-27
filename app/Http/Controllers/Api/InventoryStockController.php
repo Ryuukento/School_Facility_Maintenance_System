@@ -10,7 +10,6 @@ use App\Services\InventoryLowStockNotifier;
 use App\Services\InventoryStatusService;
 use App\Services\RoleNormalizerService;
 use App\Support\ApiResponder;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -750,62 +749,10 @@ class InventoryStockController extends Controller
     // sole remaining path that creates 'deploy' InventoryTransaction rows; it
     // does not call any of the removed methods.
 
-    /**
-     * POST /api/inventory-stock/{id}/adjust
-     * Applies a signed quantity delta to a stock item (positive = add, negative = remove).
-     * Body: { quantity_change* (non-zero integer), reason* }
-     */
-    public function adjust(Request $request, int $id): JsonResponse
-    {
-        $this->requireWriteAccess($request);
-        $performedBy = $this->sessionUserId($request);
-
-        if ($id <= 0) {
-            return $this->fail('item_id is required', 400);
-        }
-
-        $validated = $request->validate([
-            'quantity_change' => ['required', 'integer'],
-            'reason'          => ['required', 'string', 'max:1000'],
-        ]);
-
-        $quantityChange = (int) $validated['quantity_change'];
-        $reason         = trim($validated['reason']);
-
-        // Mirror the legacy combined error message exactly
-        if ($quantityChange === 0 || $reason === '') {
-            return $this->fail('item_id, quantity_change, and reason are required', 400);
-        }
-
-        // HIGH_PRIORITY_FIX_3 — Reuse the project's single canonical stock-mutation
-        // path (InventoryAdjustmentService -> InventoryTransaction ->
-        // InventoryTransactionObserver) instead of writing to items.quantity and
-        // inventory_transactions directly. See HIGH_PRIORITY_FIX_3_INVENTORY_STOCK.md.
-        $item = Item::query()->where('item_type', 'inventory_stock')->find($id);
-        if (! $item) {
-            return $this->fail('Inventory stock item not found', 404);
-        }
-
-        $direction = $quantityChange > 0 ? 'increase' : 'decrease';
-
-        try {
-            $this->inventoryAdjustmentService->adjust(
-                $item,
-                $direction,
-                abs($quantityChange),
-                $reason,
-                $performedBy
-            );
-        } catch (ValidationException $e) {
-            return $this->fail(collect($e->errors())->flatten()->first() ?: 'Unable to adjust stock', 400);
-        } catch (ModelNotFoundException $e) {
-            return $this->fail('Inventory stock item not found', 404);
-        }
-
-        return $this->ok(
-            'Stock quantity adjusted successfully',
-            ['item' => $this->fetchStockItemById($id)]
-        );
-    }
+    // 2026-09-27 — POST /api/inventory-stock/{id}/adjust was removed. No page
+    // used it; manual stock adjustment has one path only:
+    // POST /api/items/{item}/adjust-stock (ItemController::adjustStock()),
+    // which runs the same InventoryAdjustmentService and always records a
+    // reason and an inventory transaction.
 
 }

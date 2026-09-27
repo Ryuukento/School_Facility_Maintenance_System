@@ -39,26 +39,32 @@ foreach (($problemTypeConfig['problem_types'] ?? []) as $problemType) {
 }
 $problemTypeOtherValue = $problemTypeConfig['problem_type_other_value'] ?? 'Other';
 
+// 2026-09-27 — the Administrator approves and monitors; Head Maintenance
+// runs the work. The Administrator can only cancel a report (the API
+// enforces the same rule in ReportController::update()).
 $allowedStatusOptions = [];
 if ($currentRole === 'super_admin') {
-    $allowedStatusOptions = ['assigned' => 'Assigned'];
+    $allowedStatusOptions = ['cancelled' => 'Cancelled'];
 } elseif ($currentRole === 'maintenance_admin') {
     $allowedStatusOptions = [
         'assigned' => 'Assigned',
         'in_progress' => 'In Progress',
         'completed' => 'Completed',
-        'closed' => 'Closed'
+        'closed' => 'Closed',
+        'cancelled' => 'Cancelled'
     ];
 } elseif ($currentRole === 'maintenance_staff') {
+    // Staff may only set In Progress / Completed (API-enforced); "Closed"
+    // was offered here before but the API always refused it.
     $allowedStatusOptions = [
         'in_progress' => 'In Progress',
-        'completed' => 'Completed',
-        'closed' => 'Closed'
+        'completed' => 'Completed'
     ];
 }
-$canReopenReport = in_array($currentRole, ['super_admin', 'maintenance_admin'], true);
+// Reopen = completed -> in_progress: Head, and the assigned Staff.
+$canReopenReport = in_array($currentRole, ['maintenance_admin', 'maintenance_staff'], true);
 
-$canAssignUser = in_array($currentRole, ['super_admin', 'maintenance_admin'], true);
+$canAssignUser = $currentRole === 'maintenance_admin';
 $assignmentTargetsByRole = [
     'maintenance_admin' => [],
     'maintenance_staff' => [],
@@ -136,12 +142,35 @@ $pageStylesheets = [
         </div>
     </div>
 
+    <!-- Report Archive — shown for a report filed in a past academic term.
+         Filled by applyArchiveUI(); the API (report.archive) decides the state
+         and enforces it. Only the Administrator sees the reopen / lock-again
+         buttons, and only the Administrator's routes accept them. -->
+    <div class="card mt-lg report-archive-card" id="archive-state-card" hidden>
+        <div class="card-body report-archive-card-body">
+            <span class="report-archive-card-icon"><?php echo ui_icon('archive', ['size' => 22]); ?></span>
+            <div class="report-archive-card-text">
+                <strong id="archive-state-title">Archived report</strong>
+                <span id="archive-state-text"></span>
+                <div id="archive-state-alert"></div>
+            </div>
+            <?php if ($isSuperAdmin): ?>
+            <div class="report-archive-card-actions">
+                <button type="button" class="btn btn-warning" id="archive-reopen-btn" hidden><?php echo ui_icon('rotate-ccw'); ?> Reopen for changes</button>
+                <button type="button" class="btn btn-secondary" id="archive-lock-btn" hidden><?php echo ui_icon('lock'); ?> Lock again</button>
+            </div>
+            <?php endif; ?>
+        </div>
+    </div>
+
     <!-- Status Update Card -->
     <div class="card mt-lg" id="update-status-card">
         <div class="card-header">
             <span class="report-actions-kicker">Report Actions</span>
             <h2>Update Status</h2>
-            <p class="text-muted mb-0" style="font-size:13px;margin-top:2px;">Change the status, assign staff, or attach completion proof for this report.</p>
+            <p class="text-muted mb-0" style="font-size:13px;margin-top:2px;"><?php echo $currentRole === 'super_admin'
+                ? 'Head Maintenance assigns and updates this report. As Administrator you can cancel it if it is a duplicate or invalid.'
+                : 'Change the status, assign staff, or attach completion proof for this report.'; ?></p>
         </div>
         <div class="card-body">
             <div id="department-restricted-notice" class="alert alert-info" style="display:none;">
@@ -154,7 +183,7 @@ $pageStylesheets = [
                     <select id="new-status" required>
                         <option value="">Select new status...</option>
                         <?php foreach ($allowedStatusOptions as $statusValue => $statusLabel): ?>
-                            <option value="<?php echo htmlspecialchars($statusValue); ?>" <?php echo $statusValue === 'assigned' ? 'selected' : ''; ?>><?php echo htmlspecialchars($statusLabel); ?></option>
+                            <option value="<?php echo htmlspecialchars($statusValue); ?>" <?php echo ($statusValue === 'assigned' && $currentRole !== 'super_admin') ? 'selected' : ''; ?>><?php echo htmlspecialchars($statusLabel); ?></option>
                         <?php endforeach; ?>
                     </select>
                 </div>
@@ -226,6 +255,20 @@ $pageStylesheets = [
      UI.systemConfirm() modal via the showSystemConfirm() wrapper below. -->
 
 <style>
+/* Report Archive card (see applyArchiveUI()). */
+.report-archive-card[hidden] { display: none; }
+.report-archive-card { border-left: 4px solid #8b5cf6; }
+.report-archive-card.is-carried { border-left-color: #f59e0b; }
+.report-archive-card-body { display: flex; align-items: flex-start; gap: 14px; flex-wrap: wrap; }
+.report-archive-card-icon { color: #8b5cf6; display: inline-flex; margin-top: 2px; }
+.report-archive-card.is-carried .report-archive-card-icon { color: #f59e0b; }
+.report-archive-card-text { flex: 1; min-width: 220px; display: flex; flex-direction: column; gap: 3px; font-size: 13.5px; color: var(--text-secondary, #cbd5e1); }
+.report-archive-card-text strong { font-size: 15px; color: var(--text-primary, #f8fafc); }
+.report-archive-card-actions { display: flex; gap: 8px; align-items: center; }
+.report-archive-card-actions .btn[hidden] { display: none; }
+:root[data-theme-resolved='light'] .report-archive-card-text { color: #4b5563; }
+:root[data-theme-resolved='light'] .report-archive-card-text strong { color: #111827; }
+
 .assignment-role-switcher {
     display: flex;
     gap: 10px;
@@ -349,7 +392,14 @@ function renderProblemType(report) {
     return `<span class="problem-type-chip">${icon}${label}</span>`;
 }
 
+// Report Archive — a finished report from a past academic term is view-only
+// for everyone until the Administrator reopens it (API-enforced).
+function isArchiveLocked(report) {
+    return Boolean(report && report.archive && report.archive.is_locked);
+}
+
 function canModifyReportClientSide(report) {
+    if (isArchiveLocked(report)) return false;
     if (isSuperAdminUser) return true;
     const userDept = CURRENT_USER_DEPARTMENT_ID === null || CURRENT_USER_DEPARTMENT_ID === undefined ? null : Number(CURRENT_USER_DEPARTMENT_ID);
     const reportDept = (report && (report.department_id === null || report.department_id === undefined)) ? null : Number(report.department_id);
@@ -730,13 +780,15 @@ function updateNeedChangeApprovalUI(report) {
 
     if (isApproved) {
         approvalBtn.disabled = true;
-        approvalBtn.textContent = 'Already Approved';
+        approvalBtn.textContent = 'Approved & Released';
         if (rejectBtn) {
             rejectBtn.disabled = true;
         }
     } else {
         approvalBtn.disabled = false;
-        approvalBtn.textContent = 'Approve Need Change';
+        // Approval IS the hand-off for a replacement item (there is no
+        // separate release step), so the label says what it does.
+        approvalBtn.textContent = 'Approve & Release Item';
         if (rejectBtn) {
             rejectBtn.disabled = false;
         }
@@ -921,6 +973,7 @@ async function loadReport() {
         // last so it can override the visibility/disabled state the helpers
         // above just set (e.g. re-disable a reopen button they enabled).
         applyDepartmentAuthorizationUI(report);
+        applyArchiveUI(report);
 
     } catch (error) {
         console.error('Error:', error);
@@ -1054,9 +1107,9 @@ document.getElementById('approve-need-change-btn')?.addEventListener('click', as
     }
 
     const isConfirmed = await showSystemConfirm({
-        title: 'Approve Need Change',
-        message: 'Approve this Need Change request?\n\nPress OK to approve and deduct inventory now.\nPress Cancel to stop.',
-        confirmText: 'OK',
+        title: 'Approve & Release Item',
+        message: 'Approve this replacement request and release the item?\n\nThe item will be deducted from inventory now.',
+        confirmText: 'Approve & Release',
         cancelText: 'Cancel',
         confirmClass: 'btn btn-success'
     });
@@ -1163,6 +1216,85 @@ document.getElementById('reject-need-change-btn')?.addEventListener('click', asy
         rejectBtn.textContent = originalText;
     }
 });
+
+// Report Archive — the archive card, and hiding the action cards while the
+// report is view-only. Runs after applyDepartmentAuthorizationUI() so it has
+// the final say on those cards.
+function applyArchiveUI(report) {
+    const archive = (report && report.archive) || {};
+    const card = document.getElementById('archive-state-card');
+    const locked = Boolean(archive.is_locked);
+    const term = archive.term_label || 'a past academic term';
+
+    // The reopen / need-change cards are re-shown by their own helpers on
+    // every load; the status card has no helper, so restore it explicitly
+    // (it must come back after the Administrator reopens the report).
+    const statusCard = document.getElementById('update-status-card');
+    if (statusCard) statusCard.style.display = locked ? 'none' : '';
+    ['reopen-report-card', 'need-change-approval-card'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el && locked) el.style.display = 'none';
+    });
+    const notice = document.getElementById('department-restricted-notice');
+    if (notice && locked) notice.style.display = 'none';
+
+    if (!card) return;
+    card.hidden = !archive.is_archived;
+    if (!archive.is_archived) return;
+
+    const title = document.getElementById('archive-state-title');
+    const text = document.getElementById('archive-state-text');
+    card.classList.toggle('is-locked', locked);
+    card.classList.toggle('is-carried', Boolean(archive.is_carried_over));
+    card.classList.toggle('is-reopened', Boolean(archive.is_reopened));
+
+    if (locked) {
+        title.textContent = 'Archived report · View only';
+        text.textContent = `Filed in ${term}. Finished reports from past terms can be viewed and printed but not changed.`
+            + (isSuperAdminUser ? ' As Administrator you can reopen it if a correction is needed.' : ' Only the Administrator can reopen it.');
+    } else if (archive.is_reopened) {
+        title.textContent = 'Archived report · Reopened for changes';
+        text.textContent = `Filed in ${term}. Reopened by the Administrator — it becomes view-only again when it is finished, or when locked again.`;
+    } else {
+        title.textContent = 'Carried over from a past term';
+        text.textContent = `Filed in ${term} and not finished yet, so it can still be worked on. It becomes view-only once it is completed.`;
+    }
+
+    const reopenBtn = document.getElementById('archive-reopen-btn');
+    const lockBtn = document.getElementById('archive-lock-btn');
+    if (reopenBtn) reopenBtn.hidden = !locked;
+    if (lockBtn) lockBtn.hidden = !archive.is_reopened;
+}
+
+async function runArchiveAction(action) {
+    const alertDiv = document.getElementById('archive-state-alert');
+    const btn = document.getElementById(action === 'reopen' ? 'archive-reopen-btn' : 'archive-lock-btn');
+
+    const confirmed = await showSystemConfirm(action === 'reopen'
+        ? { title: 'Reopen archived report?', message: 'This report is from a past academic term. Reopening lets it be changed again, and is recorded in the Activity Log.', confirmText: 'Reopen for changes', confirmClass: 'btn-warning' }
+        : { title: 'Lock this report again?', message: 'It will become view-only again (archived).', confirmText: 'Lock again' });
+    if (!confirmed) return;
+
+    if (btn) btn.disabled = true;
+    try {
+        const response = await fetch(window.SFMS_PUBLIC_URL(`/api/reports/${reportId}/archive-${action === 'reopen' ? 'reopen' : 'lock'}`), {
+            method: 'POST',
+            credentials: 'include',
+            headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+        });
+        const data = await response.json();
+        if (!response.ok || !data.success) throw new Error(data.message || 'Request failed');
+        alertDiv.innerHTML = '';
+        await loadReport();
+    } catch (error) {
+        alertDiv.innerHTML = `<div class="alert alert-danger" style="margin-top:8px;">${UI.escapeHtml(error.message || 'Something went wrong.')}</div>`;
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
+document.getElementById('archive-reopen-btn')?.addEventListener('click', () => runArchiveAction('reopen'));
+document.getElementById('archive-lock-btn')?.addEventListener('click', () => runArchiveAction('lock'));
 
 function updateReopenCardUI(report) {
     const card = document.getElementById('reopen-report-card');

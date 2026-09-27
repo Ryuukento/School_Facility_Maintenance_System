@@ -198,17 +198,13 @@ class DanglingNotificationEntityTest extends TestCase
             . 'error page or a fatal — notification.js parses this response as JSON.'
         );
 
-        // Pinned deliberately. When the spun-off bootstrap/app.php fix lands,
-        // this assertion is the one that must be updated to 404, together with
-        // DamageReportControllerTest's equivalent — which is precisely the
-        // signal that the shared defect has been addressed rather than
-        // forgotten.
+        // 2026-09-27 — the bootstrap/app.php renderer fix landed (updated
+        // together with DamageReportControllerTest's equivalent, as planned):
+        // a missing record is now a clean 404, not a 500.
         $this->assertSame(
-            500,
+            404,
             $response->getStatusCode(),
-            'Documenting the known app-wide bootstrap/app.php status-code bug '
-            . '(see this method\'s docblock and Task 73). Update to 404 only as '
-            . 'part of the dedicated follow-up task that fixes the renderer.'
+            'A missing damage report must answer 404 now that the renderer keeps HTTP status codes.'
         );
     }
 

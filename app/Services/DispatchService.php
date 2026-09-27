@@ -124,6 +124,13 @@ class DispatchService
                 ]);
             }
 
+            // A dispatch that skips approval is "approved" from the start, so
+            // it gets the same stock check approveDispatch() applies (the
+            // whole transaction rolls back if stock is short).
+            if (!$requiresApproval) {
+                $this->assertStockCoversDispatch($dispatch);
+            }
+
             if ($actorUserId) {
                 $this->activityLogService->logFromSession([
                     'user_id' => $actorUserId,
@@ -307,6 +314,13 @@ class DispatchService
                 ]);
             }
 
+            // 2026-09-27 — "check stock at approval, deduct at hand-off".
+            // Approval still moves no inventory (releaseDispatch() remains the
+            // single deduction path and re-checks stock), but a dispatch the
+            // inventory cannot fulfil right now is refused here, instead of
+            // the assigned staff member discovering it at release time.
+            $this->assertStockCoversDispatch($locked);
+
             $locked->update([
                 'approved_by' => $approvedBy,
                 'approved_at' => now(),
@@ -361,6 +375,40 @@ class DispatchService
      * because that is the only terminal non-released status this schema has —
      * no enum change, and cancelDispatch()'s own behaviour is untouched.
      */
+    /**
+     * Read-only stock check used at approval: same available-stock formula
+     * (quantity - reserved_quantity), same per-item aggregation, and the same
+     * message format as releaseDispatch()'s check.
+     */
+    private function assertStockCoversDispatch(Dispatch $dispatch): void
+    {
+        $requestedByItemId = [];
+        $itemsById = [];
+        foreach ($dispatch->items()->with('item')->get() as $di) {
+            $requestedByItemId[$di->item_id] = ($requestedByItemId[$di->item_id] ?? 0) + (int) $di->quantity;
+            $itemsById[$di->item_id] = $di->item;
+        }
+
+        foreach ($requestedByItemId as $itemId => $requested) {
+            $item = $itemsById[$itemId] ?? null;
+            if (!$item) {
+                throw ValidationException::withMessages(['items' => 'Item not found for dispatch item.']);
+            }
+
+            $available = (int) $item->quantity - (int) $item->reserved_quantity;
+            if ($requested > $available) {
+                throw ValidationException::withMessages([
+                    'items' => sprintf(
+                        'Insufficient Inventory for %s. Available Stock: %d. Requested: %d.',
+                        $item->name,
+                        $available,
+                        $requested
+                    ),
+                ]);
+            }
+        }
+    }
+
     public function rejectDispatch(Dispatch $dispatch, string $reason, ?int $actorUserId = null): Dispatch
     {
         return DB::transaction(function () use ($dispatch, $reason, $actorUserId): Dispatch {

@@ -445,12 +445,14 @@ class DamageReportControllerTest extends TestCase
      * EVERY implicit route-model-bound route in the whole application, not
      * just Damage Reports. Confirmed with the user this is a real, shared,
      * app-wide bug in bootstrap/app.php (outside the Damage Reports module),
-     * and per Task 73's change-discipline rules it is intentionally NOT
-     * fixed here; a dedicated follow-up task has been spun off for it. This
-     * test documents the actual current behavior so the suite reflects
-     * reality rather than asserting a fix this task did not make.
+     * and per Task 73's change-discipline rules it was intentionally not
+     * fixed there.
+     *
+     * 2026-09-27 — fixed in bootstrap/app.php: HTTP exceptions keep their own
+     * status, and a missing route-model-bound record answers 404
+     * "Resource not found." (no model class name in the message).
      */
-    public function test_show_of_a_missing_report_currently_returns_500_not_404_known_app_wide_issue(): void
+    public function test_show_of_a_missing_report_returns_a_clean_404(): void
     {
         $deptId = $this->seedDepartment();
         $staffId = $this->seedUser(['role' => 'maintenance_staff', 'department_id' => $deptId]);
@@ -458,7 +460,9 @@ class DamageReportControllerTest extends TestCase
         $this
             ->actingAsSessionUser($staffId, 'maintenance_staff')
             ->getJson('/api/damage-reports/999999')
-            ->assertStatus(500);
+            ->assertStatus(404)
+            ->assertJsonPath('success', false)
+            ->assertJsonPath('message', 'Resource not found.');
     }
 
     public function test_history_lists_entries_in_descending_created_at_order(): void
@@ -662,8 +666,11 @@ class DamageReportControllerTest extends TestCase
      * pre-existing review/approve capability on the status-update endpoint
      * must be unaffected, since this task only restricts creation.
      */
-    public function test_super_admin_retains_status_update_supervisory_access(): void
+    public function test_super_admin_can_only_close_an_asset_report(): void
     {
+        // 2026-09-27 — the Administrator approves and monitors; Head
+        // Maintenance moves repairs through their statuses. The
+        // Administrator keeps only the ability to close (cancel) one.
         $deptId = $this->seedDepartment();
         $adminId = $this->seedUser(['role' => 'super_admin']);
         $damageReportId = $this->seedDamageReport(['department_id' => $deptId, 'status' => 'pending']);
@@ -671,9 +678,14 @@ class DamageReportControllerTest extends TestCase
         $this
             ->actingAsSessionUser($adminId, 'super_admin')
             ->postJson("/api/damage-reports/{$damageReportId}/status", ['status' => 'under_review'])
-            ->assertOk();
+            ->assertStatus(403);
+        $this->assertSame('pending', DB::table('damage_reports')->where('id', $damageReportId)->value('status'));
 
-        $this->assertSame('under_review', DB::table('damage_reports')->where('id', $damageReportId)->value('status'));
+        $this
+            ->actingAsSessionUser($adminId, 'super_admin')
+            ->postJson("/api/damage-reports/{$damageReportId}/status", ['status' => 'closed'])
+            ->assertOk();
+        $this->assertSame('closed', DB::table('damage_reports')->where('id', $damageReportId)->value('status'));
     }
 
     // ---------------------------------------------------------------

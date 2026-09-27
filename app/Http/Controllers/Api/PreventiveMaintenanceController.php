@@ -192,9 +192,11 @@ class PreventiveMaintenanceController extends Controller
         $tasks = $query->get();
 
         // Ordered to mirror the manual: by the equipment's position in the
-        // fixed category list (config), then alphabetically by location, so
-        // "COMPUTERS" rows for Offices/Hallways/INTERNET/etc. stay grouped
-        // the same way the physical table groups them.
+        // fixed category list (config), then by creation order. The manual
+        // plan is seeded top-to-bottom (pm:seed-manual-plan), so within a
+        // group this reproduces the printed row order (COMPUTERS: Offices,
+        // Laboratory Rooms, INTERNET, LAN, ...); tasks added later simply
+        // follow at the end of their group.
         $categoryOrder = array_flip(config('preventive_maintenance.categories', []));
         $tasks = $tasks->sort(function (PreventiveMaintenanceTask $a, PreventiveMaintenanceTask $b) use ($categoryOrder) {
             $posA = $categoryOrder[$a->category] ?? PHP_INT_MAX;
@@ -202,7 +204,7 @@ class PreventiveMaintenanceController extends Controller
             if ($posA !== $posB) {
                 return $posA <=> $posB;
             }
-            return strcmp((string) $a->location_label, (string) $b->location_label);
+            return $a->id <=> $b->id;
         })->values();
 
         $rows = $tasks->map(function (PreventiveMaintenanceTask $task) {
@@ -335,6 +337,8 @@ class PreventiveMaintenanceController extends Controller
                 'notes' => $completion?->notes,
                 'findings' => $completion?->findings,
                 'action_taken' => $completion?->action_taken,
+                'condition_result' => $completion?->condition_result,
+                'maintenance_report_id' => $completion?->maintenance_report_id,
             ];
         });
 
@@ -361,6 +365,9 @@ class PreventiveMaintenanceController extends Controller
             'categories' => config('preventive_maintenance.categories', []),
             'frequencies' => config('preventive_maintenance.frequencies', []),
             'due_soon_days' => (int) config('preventive_maintenance.due_soon_days', 14),
+            // For the "Needs Repair" report fields in the Complete modal.
+            'report_problem_types' => array_column((array) config('maintenance_reports.problem_types', []), 'value'),
+            'report_problem_type_defaults' => (array) config('preventive_maintenance.report_problem_types', []),
         ]);
     }
 
@@ -492,6 +499,17 @@ class PreventiveMaintenanceController extends Controller
             return $this->fail('You are not allowed to edit this task.', 403);
         }
 
+        // Assigning PM tasks is Head Maintenance's responsibility: a staff
+        // member editing their own task may not hand it to someone else (or
+        // unassign it). Sending the unchanged assignee back is harmless.
+        if (
+            $request->has('assigned_user_id')
+            && !$this->preventiveMaintenanceService->canAssignTasks($authUser)
+            && (int) $request->input('assigned_user_id') !== (int) $preventiveMaintenanceTask->assigned_user_id
+        ) {
+            return $this->fail('Only Head Maintenance can assign preventive maintenance tasks.', 403);
+        }
+
         $validated = $request->validate($this->validationRules(true));
 
         try {
@@ -550,9 +568,17 @@ class PreventiveMaintenanceController extends Controller
             'completed_date' => ['required', 'date'],
             'performed_by' => ['nullable', 'integer', 'exists:users,user_id'],
             'notes' => ['nullable', 'string'],
-            'findings' => ['nullable', 'string'],
+            'findings' => ['nullable', 'string', 'required_if:condition_result,needs_repair'],
             'action_taken' => ['nullable', 'string'],
+            // Inspection result. Nullable at the API boundary so existing
+            // callers keep working; the Complete modal always sends it.
+            'condition_result' => ['nullable', 'in:working,needs_repair'],
+            'create_repair_report' => ['nullable', 'boolean'],
+            'report_priority' => ['nullable', 'in:low,medium,high,critical'],
+            'report_problem_type' => ['nullable', 'string', 'max:50'],
             'completion_proof' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp,gif', 'max:5120'],
+        ], [
+            'findings.required_if' => 'Please describe what needs repair in the Findings field.',
         ]);
 
         try {
@@ -562,10 +588,36 @@ class PreventiveMaintenanceController extends Controller
                 $request->file('completion_proof'),
                 (int) $request->session()->get('user_id')
             );
+        } catch (ValidationException $e) {
+            return $this->fail(collect($e->errors())->flatten()->first() ?: 'Invalid data.', 400);
+        } catch (\Throwable $e) {
+            return $this->fail('Failed to complete preventive maintenance task: ' . $e->getMessage(), 500);
+        }
 
-            return $this->ok('Preventive maintenance task marked completed', [
+        // The inspection is recorded either way. The repair report is raised
+        // after that commit, so a report failure never loses the inspection;
+        // it can be raised later from the task history instead.
+        $report = null;
+        $message = 'Preventive maintenance task marked completed';
+        if (($validated['condition_result'] ?? null) === 'needs_repair' && $request->boolean('create_repair_report')) {
+            try {
+                $report = $this->preventiveMaintenanceService->createRepairReport($result['history'], [
+                    'priority' => $validated['report_priority'] ?? null,
+                    'problem_type' => $validated['report_problem_type'] ?? null,
+                ], $authUser + ['user_id' => (int) $request->session()->get('user_id')]);
+                $message = 'Preventive maintenance recorded and repair report #' . $report->report_id . ' created';
+            } catch (\Throwable $e) {
+                $message = 'Preventive maintenance recorded, but the repair report could not be created: '
+                    . ($e instanceof ValidationException ? (collect($e->errors())->flatten()->first() ?: 'Invalid data.') : $e->getMessage())
+                    . ' You can create it later from the task details.';
+            }
+        }
+
+        try {
+            return $this->ok($message, [
                 'task' => $result['task']->load(self::EAGER_LOADS),
-                'history' => $result['history'],
+                'history' => $result['history']->fresh(),
+                'repair_report' => $report ? ['report_id' => $report->report_id, 'title' => $report->title, 'status' => $report->status] : null,
             ]);
         } catch (ValidationException $e) {
             return $this->fail(collect($e->errors())->flatten()->first() ?: 'Invalid data.', 400);
@@ -582,8 +634,83 @@ class PreventiveMaintenanceController extends Controller
     {
         return $this->ok('History retrieved', [
             'history' => $preventiveMaintenanceTask->history()
-                ->with(['performedByUser', 'recordedByUser'])
+                ->with(['performedByUser', 'recordedByUser', 'maintenanceReport:report_id,title,status'])
                 ->paginate((int) $request->integer('per_page', 20)),
         ]);
+    }
+
+    /**
+     * POST /api/preventive-maintenance/assign  {task_ids: int[], assigned_user_id: int|null}
+     *
+     * Head Maintenance assigns several PM tasks to one staff member at once
+     * (e.g. every COMPUTERS location). Route middleware limits this to
+     * maintenance_admin; the service re-checks and only accepts active
+     * Maintenance Staff as the assignee.
+     */
+    public function assign(Request $request)
+    {
+        if (!$this->preventiveMaintenanceService->canAssignTasks($this->authUser($request))) {
+            return $this->fail('Only Head Maintenance can assign preventive maintenance tasks.', 403);
+        }
+
+        $validated = $request->validate([
+            'task_ids' => ['required', 'array', 'min:1', 'max:200'],
+            'task_ids.*' => ['integer', 'exists:preventive_maintenance_tasks,id'],
+            'assigned_user_id' => ['present', 'nullable', 'integer', 'exists:users,user_id'],
+        ]);
+
+        try {
+            $count = $this->preventiveMaintenanceService->assignTasks(
+                $validated['task_ids'],
+                $validated['assigned_user_id'] !== null ? (int) $validated['assigned_user_id'] : null,
+                (int) $request->session()->get('user_id')
+            );
+
+            return $this->ok(
+                $validated['assigned_user_id'] !== null ? "Assigned {$count} task(s)." : "Unassigned {$count} task(s).",
+                ['updated' => $count]
+            );
+        } catch (ValidationException $e) {
+            return $this->fail(collect($e->errors())->flatten()->first() ?: 'Invalid data.', 422);
+        } catch (\Throwable $e) {
+            return $this->fail('Failed to assign preventive maintenance tasks: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * POST /api/preventive-maintenance/history/{history}/repair-report
+     *
+     * Raises the linked repair report for a "Needs Repair" inspection that
+     * was recorded without one (e.g. the box was unticked, or the report
+     * failed at completion time). Same permission as completing the task.
+     */
+    public function repairReport(Request $request, PreventiveMaintenanceHistory $history)
+    {
+        $authUser = $this->authUser($request);
+        $task = PreventiveMaintenanceTask::query()->withTrashed()->find($history->preventive_maintenance_task_id);
+        if (!$task || !$this->preventiveMaintenanceService->canManageTask($authUser, $task)) {
+            return $this->fail('You are not allowed to raise a repair report for this task.', 403);
+        }
+
+        $validated = $request->validate([
+            'priority' => ['nullable', 'in:low,medium,high,critical'],
+            'problem_type' => ['nullable', 'string', 'max:50'],
+        ]);
+
+        try {
+            $report = $this->preventiveMaintenanceService->createRepairReport(
+                $history,
+                $validated,
+                $authUser + ['user_id' => (int) $request->session()->get('user_id')]
+            );
+
+            return $this->ok('Repair report #' . $report->report_id . ' created', [
+                'repair_report' => ['report_id' => $report->report_id, 'title' => $report->title, 'status' => $report->status],
+            ], 201);
+        } catch (ValidationException $e) {
+            return $this->fail(collect($e->errors())->flatten()->first() ?: 'Invalid data.', 422);
+        } catch (\Throwable $e) {
+            return $this->fail('Failed to create the repair report: ' . $e->getMessage(), 500);
+        }
     }
 }

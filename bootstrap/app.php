@@ -77,6 +77,33 @@ return Application::configure(basePath: dirname(__DIR__))
                 ], Response::HTTP_NOT_FOUND);
             }
 
+            // HTTP errors keep their own status (unknown route 404, wrong
+            // method 405, abort(403), throttling 429, ...). They used to fall
+            // through to the generic 500 below, so a mistyped API URL looked
+            // like a server crash.
+            if ($e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                $status = $e->getStatusCode();
+
+                // Laravel turns a missing route-model-bound record into a
+                // NotFoundHttpException before this callback runs (so the
+                // ModelNotFoundException branch above is only reached by
+                // explicit findOrFail() calls); keep the same clean message
+                // instead of exposing the model class name.
+                if ($e->getPrevious() instanceof ModelNotFoundException) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Resource not found.',
+                    ], Response::HTTP_NOT_FOUND);
+                }
+
+                return response()->json([
+                    'success' => false,
+                    'message' => $e->getMessage() !== ''
+                        ? $e->getMessage()
+                        : (Response::$statusTexts[$status] ?? 'Request failed.'),
+                ], $status, $e->getHeaders());
+            }
+
             return response()->json([
                 'success' => false,
                 'message' => config('app.debug')

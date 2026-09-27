@@ -202,90 +202,21 @@ main.maintenance-admin-dashboard-page .hd-card-body-table {
 }
 
 /* ── ROW 2: mid grid ────────────────────────────────────────── */
-/* Priority Overview is now the only card in this row (My Assigned Reports
-   was removed as a duplicate of the Reports module), so the row is a single
-   full-width column instead of a 50/50 split. */
+/* Priority Overview and Reports by Status share this row 50/50, stacking to a
+   single column once the two donuts no longer fit side by side. */
 main.maintenance-admin-dashboard-page .hd-mid-grid {
     display: grid;
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 20px;
     margin-bottom: 20px;
     align-items: stretch;
 }
 
-/* ── Priority chart ─────────────────────────────────────────── */
-
-/* Side-by-side layout: donut LEFT, legend+alert RIGHT */
-main.maintenance-admin-dashboard-page .hd-priority-body {
-    display: flex;
-    align-items: flex-start;
-    gap: 18px;
-    padding: 18px 22px 16px;
+@media (max-width: 1100px) {
+    main.maintenance-admin-dashboard-page .hd-mid-grid {
+        grid-template-columns: 1fr;
+    }
 }
-
-/* Enlarged from a fixed 130px now that Priority Overview has the full row
-   width to itself; clamp() + aspect-ratio keep it a true circle that scales
-   with the card instead of a second fixed breakpoint ladder. */
-main.maintenance-admin-dashboard-page .hd-chart-wrap {
-    flex-shrink: 0;
-    width: min(250px, 100%);
-    aspect-ratio: 1 / 1;
-    position: relative;
-}
-
-main.maintenance-admin-dashboard-page .hd-chart-canvas {
-    display: block;
-    width: 100% !important;
-    height: 100% !important;
-}
-
-main.maintenance-admin-dashboard-page .hd-priority-right {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-/* Four across instead of two — with the card at full width, a 2-column
-   legend left a large empty gap next to the enlarged chart. */
-main.maintenance-admin-dashboard-page .hd-priority-legend {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 7px 12px;
-}
-
-main.maintenance-admin-dashboard-page .hd-legend-item {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 0.8rem;
-    color: var(--text-primary, #111827);
-}
-
-main.maintenance-admin-dashboard-page .hd-legend-label {
-    flex: 1;
-    color: var(--text-muted, #6b7280);
-    font-size: 0.78rem;
-}
-
-main.maintenance-admin-dashboard-page .hd-legend-item strong {
-    font-weight: 700;
-    color: var(--text-primary, #111827);
-    font-size: 0.82rem;
-}
-
-main.maintenance-admin-dashboard-page .hd-legend-dot {
-    width: 9px;
-    height: 9px;
-    border-radius: 50%;
-    flex-shrink: 0;
-}
-
-main.maintenance-admin-dashboard-page .hd-dot-critical { background: #991b1b; }
-main.maintenance-admin-dashboard-page .hd-dot-high     { background: #f59e0b; }
-main.maintenance-admin-dashboard-page .hd-dot-medium   { background: #3b82f6; }
-main.maintenance-admin-dashboard-page .hd-dot-low      { background: #94a3b8; }
 
 main.maintenance-admin-dashboard-page .hd-alert-panel {
     display: flex;
@@ -329,25 +260,6 @@ main.maintenance-admin-dashboard-page .hd-alert-panel.hd-alert-clear {
 
 main.maintenance-admin-dashboard-page .hd-alert-panel.hd-alert-clear svg { stroke: #10b981; }
 main.maintenance-admin-dashboard-page .hd-alert-panel.hd-alert-clear .hd-alert-heading { color: #047857; }
-
-/* Collapse to stacked on narrow Priority card */
-@media (max-width: 1024px) {
-    main.maintenance-admin-dashboard-page .hd-priority-body {
-        flex-direction: column;
-        align-items: center;
-    }
-    main.maintenance-admin-dashboard-page .hd-priority-right {
-        width: 100%;
-    }
-}
-
-/* Four legend columns get cramped once the card itself is phone-width;
-   drop back to two so each label still has room to breathe. */
-@media (max-width: 480px) {
-    main.maintenance-admin-dashboard-page .hd-priority-legend {
-        grid-template-columns: 1fr 1fr;
-    }
-}
 
 /* ── ROW 3: bottom grid ─────────────────────────────────────── */
 /* Pending Dispatch Requests is now the only card in this row (Low Stock
@@ -535,7 +447,6 @@ main.maintenance-admin-dashboard-page .hd-skeleton-row {
 
 :root:not([data-theme-resolved='light']) main.maintenance-admin-dashboard-page .hd-kpi-value,
 :root:not([data-theme-resolved='light']) main.maintenance-admin-dashboard-page .hd-card-title,
-:root:not([data-theme-resolved='light']) main.maintenance-admin-dashboard-page .hd-legend-item strong,
 :root:not([data-theme-resolved='light']) main.maintenance-admin-dashboard-page .hd-table td,
 :root:not([data-theme-resolved='light']) main.maintenance-admin-dashboard-page .hd-alert-body {
     color: #f1f5f9;
@@ -544,7 +455,6 @@ main.maintenance-admin-dashboard-page .hd-skeleton-row {
 :root:not([data-theme-resolved='light']) main.maintenance-admin-dashboard-page .hd-kpi-label,
 :root:not([data-theme-resolved='light']) main.maintenance-admin-dashboard-page .hd-kpi-sub,
 :root:not([data-theme-resolved='light']) main.maintenance-admin-dashboard-page .hd-card-sub,
-:root:not([data-theme-resolved='light']) main.maintenance-admin-dashboard-page .hd-legend-label,
 :root:not([data-theme-resolved='light']) main.maintenance-admin-dashboard-page .hd-table th,
 :root:not([data-theme-resolved='light']) main.maintenance-admin-dashboard-page .hd-td-id {
     color: #94a3b8;
@@ -606,4 +516,16 @@ main.maintenance-admin-dashboard-page .hd-skeleton-row {
 
 :root:not([data-theme-resolved='light']) main.maintenance-admin-dashboard-page .dashboard-empty-state {
     color: #64748b;
+}
+
+/* Phones: stack the overview cards' subtitle ("Reports filed in September
+   2026") under the title instead of beside it, where it squeezed the title
+   onto two lines ("Reports by / Status"). */
+@media (max-width: 640px) {
+    main.maintenance-admin-dashboard-page #priority-overview-card .hd-card-header,
+    main.maintenance-admin-dashboard-page #status-overview-card .hd-card-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 2px;
+    }
 }

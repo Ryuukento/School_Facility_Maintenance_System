@@ -199,8 +199,22 @@ class UserController extends Controller
 
     public function approve(Request $request, User $user)
     {
+        // 2026-09-27 — the Administrator now also picks the department when
+        // approving. Self-registration cannot know it and used to drop every
+        // new account into the first active department, while report and
+        // dispatch permissions are department-based. Same rule as store():
+        // both maintenance roles require an active department.
         $validated = $request->validate([
             'role' => ['required', 'string', 'in:maintenance_admin,maintenance_staff'],
+            'department_id' => [
+                Rule::requiredIf(fn (): bool => $this->roleRequiresDepartment($request->input('role'))),
+                'nullable',
+                'integer',
+                Rule::exists('departments', 'department_id')->where('status', 'active'),
+            ],
+        ], [
+            'department_id.required' => 'Please choose the department this user belongs to.',
+            'department_id.exists' => 'Please choose an active department.',
         ]);
 
         // Mirrors the same guard deactivate()/activate()/reject() already
@@ -223,6 +237,7 @@ class UserController extends Controller
 
         $user->update([
             'role' => $validated['role'],
+            'department_id' => $validated['department_id'] ?? $user->department_id,
             'status' => 'active',
         ]);
 
@@ -231,6 +246,7 @@ class UserController extends Controller
             'APPROVE_USER',
             (int)$user->user_id,
             'Approved user #' . $user->user_id . ' and assigned role ' . $validated['role']
+                . (isset($validated['department_id']) ? ' (department #' . $validated['department_id'] . ')' : '')
         );
 
         return $this->ok('User approved successfully', [
@@ -289,8 +305,8 @@ class UserController extends Controller
         $email           = trim((string)$request->input('email_address', $currentUser->email ?? ''));
         $currentPassword = (string)$request->input('current_password', '');
         // Deliberately NOT trimmed: every other password-set path in this
-        // codebase (register(), UserController::store(), resetPassword(),
-        // forgotPasswordReset()) hashes the raw input, and AuthController::
+        // codebase (register(), UserController::store(), resetPassword())
+        // hashes the raw input, and AuthController::
         // login() compares the raw input via Hash::check() without trimming.
         // Trimming only here silently stored a different string than what
         // the user actually typed, so a new password containing a leading/

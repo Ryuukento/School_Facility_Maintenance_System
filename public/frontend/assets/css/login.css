@@ -2190,3 +2190,289 @@
     margin-top: 6px;
     padding-top: 0;
 }
+
+/* Login spam protection — "N attempts left before sign-in is locked" line
+   under a failed sign-in message (see the login form's catch block). */
+.login-container .login-attempts-warning {
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px dashed rgba(185, 28, 28, 0.3);
+    font-size: 0.85em;
+    font-weight: 700;
+    color: #9a3412;
+}
+
+/* =========================================================================
+   LOGIN POLISH (2026-09-26) — appended last so it wins by source order,
+   the pattern this stylesheet uses throughout.
+   - The "A Better Learning Environment" line and the "© 2026 … All rights
+     reserved." footer were removed from index.php on request.
+   - Bigger logo. logo.png is 642x314 with the seal centred between wide
+     transparent margins, so `object-fit: contain` in a square box drew the
+     seal at under half the box. `cover` crops the empty margins, so the seal
+     itself fills the box; the box also grows from 190px to 230px.
+   - Purple username/password icons (darker while the field has focus),
+     a firmer purple sign-in button, and a softer entrance.
+   ========================================================================= */
+
+/* Left panel — logo with a soft halo ring behind it. */
+.login-container .pitch-panel .form-brand {
+    position: relative;
+    gap: 16px;
+}
+
+.login-container .pitch-panel .form-brand img {
+    width: 230px;
+    height: 230px;
+    max-width: 230px;
+    object-fit: cover;
+    object-position: center;
+    position: relative;
+    z-index: 1;
+    filter: drop-shadow(0 0 34px rgba(168, 85, 247, 0.55)) drop-shadow(0 10px 22px rgba(15, 5, 40, 0.45));
+    transition: transform 0.35s ease;
+}
+
+.login-container .pitch-panel .form-brand::before {
+    content: "";
+    position: absolute;
+    top: -14px;
+    left: 50%;
+    width: 258px;
+    height: 258px;
+    transform: translateX(-50%);
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(167, 139, 250, 0.22) 0%, rgba(139, 92, 246, 0.08) 55%, rgba(139, 92, 246, 0) 72%);
+    border: 1px solid rgba(196, 181, 253, 0.18);
+    pointer-events: none;
+}
+
+.login-container .pitch-panel .form-brand:hover img {
+    transform: scale(1.03);
+}
+
+.login-container .pitch-panel .form-brand-subtitle {
+    font-size: clamp(0.85rem, 0.3vw + 0.78rem, 0.98rem);
+    color: #d8ccff;
+}
+
+@media (max-width: 900px) {
+    .login-container .pitch-panel .form-brand img {
+        width: clamp(140px, 22vw, 180px);
+        height: clamp(140px, 22vw, 180px);
+        max-width: clamp(140px, 22vw, 180px);
+    }
+    .login-container .pitch-panel .form-brand::before {
+        width: clamp(160px, 25vw, 204px);
+        height: clamp(160px, 25vw, 204px);
+        top: -12px;
+    }
+}
+
+@media (max-width: 480px) {
+    .login-container .pitch-panel .form-brand img {
+        width: clamp(104px, 30vw, 128px);
+        height: clamp(104px, 30vw, 128px);
+        max-width: clamp(104px, 30vw, 128px);
+    }
+    .login-container .pitch-panel .form-brand::before {
+        width: clamp(120px, 34vw, 146px);
+        height: clamp(120px, 34vw, 146px);
+        top: -9px;
+    }
+}
+
+/* Right panel — purple field icons, clearer focus. */
+.login-container .input-icon-wrapper .input-icon,
+.login-container .password-field-wrapper .input-icon {
+    width: 19px;
+    height: 19px;
+    color: #8b5cf6;
+    transition: color 0.2s ease, transform 0.2s ease;
+}
+
+.login-container .input-icon-wrapper:focus-within .input-icon,
+.login-container .password-field-wrapper:focus-within .input-icon {
+    color: #6d28d9;
+    transform: translateY(-50%) scale(1.08);
+}
+
+.login-container .card:not(.register-mode) .input-icon-wrapper input,
+.login-container .card:not(.register-mode) .password-field-wrapper input {
+    min-height: 52px;
+    border-radius: 12px;
+    border-color: #e4defa;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+
+.login-container .card:not(.register-mode) .input-icon-wrapper input:hover,
+.login-container .card:not(.register-mode) .password-field-wrapper input:hover {
+    border-color: #c4b5fd;
+}
+
+.login-container .card:not(.register-mode) .input-icon-wrapper input:focus,
+.login-container .card:not(.register-mode) .password-field-wrapper input:focus {
+    border-color: #8b5cf6;
+    box-shadow: 0 0 0 4px rgba(139, 92, 246, 0.16);
+}
+
+.login-container .password-toggle-btn {
+    color: #8b5cf6;
+}
+
+.login-container .remember-me-control input {
+    accent-color: #7c3aed;
+}
+
+.login-container .forgot-password-link {
+    font-weight: 600;
+}
+
+/* Sign In button — deeper purple gradient with a gentle shine on hover. */
+.login-container .btn-primary {
+    background: linear-gradient(135deg, #6d28d9 0%, #8b5cf6 55%, #a78bfa 100%);
+    background-size: 160% 100%;
+    background-position: 0% 50%;
+    border: 0;
+    border-radius: 12px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    box-shadow: 0 12px 26px rgba(109, 40, 217, 0.34);
+    transition: background-position 0.35s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.login-container .btn-primary:hover:not(:disabled) {
+    background-position: 100% 50%;
+    box-shadow: 0 16px 32px rgba(109, 40, 217, 0.42);
+    transform: translateY(-1px);
+}
+
+.login-container .btn-primary:hover:not(:disabled) .btn-arrow-icon {
+    transform: translateX(3px);
+}
+
+.login-container .btn-arrow-icon {
+    transition: transform 0.2s ease;
+}
+
+.login-container .btn-primary:disabled {
+    background: linear-gradient(135deg, #a78bfa 0%, #c4b5fd 100%);
+    box-shadow: none;
+}
+
+/* With the footer gone, give the Secure Access row a little room below. */
+.login-container .secure-access-row {
+    margin-top: 16px;
+}
+
+.login-container .secure-access-text {
+    color: #8b5cf6;
+}
+
+/* Soft entrance for the whole card. */
+@keyframes loginCardIn {
+    from { opacity: 0; transform: translateY(10px) scale(0.99); }
+    to   { opacity: 1; transform: none; }
+}
+
+.login-container .card {
+    animation: loginCardIn 0.45s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .login-container .card,
+    .login-container .pitch-panel .form-brand img,
+    .login-container .btn-primary {
+        animation: none;
+        transition: none;
+    }
+}
+
+/* =========================================================================
+   LOGIN MOBILE SCROLL FIX (2026-09-27) — appended last so it wins.
+   1. One scroller: on phones `html, body { height: 100%; overflow-y: auto }`
+      (earlier in this file) made both elements scroll containers; the two
+      fought over the scroll, so reaching the bottom — or the address bar
+      hiding/showing — snapped the page back up. The document now scrolls
+      normally as a single page.
+   2. Keyboard room: `body.keyboard-open` (set by the sign-in page's script
+      while a field has focus) already collapses the logo panel and pads the
+      form by --kb-offset; this adds breathing room under the form so the
+      focused field and the Sign In button can scroll clear of the keyboard.
+   Desktop keeps its fixed, centred layout (these rules are phone/tablet only).
+   ========================================================================= */
+@media (max-width: 900px) {
+    /* Sideways clipping lives on <html> ONLY: overflow set on the root is
+       applied to the page viewport itself (the normal document scroll), not a
+       nested scroll box. <body> must stay `overflow: visible` on both axes —
+       `overflow-x: hidden` there would silently turn its overflow-y into
+       `auto` and make it a second scroller again. */
+    html {
+        height: auto !important;
+        overflow-x: hidden !important;
+        overflow-y: auto !important;
+        overscroll-behavior-y: none;
+    }
+
+    body {
+        height: auto !important;
+        min-height: 100svh;
+        overflow: visible !important;
+    }
+
+    /* The decorative background layers are larger than the screen on
+       purpose (the particle layer drifts). Pinned to the screen, they no
+       longer widen/lengthen the scrollable page now that <body> does not
+       clip them. */
+    body::before,
+    body::after {
+        position: fixed !important;
+    }
+
+    /* The container glow bled ~23px past each side (inset -6%), widening
+       the page so phones could pan sideways. Keep it within the screen. */
+    .login-container::before {
+        left: 0;
+        right: 0;
+    }
+
+    body.keyboard-open .form-panel-inner {
+        padding-bottom: calc(var(--kb-offset, 0px) + 24px);
+    }
+}
+
+/* Desktop: lift the logo group slightly — the space above it (under the
+   "SERVICE • FACILITIES • A BETTER CAMPUS" tagline) was noticeably larger
+   than needed. The group stays vertically centred (margin: auto 0); the
+   extra bottom padding simply moves its centre up by half its size. */
+@media (min-width: 901px) {
+    .login-container .pitch-panel .pitch-brand-group {
+        padding-bottom: 64px;
+    }
+}
+
+/* ============================================================
+   BRAND TEXT SPACING (2026-09-27)
+   The seal's halo eats most of the 16px gap, so the college name
+   read as glued to the logo. Push the brand text down a bit.
+   ============================================================ */
+.login-container .pitch-panel .form-brand-text {
+    margin-top: 14px;
+}
+
+@media (max-width: 900px) {
+    .login-container .pitch-panel .form-brand-text {
+        margin-top: 8px;
+    }
+}
+
+/* Give the system title more breathing room below the divider. */
+.login-container .pitch-panel .pitch-system-title {
+    margin-top: 18px;
+}
+
+@media (max-width: 900px) {
+    .login-container .pitch-panel .pitch-system-title {
+        margin-top: 10px;
+    }
+}

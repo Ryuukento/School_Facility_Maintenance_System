@@ -98,7 +98,8 @@ class PurchaseReceiptController extends Controller
         $rawReceivedBy = $request->input('received_by_user_id');
         if ($rawReceivedBy !== null && $rawReceivedBy !== '') {
             $overrideId = (int) $rawReceivedBy;
-            if ($overrideId > 0 && DB::table('users')->where('user_id', $overrideId)->exists()) {
+            // Only an active account can be recorded as the receiver.
+            if ($overrideId > 0 && DB::table('users')->where('user_id', $overrideId)->where('status', 'active')->exists()) {
                 $receivedBy = $overrideId;
             }
         }
@@ -117,6 +118,16 @@ class PurchaseReceiptController extends Controller
         $parsed = \DateTime::createFromFormat('Y-m-d', $receiptDate);
         if (!$parsed || $parsed->format('Y-m-d') !== $receiptDate) {
             return $this->fail('Invalid receipt date. Use YYYY-MM-DD format', 422);
+        }
+
+        // A receipt records a delivery that already happened.
+        if ($receiptDate > now()->toDateString()) {
+            return $this->fail('Receipt date cannot be in the future', 422);
+        }
+
+        if ($departmentId !== null
+            && !DB::table('departments')->where('department_id', $departmentId)->where('status', 'active')->exists()) {
+            return $this->fail('Please choose an active department', 422);
         }
 
         if (DB::table('purchase_receipts')->where('or_number', $orNumber)->exists()) {
@@ -233,6 +244,36 @@ class PurchaseReceiptController extends Controller
      *     stock per line and adds the quantity, so 2+3 on one line and 2 and 3
      *     on two lines produce exactly the same inventory result.
      */
+    /**
+     * DELETE /api/purchase-receipts/{id}/items/{lineId}
+     *
+     * Removes a line that was added by mistake. Only while the receipt is
+     * still a draft: a draft line has not touched inventory yet (posting is
+     * what adds stock), so removing it has no stock effect. Posted receipts
+     * stay unchanged — a wrong posted quantity is corrected through a stock
+     * adjustment, which keeps its own audit trail.
+     */
+    public function removeItem(Request $request, int $id, int $lineId): JsonResponse
+    {
+        if ($receiptError = $this->draftReceiptError($id)) {
+            $message = $receiptError[1] === 422 ? 'Cannot remove items from a posted receipt' : $receiptError[0];
+            return $this->fail($message, $receiptError[1]);
+        }
+
+        $deleted = DB::table('purchase_receipt_items')
+            ->where('id', $lineId)
+            ->where('purchase_receipt_id', $id)
+            ->delete();
+
+        if ($deleted === 0) {
+            return $this->fail('Line item not found on this receipt', 404);
+        }
+
+        DB::table('purchase_receipts')->where('id', $id)->update(['updated_at' => now()]);
+
+        return $this->ok('Item removed from receipt', ['id' => $lineId]);
+    }
+
     public function addItems(Request $request, int $id): JsonResponse
     {
         $rawLines = $request->input('items');

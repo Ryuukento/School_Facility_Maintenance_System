@@ -5,7 +5,7 @@
 @section('content')
 <main class="login-container">
     <header class="page-auth-header">
-        <img src="{{ asset('frontend/assets/images/logo.png') }}" alt="School Logo" class="page-auth-logo">
+        <img src="{{ asset('frontend/assets/images/logo-seal.svg') }}" alt="School Logo" class="page-auth-logo">
         <div class="page-auth-text">
             <span class="page-auth-title">School Facility Maintenance</span>
             <span class="page-auth-subtitle">Philippine College of Science &amp; Technology</span>
@@ -101,7 +101,7 @@
         <aside class="pitch-panel">
             <div class="pitch-content">
                 <div class="form-brand">
-                    <img src="{{ asset('frontend/assets/images/logo.png') }}" alt="School Logo">
+                    <img src="{{ asset('frontend/assets/images/logo-seal.svg') }}" alt="School Logo">
                     <div class="form-brand-text">
                         <div class="form-brand-name">Philippine College of Science &amp; Technology</div>
                         <div class="form-brand-subtitle">Institutional Facility Management System</div>

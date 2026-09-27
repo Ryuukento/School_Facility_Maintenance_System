@@ -21,13 +21,8 @@ $defaultBackUrl = $isMaintenanceContext
     ? '/School_Facility_Maintenance_System/frontend/pages/maintenance-dashboard.php'
     : '/School_Facility_Maintenance_System/frontend/pages/dashboard.php';
 
-$canViewDeploymentTracking = in_array($user['role'] ?? '', ['super_admin', 'maintenance_admin'], true);
-
 $pageTitle = 'Buildings Overview - SFMS';
 include __DIR__ . '/../includes/header.php';
-
-$deploymentTrackingUrl = public_url('/deployment-tracking');
-$inventoryQuickNavUrl = public_url('/frontend/pages/inventory.php');
 ?>
 
 <link rel="stylesheet" href="<?php echo htmlspecialchars(public_url('/frontend/assets/css/buildings-redesign.css?v=20260921-2')); ?>">
@@ -39,24 +34,9 @@ $inventoryQuickNavUrl = public_url('/frontend/pages/inventory.php');
             <h2>Buildings Overview</h2>
             <p>Explore all campus buildings, floors, rooms, and inventory deployments.</p>
         </div>
-        <div class="buildings-page-hero-metrics">
-            <button type="button" id="quickNavRooms" class="buildings-hero-metric buildings-hero-metric-action" aria-label="Jump to the Rooms section below">
-                <strong>Rooms</strong><span>Filter instantly</span>
-            </button>
-            <?php if ($canViewDeploymentTracking): ?>
-            <a href="<?php echo htmlspecialchars($deploymentTrackingUrl); ?>" class="buildings-hero-metric buildings-hero-metric-action" aria-label="Go to Deployment Tracking">
-                <strong>Deployments</strong><span>Print-ready reports</span>
-            </a>
-            <?php else: ?>
-            <div class="buildings-hero-metric buildings-hero-metric-disabled" aria-disabled="true" title="Deployment Tracking is available to Administrator and Head Maintenance accounts only">
-                <strong>Deployments <span class="buildings-hero-metric-lock"><?php echo ui_icon('lock'); ?></span></strong>
-                <span>Administrator only</span>
-            </div>
-            <?php endif; ?>
-            <a href="<?php echo htmlspecialchars($inventoryQuickNavUrl); ?>" class="buildings-hero-metric buildings-hero-metric-action" aria-label="Go to Inventory">
-                <strong>Inventory</strong><span>Room-by-room view</span>
-            </a>
-        </div>
+        <!-- The Rooms / Deployments / Inventory quick-nav cards were removed
+             from this header on request. Inventory and Deployment Tracking
+             stay reachable from the sidebar's Inventory menu. -->
     </section>
 
     <section id="buildingsStatsSection" class="buildings-stats-grid" aria-label="Facility summary statistics" hidden>
@@ -397,7 +377,7 @@ $inventoryQuickNavUrl = public_url('/frontend/pages/inventory.php');
         <div class="print-preview-sheet">
             <div class="print-preview-header">
                 <div class="print-preview-branding">
-                    <img src="<?php echo htmlspecialchars(public_url('/frontend/assets/images/logo.png')); ?>" alt="PHILCST Logo" class="print-preview-logo" onerror="this.style.display='none'" />
+                    <img src="<?php echo htmlspecialchars(public_url('/frontend/assets/images/logo-seal.svg')); ?>" alt="PHILCST Logo" class="print-preview-logo" onerror="this.style.display='none'" />
                     <div>
                         <div class="print-preview-school">PHILCST Centralized School Facility Maintenance Report Management System</div>
                         <div class="print-preview-title">Deployed Items Inventory Report</div>
@@ -1409,7 +1389,6 @@ async function loadBuildings() {
     document.getElementById('overviewTitle').textContent = 'Buildings';
     document.getElementById('overviewSubtitle').textContent = 'Select a building to view floors';
     clearActions();
-    addActionButton('Print Deployed Items', () => openPrintFilterModal());
     // TASK 35 — Administrator (super_admin) only; Head Maintenance and
     // Maintenance Staff are view-only for buildings (enforced server-side by
     // EnsureRole:'super_admin' on POST /api/buildings, see routes/web.php).
@@ -1491,7 +1470,6 @@ async function loadFloors(buildingId, buildingName) {
     document.getElementById('overviewTitle').textContent = 'Floors of ' + buildingName;
     document.getElementById('overviewSubtitle').textContent = 'Select a floor to view rooms';
     clearActions();
-    addActionButton('Print Deployed Items', () => openPrintFilterModal());
     // TASK 35 — Administrator (super_admin) only; matches the narrowed
     // POST /api/buildings/{id}/floors middleware (routes/web.php).
     if (canModifyBuildings) {
@@ -1540,7 +1518,6 @@ async function loadRooms(floorId, floorName) {
     document.getElementById('overviewTitle').textContent = 'Rooms of ' + floorName;
     document.getElementById('overviewSubtitle').textContent = 'Select a room to view items';
     clearActions();
-    addActionButton('Print Deployed Items', () => openPrintFilterModal());
     // TASK 35 — Administrator (super_admin) only; matches the narrowed
     // POST /api/rooms middleware (routes/web.php).
     if (canModifyBuildings) {
@@ -1836,7 +1813,6 @@ async function loadItems(roomId, roomName) {
     document.getElementById('overviewTitle').textContent = 'Items in ' + roomName;
     document.getElementById('overviewSubtitle').textContent = 'Search items in this room';
     clearActions();
-    addActionButton('Print Deployed Items', () => openPrintFilterModal());
     addActionButton('Add Item', () => openItemModal());
     addActionButton('Back', () => loadRooms(currentFloorId, currentFloorName));
 
@@ -2148,16 +2124,6 @@ document.addEventListener('DOMContentLoaded', () => {
             setRoomCategoryFilter(button.getAttribute('data-room-category-filter') || 'all');
         });
     });
-
-    const quickNavRooms = document.getElementById('quickNavRooms');
-    if (quickNavRooms) {
-        quickNavRooms.addEventListener('click', () => {
-            const target = document.getElementById('overviewHeader');
-            if (target) {
-                target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }
-        });
-    }
 
     // TASK 101B — the three persistent cascading filters, all bound on the outer
     // Buildings Overview view. Each child listener returns early unless its

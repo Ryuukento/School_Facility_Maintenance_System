@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\MaintenanceReport;
 use App\Models\PreventiveMaintenanceHistory;
 use App\Models\PreventiveMaintenanceTask;
 use App\Models\User;
@@ -14,21 +15,31 @@ class PreventiveMaintenanceService
 {
     public function __construct(
         private readonly ActivityLogService $activityLogService,
-        private readonly NotificationService $notificationService
+        private readonly NotificationService $notificationService,
+        // Repair reports raised from a "Needs Repair" inspection go through
+        // the normal report creation path (same audit log + Head
+        // notification as any other report) instead of a second insert.
+        private readonly ReportService $reportService
     ) {
     }
 
     /**
      * RBAC per the confirmed plan: Maintenance Staff may VIEW every task
      * (index is never scoped), but may only EDIT or COMPLETE a task whose
-     * assigned_user_id is their own user_id. super_admin / maintenance_admin
-     * may manage any task. Mirrors DispatchAuthorizationService's role of
-     * being the single place this identity check lives.
+     * assigned_user_id is their own user_id — an unassigned task cannot be
+     * completed by any staff member. Head Maintenance (maintenance_admin)
+     * owns the plan and may manage any task. Mirrors
+     * DispatchAuthorizationService's role of being the single place this
+     * identity check lives.
+     *
+     * 2026-09-27: the Administrator (super_admin) is view/monitor only for
+     * Preventive Maintenance — PM is performed by Head Maintenance and Staff,
+     * so the Administrator no longer edits or completes tasks.
      */
     public function canManageTask(array $authUser, PreventiveMaintenanceTask $task): bool
     {
         $role = (string) ($authUser['role'] ?? '');
-        if (in_array($role, ['super_admin', 'maintenance_admin'], true)) {
+        if ($role === 'maintenance_admin') {
             return true;
         }
 
@@ -37,6 +48,46 @@ class PreventiveMaintenanceService
         }
 
         return false;
+    }
+
+    /**
+     * Assigning PM tasks to staff is Head Maintenance's responsibility.
+     */
+    public function canAssignTasks(array $authUser): bool
+    {
+        return (string) ($authUser['role'] ?? '') === 'maintenance_admin';
+    }
+
+    /**
+     * Head Maintenance assigns (or unassigns, with null) one or more tasks
+     * in one step. Each task goes through updateTask(), so the per-task
+     * activity log and the "you have been assigned" notification behave
+     * exactly as they do for a single edit.
+     *
+     * @param  array<int, int>  $taskIds
+     * @return int number of tasks updated
+     */
+    public function assignTasks(array $taskIds, ?int $assigneeId, ?int $actorUserId = null): int
+    {
+        if ($assigneeId !== null) {
+            $isActiveStaff = User::query()
+                ->where('user_id', $assigneeId)
+                ->where('role', 'maintenance_staff')
+                ->where('status', 'active')
+                ->exists();
+            if (!$isActiveStaff) {
+                throw ValidationException::withMessages([
+                    'assigned_user_id' => 'Preventive maintenance tasks can only be assigned to active Maintenance Staff.',
+                ]);
+            }
+        }
+
+        $tasks = PreventiveMaintenanceTask::query()->whereIn('id', array_unique(array_map('intval', $taskIds)))->get();
+        foreach ($tasks as $task) {
+            $this->updateTask($task, ['assigned_user_id' => $assigneeId], $actorUserId);
+        }
+
+        return $tasks->count();
     }
 
     /**
@@ -321,6 +372,7 @@ class PreventiveMaintenanceService
                 'notes' => $data['notes'] ?? null,
                 'findings' => $data['findings'] ?? null,
                 'action_taken' => $data['action_taken'] ?? null,
+                'condition_result' => $data['condition_result'] ?? null,
                 'completion_proof_path' => $proofPath,
                 'next_due_date_snapshot' => $nextDue->toDateString(),
             ]);
@@ -339,7 +391,11 @@ class PreventiveMaintenanceService
                     'entity_type' => 'preventive_maintenance_task',
                     'entity_id' => $locked->id,
                     'details' => 'Recorded completion for "' . $locked->title . '". Next due ' . $nextDue->toDateString() . '.',
-                    'meta' => ['history_id' => $history->id, 'next_due_date' => $nextDue->toDateString()],
+                    'meta' => [
+                        'history_id' => $history->id,
+                        'next_due_date' => $nextDue->toDateString(),
+                        'condition_result' => $data['condition_result'] ?? null,
+                    ],
                 ]);
             }
 
@@ -363,6 +419,104 @@ class PreventiveMaintenanceService
                 'history' => $history,
             ];
         });
+    }
+
+    /**
+     * Raises the repair report for a "Needs Repair" inspection and links it
+     * to that history row. The report is created through
+     * ReportService::createGeneralReport() exactly like a report filed from
+     * the Create Report page (status "submitted", unassigned, CREATE_REPORT
+     * audit entry, Head notified), so the repair then follows the normal
+     * report workflow.
+     *
+     * One report per inspection: the history row is locked and re-checked so
+     * a double submit cannot raise two reports.
+     *
+     * @param  array{priority?: string|null, problem_type?: string|null}  $data
+     */
+    public function createRepairReport(PreventiveMaintenanceHistory $history, array $data, array $authUser): MaintenanceReport
+    {
+        return DB::transaction(function () use ($history, $data, $authUser): MaintenanceReport {
+            $locked = PreventiveMaintenanceHistory::query()->whereKey($history->id)->lockForUpdate()->first();
+            if (!$locked) {
+                throw ValidationException::withMessages(['id' => 'Inspection record not found.']);
+            }
+            if ($locked->condition_result !== 'needs_repair') {
+                throw ValidationException::withMessages([
+                    'condition_result' => 'A repair report can only be raised for an inspection marked "Needs Repair".',
+                ]);
+            }
+            if ($locked->maintenance_report_id !== null) {
+                throw ValidationException::withMessages([
+                    'maintenance_report_id' => 'A repair report was already created for this inspection (Report #' . $locked->maintenance_report_id . ').',
+                ]);
+            }
+
+            $task = PreventiveMaintenanceTask::query()->withTrashed()->findOrFail($locked->preventive_maintenance_task_id);
+            [$problemType, $problemTypeOther] = $this->resolveReportProblemType($task, $data['problem_type'] ?? null);
+            $location = $task->location_label ?: null;
+            $completedOn = $locked->completed_date instanceof Carbon
+                ? $locked->completed_date->toDateString()
+                : (string) $locked->completed_date;
+
+            $description = trim((string) $locked->findings);
+            if ($description === '') {
+                $description = 'Equipment found in need of repair during preventive maintenance.';
+            }
+            if (!empty($locked->action_taken)) {
+                $description .= "\n\nAction taken during inspection: " . trim((string) $locked->action_taken);
+            }
+            $description .= "\n\nRaised from the Preventive Maintenance inspection of " . $task->category
+                . ($location ? ' (' . $location . ')' : '') . ' on ' . $completedOn . '.';
+
+            $report = $this->reportService->createGeneralReport([
+                'title' => mb_substr('PM Finding: ' . $task->category . ($location ? ' — ' . $location : ''), 0, 255),
+                'description' => $description,
+                'problem_type' => $problemType,
+                'problem_type_other' => $problemTypeOther,
+                'location' => $location,
+                'priority' => $data['priority'] ?? 'medium',
+                'department_id' => $task->department_id ?? ($authUser['department_id'] ?? null),
+            ], $authUser, false, (string) ($authUser['full_name'] ?? 'Maintenance personnel'));
+
+            $locked->forceFill(['maintenance_report_id' => $report->report_id])->save();
+
+            $this->activityLogService->logFromSession([
+                'user_id' => (int) ($authUser['user_id'] ?? 0),
+                'user_role' => $authUser['role'] ?? null,
+                'action' => 'CREATE_PREVENTIVE_MAINTENANCE_REPAIR_REPORT',
+                'module' => 'preventive_maintenance',
+                'entity_type' => 'preventive_maintenance_task',
+                'entity_id' => $task->id,
+                'details' => 'Raised repair report #' . $report->report_id . ' from the "Needs Repair" inspection of "' . $task->title . '".',
+                'meta' => ['history_id' => $locked->id, 'report_id' => $report->report_id],
+            ], $authUser);
+
+            return $report;
+        });
+    }
+
+    /**
+     * Problem Type for a PM repair report: the caller's choice when it is in
+     * the approved vocabulary, otherwise the equipment's configured default,
+     * otherwise "Other" with the equipment name as the specified type.
+     *
+     * @return array{0: string, 1: string|null}
+     */
+    private function resolveReportProblemType(PreventiveMaintenanceTask $task, ?string $requested): array
+    {
+        $allowed = array_column((array) config('maintenance_reports.problem_types', []), 'value');
+        $otherValue = (string) config('maintenance_reports.problem_type_other_value', 'Other');
+
+        $type = $requested !== null && in_array($requested, $allowed, true)
+            ? $requested
+            : (config('preventive_maintenance.report_problem_types.' . $task->category) ?? $otherValue);
+
+        if (!in_array($type, $allowed, true)) {
+            $type = $otherValue;
+        }
+
+        return [$type, $type === $otherValue ? mb_substr($task->category, 0, 100) : null];
     }
 
     private function notifyAssignment(PreventiveMaintenanceTask $task, ?int $previousAssignee, ?int $actorUserId): void

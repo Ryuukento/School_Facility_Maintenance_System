@@ -79,6 +79,7 @@ class ReportNotificationFailureIsolationTest extends TestCase
             'created_by' => $ownerId,
             'assigned_to' => $staffId,
             'status' => 'in_progress',
+            'completion_proof_image' => '/frontend/uploads/completion-proofs/test-proof.jpg', // 2026-09-27: completing requires proof
         ]);
 
         $response = $this

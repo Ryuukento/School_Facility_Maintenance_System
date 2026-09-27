@@ -94,12 +94,12 @@ class ReportServiceExtractionParityTest extends TestCase
 
     public function test_assignment_activity_log_still_records_the_request_metadata(): void
     {
-        $adminId = $this->seedUser(['role' => 'super_admin']);
+        $adminId = $this->seedUser(['role' => 'maintenance_admin']);
         $staffId = $this->seedUser(['role' => 'maintenance_staff']);
         $reportId = $this->seedReport();
 
         $this
-            ->actingAsSessionUser($adminId, 'super_admin')
+            ->actingAsSessionUser($adminId, 'maintenance_admin')
             ->withHeaders(['User-Agent' => self::TEST_USER_AGENT])
             ->patchJson("/api/reports/{$reportId}", ['status' => 'assigned', 'assigned_to' => $staffId])
             ->assertOk();
@@ -107,7 +107,7 @@ class ReportServiceExtractionParityTest extends TestCase
         $log = $this->latestLog('ASSIGN_REPORT');
 
         $this->assertSame($adminId, (int) $log->user_id);
-        $this->assertSame('super_admin', $log->user_role);
+        $this->assertSame('maintenance_admin', $log->user_role);
         $this->assertSame($reportId, (int) $log->entity_id);
         $this->assertRequestMetadataWasRecorded($log, 'ASSIGN_REPORT');
     }
@@ -139,12 +139,12 @@ class ReportServiceExtractionParityTest extends TestCase
 
     public function test_one_update_request_still_writes_exactly_one_activity_log(): void
     {
-        $adminId = $this->seedUser(['role' => 'super_admin']);
+        $adminId = $this->seedUser(['role' => 'maintenance_admin']);
         $staffId = $this->seedUser(['role' => 'maintenance_staff']);
         $reportId = $this->seedReport();
 
         $this
-            ->actingAsSessionUser($adminId, 'super_admin')
+            ->actingAsSessionUser($adminId, 'maintenance_admin')
             ->patchJson("/api/reports/{$reportId}", ['status' => 'assigned', 'assigned_to' => $staffId])
             ->assertOk();
 
@@ -177,12 +177,12 @@ class ReportServiceExtractionParityTest extends TestCase
 
     public function test_one_assignment_request_still_sends_exactly_one_notification(): void
     {
-        $adminId = $this->seedUser(['role' => 'super_admin']);
+        $adminId = $this->seedUser(['role' => 'maintenance_admin']);
         $staffId = $this->seedUser(['role' => 'maintenance_staff']);
         $reportId = $this->seedReport();
 
         $this
-            ->actingAsSessionUser($adminId, 'super_admin')
+            ->actingAsSessionUser($adminId, 'maintenance_admin')
             ->patchJson("/api/reports/{$reportId}", ['status' => 'assigned', 'assigned_to' => $staffId])
             ->assertOk();
 

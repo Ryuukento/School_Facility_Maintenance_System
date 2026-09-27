@@ -186,8 +186,11 @@ class ReportAuthorizationBypassAuditTest extends TestCase
         $this->assertSame('assigned', DB::table('maintenance_reports')->where('report_id', $reportId)->value('status'));
     }
 
-    public function test_administrator_can_update_any_departments_damage_report(): void
+    public function test_administrator_cannot_drive_a_linked_report_through_the_damage_status_endpoint(): void
     {
+        // 2026-09-27 — this endpoint syncs onto the linked maintenance report
+        // (under_review -> "assigned"), so it must not become a way around
+        // the rule that the Administrator does not assign or work reports.
         $adminId = $this->seedUser(['role' => 'super_admin']);
         $otherDept = $this->seedDepartment();
 
@@ -201,9 +204,9 @@ class ReportAuthorizationBypassAuditTest extends TestCase
         $this
             ->actingAsSessionUser($adminId, 'super_admin')
             ->postJson("/api/damage-reports/{$damageReportId}/status", ['status' => 'under_review'])
-            ->assertOk();
+            ->assertStatus(403);
 
-        $this->assertSame('assigned', DB::table('maintenance_reports')->where('report_id', $reportId)->value('status'));
+        $this->assertSame('submitted', DB::table('maintenance_reports')->where('report_id', $reportId)->value('status'));
     }
 
     public function test_damage_report_without_linked_maintenance_report_is_unaffected_by_the_gate(): void

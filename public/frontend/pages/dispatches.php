@@ -35,7 +35,7 @@ include __DIR__ . '/../includes/header.php';
             <p class="dispatches-page__description">Manage item deployment from inventory rooms to rooms and laboratories.</p>
         </div>
         <div class="dispatches-page__actions">
-            <button type="button" class="btn dispatches-page__secondary-action" onclick="window.print()">Print</button>
+            <button type="button" id="dispatch-print-btn" class="btn dispatches-page__secondary-action">Print</button>
             <?php if ($canCreateDispatch): ?>
             <a href="<?php echo htmlspecialchars(public_url('/dispatches/create')); ?>" class="btn dispatches-page__primary-action">+ Create Dispatch</a>
             <?php endif; ?>
@@ -55,7 +55,6 @@ include __DIR__ . '/../includes/header.php';
                     <option value="pending">Pending</option>
                     <option value="approved">Approved</option>
                     <option value="released">Released</option>
-                    <option value="cancelled">Cancelled</option>
                 </select>
             </div>
             <div class="dispatches-toolbar__action">
@@ -111,7 +110,12 @@ include __DIR__ . '/../includes/header.php';
     </div>
 </main>
 
+<!-- Shared branded printout (logo letterhead) used by printDispatchReport(). -->
+<script src="/School_Facility_Maintenance_System/frontend/assets/js/sfms-print.js?v=20260927-1"></script>
 <script>
+// "Prepared by" line on the printed Dispatch Report.
+const DSP_CURRENT_USER_NAME = <?php echo json_encode((string)($_dspUser['full_name'] ?? ''), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
+const DSP_CURRENT_USER_ROLE = <?php echo json_encode($_dspRole, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
 let dispatchPage = 1;
 let dispatchLastPage = 1;
 // TASK 98.1 — debounce handle for the live free-text search below. Search-
@@ -250,13 +254,8 @@ function dspRoomCell(row) {
         return dspMutedDash();
     }
 
-    const capacity = row.room?.capacity;
-    const secondary = capacity ? `<div class="dispatches-cell-secondary">Capacity: ${dspEscapeHtml(capacity)}</div>` : '';
-
-    return `
-        <div class="dispatches-cell-primary">${dspEscapeHtml(name)}</div>
-        ${secondary}
-    `;
+    // Room capacity was retired from the system, so only the room name shows.
+    return `<div class="dispatches-cell-primary">${dspEscapeHtml(name)}</div>`;
 }
 
 function dspItemsCell(row) {
@@ -371,6 +370,126 @@ function dspDateCell(row) {
         <div class="dispatches-cell-primary">${dspEscapeHtml(date)}</div>
         ${time ? `<div class="dispatches-cell-secondary">${dspEscapeHtml(time)}</div>` : ''}
     `;
+}
+
+// ── Print ─────────────────────────────────────────────────────────────────
+// Branded Dispatch Report via the shared SfmsPrint layout (PHILCST letterhead
+// + logo, coupon-bond landscape fit, repeated header, page numbers, sign-off)
+// — the same design as the All Reports printout. It prints EVERY dispatch
+// matching the current Search/Status filters, not just the 20 on the visible
+// page, and leaves out the Action column (a button has no meaning on paper).
+const DSP_PRINT_ROLE_LABELS = {
+    super_admin: 'Administrator',
+    maintenance_admin: 'Head Maintenance',
+    maintenance_staff: 'Maintenance Staff',
+};
+const DSP_PRINT_STATUS_TONES = { pending: 'amber', approved: 'blue', released: 'green', cancelled: 'red' };
+
+async function fetchAllDispatchesForPrint() {
+    const search = document.getElementById('dispatch-search').value.trim();
+    const status = document.getElementById('dispatch-status').value;
+    const rows = [];
+
+    for (let page = 1, lastPage = 1; page <= lastPage && page <= 100; page += 1) {
+        const params = new URLSearchParams({ page: String(page), per_page: '100' });
+        if (search) params.set('search', search);
+        if (status) params.set('status', status);
+
+        const response = await fetch(`${DISPATCH_API_BASE}?${params.toString()}`, {
+            credentials: 'same-origin',
+            headers: { Accept: 'application/json' },
+        });
+        const payload = await response.json();
+        if (!response.ok || !payload.success) {
+            throw new Error(payload.message || 'Failed to load dispatches for printing');
+        }
+
+        rows.push(...(Array.isArray(payload.data?.data) ? payload.data.data : []));
+        lastPage = Number(payload.data?.last_page || 1);
+    }
+
+    return { rows, search, status };
+}
+
+async function printDispatchReport() {
+    const button = document.getElementById('dispatch-print-btn');
+    if (button) button.disabled = true;
+
+    try {
+        const { rows, search, status } = await fetchAllDispatchesForPrint();
+        if (rows.length === 0) {
+            dspNotify('No dispatches match the current filters, so there is nothing to print.', 'warning');
+            return;
+        }
+
+        const esc = SfmsPrint.escape;
+        const titleCase = (s) => String(s || '').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+
+        const rowsHtml = rows.map((row, index) => {
+            const statusKey = String(row.status || '').toLowerCase();
+            const { date, time } = dspFormatDateParts(row.created_at);
+            const deptName = row.department_name || row.department?.name;
+            const roomName = row.room_name || row.room?.name;
+            const itemCount = Number(row.item_count || 0);
+            const assignee = row.release_assigned_to_name;
+            const approverRole = dspRoleLabel(row.approved_by_user?.role);
+
+            return `
+                <tr>
+                    <td class="c-no">${index + 1}</td>
+                    <td class="c-key">${esc(row.dispatch_code)}<span class="sub">${row.report?.title ? esc(row.report.title) : 'No linked report'}</span></td>
+                    <td>${deptName ? esc(deptName) : '<span class="muted">—</span>'}</td>
+                    <td class="c-strong">${roomName ? esc(roomName) : '<span class="muted">—</span>'}</td>
+                    <td>${esc(`${itemCount} Item${itemCount === 1 ? '' : 's'}`)}</td>
+                    <td>${SfmsPrint.pill(titleCase(statusKey) || 'Unknown', DSP_PRINT_STATUS_TONES[statusKey] || 'gray')}</td>
+                    <td>${assignee ? `${esc(assignee)}<span class="sub">${esc(dspAssignmentStatus(row).label)}</span>` : '<span class="muted">Not assigned</span>'}</td>
+                    <td>${row.approved_by_name ? `${esc(row.approved_by_name)}${approverRole ? `<span class="sub">${esc(approverRole)}</span>` : ''}` : '<span class="muted">Not yet approved</span>'}</td>
+                    <td class="c-nowrap">${date ? esc(date) : '—'}${time ? `<span class="sub">${esc(time)}</span>` : ''}</td>
+                </tr>
+            `;
+        }).join('');
+
+        const count = (key) => rows.filter((r) => String(r.status || '').toLowerCase() === key).length;
+        const totalItems = rows.reduce((sum, r) => sum + Number(r.item_count || 0), 0);
+        const filterParts = [status ? `Status: ${titleCase(status)}` : 'All statuses'];
+        if (search) filterParts.push(`Search: "${search}"`);
+
+        const opened = SfmsPrint.open({
+            title: 'Dispatch Report',
+            subtitle: filterParts.join(' · '),
+            preparedBy: DSP_CURRENT_USER_NAME,
+            preparedRole: DSP_PRINT_ROLE_LABELS[DSP_CURRENT_USER_ROLE] || '',
+            recordLabel: 'Dispatches',
+            recordCount: rows.length,
+            stats: [
+                { label: 'Total Dispatches', value: rows.length, tone: 'purple' },
+                { label: 'Pending', value: count('pending'), tone: 'amber' },
+                { label: 'Approved', value: count('approved'), tone: 'blue' },
+                { label: 'Released', value: count('released'), tone: 'green' },
+                { label: 'Items Dispatched', value: totalItems, tone: 'violet' },
+            ],
+            columns: [
+                { label: 'No.', width: '4%' },
+                { label: 'Dispatch Code', width: '15%' },
+                { label: 'Department', width: '10%' },
+                { label: 'Room', width: '12%' },
+                { label: 'Items', width: '7%' },
+                { label: 'Status', width: '9%' },
+                { label: 'Release Personnel', width: '17%' },
+                { label: 'Approved By', width: '14%' },
+                { label: 'Date', width: '12%' },
+            ],
+            rowsHtml,
+        });
+
+        if (!opened) {
+            dspNotify('Unable to open the print preview. Please allow pop-ups for this site.', 'warning');
+        }
+    } catch (error) {
+        dspNotify(error.message || 'Unable to print dispatches.');
+    } finally {
+        if (button) button.disabled = false;
+    }
 }
 
 async function loadDispatches() {
@@ -561,6 +680,8 @@ document.addEventListener('DOMContentLoaded', () => {
         dispatchPage = 1;
         loadDispatches();
     });
+
+    document.getElementById('dispatch-print-btn').addEventListener('click', printDispatchReport);
 
     document.getElementById('dispatch-prev').addEventListener('click', () => {
         if (dispatchPage > 1) {
@@ -811,9 +932,14 @@ document.addEventListener('DOMContentLoaded', () => {
 /* TASK 6 — Enterprise Dispatch Table Redesign: taller, roomier rows,
    stronger header contrast, and per-column primary/secondary text
    hierarchy replace the previous single-line, cramped table. */
+/* Fit-to-screen pass: the table used to need ~1450px (a 1040px floor, fixed
+   column minimums, 18px cell padding and non-wrapping headers), which pushed
+   the Action column off-screen at 1920px with the sidebar open. It now fits
+   the standard desktop content width; the 880px floor only kicks in on much
+   narrower screens, where .table-responsive's horizontal scroll takes over. */
 .dispatches-page .dispatches-table {
     width: 100%;
-    min-width: 1040px;
+    min-width: 880px;
     margin: 0;
     border-collapse: separate;
     border-spacing: 0;
@@ -841,16 +967,20 @@ document.addEventListener('DOMContentLoaded', () => {
     display: table-cell;
 }
 
+/* Headers may wrap ("RELEASE / PERSONNEL") so a label is never what decides
+   a column's width. */
 .dispatches-page .dispatches-table th {
-    padding: 16px 18px;
+    padding: 14px 12px;
     border: 0;
     border-bottom: 1px solid var(--dispatch-border);
-    font-size: 11.5px;
+    font-size: 11px;
     font-weight: 700;
-    letter-spacing: 0.07em;
+    letter-spacing: 0.05em;
+    line-height: 1.3;
     text-transform: uppercase;
     color: var(--dispatch-text-muted);
-    white-space: nowrap;
+    white-space: normal;
+    vertical-align: bottom;
 }
 
 .dispatches-table__action-head {
@@ -877,7 +1007,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 .dispatches-page .dispatches-table td {
     display: table-cell;
-    padding: 18px;
+    padding: 14px 12px;
     border: 0;
     border-bottom: 1px solid var(--dispatch-border);
     background: transparent;
@@ -902,14 +1032,17 @@ document.addEventListener('DOMContentLoaded', () => {
 /* Dispatch Code column — primary/secondary hierarchy, the table's
    strongest visual anchor. */
 .dispatches-table__code-cell {
-    min-width: 190px;
+    min-width: 150px;
 }
 
+/* nowrap: the code used to break after "DSP-", splitting one identifier over
+   two lines. */
 .dispatches-code-primary {
-    font-size: 14.5px;
+    font-size: 13.5px;
     font-weight: 700;
     color: var(--dispatch-accent);
     letter-spacing: 0.01em;
+    white-space: nowrap;
 }
 
 .dispatches-code-secondary {
@@ -948,7 +1081,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 /* Items column */
 .dispatches-table__items-cell {
-    min-width: 130px;
+    min-width: 90px;
 }
 
 .dispatches-view-items-btn {
@@ -1001,7 +1134,7 @@ document.addEventListener('DOMContentLoaded', () => {
    styles.css, so this column introduces no new component and no new colour.
    The avatar is scaled down to 32px to suit a table row. */
 .dispatches-table__assignee-cell {
-    min-width: 190px;
+    min-width: 150px;
 }
 
 /* TASK 13.2 §7 — flex-start rather than center now that the cell can stack
@@ -1049,7 +1182,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 /* Date column */
 .dispatches-table__date-cell {
-    min-width: 120px;
+    min-width: 100px;
 }
 
 /* Action column */
@@ -1193,7 +1326,13 @@ document.addEventListener('DOMContentLoaded', () => {
         flex-wrap: wrap;
         justify-content: flex-start;
     }
+}
 
+/* Tablets only: keep a real, horizontally scrollable table. On phones
+   (<= 640px) the table becomes one card per row instead — see
+   assets/css/mobile-table-cards.css, which also supplies the column labels
+   that the rules below would otherwise hide. */
+@media (min-width: 641px) and (max-width: 768px) {
     .dispatches-page .dispatches-table {
         min-width: 900px;
     }
@@ -1374,6 +1513,14 @@ document.addEventListener('DOMContentLoaded', () => {
   @page {
     size: landscape;
     margin: 12mm;
+  }
+
+  /* Browser print (Ctrl+P) of the page itself: the Action column's View
+     button has no meaning on paper. The Print button uses the branded
+     printDispatchReport() layout instead, which omits it too. */
+  .dispatches-page .dispatches-table__action-head,
+  .dispatches-page .dispatches-table__action-cell {
+    display: none !important;
   }
 </style>
 

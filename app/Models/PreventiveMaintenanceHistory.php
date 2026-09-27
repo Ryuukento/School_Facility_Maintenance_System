@@ -10,6 +10,11 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * Append-only completion record for a PreventiveMaintenanceTask. Nothing in
  * this codebase ever updates or deletes a row here once written — see the
  * migration's design notes.
+ *
+ * One narrow exception (2026-09-27): maintenance_report_id may be filled in
+ * ONCE, from null, when a repair report is raised for a "needs_repair"
+ * inspection (PreventiveMaintenanceService::createRepairReport()). It only
+ * links the row to the report; the recorded inspection itself never changes.
  */
 class PreventiveMaintenanceHistory extends Model
 {
@@ -25,6 +30,8 @@ class PreventiveMaintenanceHistory extends Model
         'notes',
         'findings',
         'action_taken',
+        'condition_result',
+        'maintenance_report_id',
         'completion_proof_path',
         'next_due_date_snapshot',
     ];
@@ -45,6 +52,7 @@ class PreventiveMaintenanceHistory extends Model
     protected $appends = [
         'performed_by_name',
         'recorded_by_name',
+        'condition_result_label',
     ];
 
     public function task(): BelongsTo
@@ -60,6 +68,20 @@ class PreventiveMaintenanceHistory extends Model
     public function recordedByUser(): BelongsTo
     {
         return $this->belongsTo(User::class, 'recorded_by', 'user_id');
+    }
+
+    public function maintenanceReport(): BelongsTo
+    {
+        return $this->belongsTo(MaintenanceReport::class, 'maintenance_report_id', 'report_id');
+    }
+
+    public function getConditionResultLabelAttribute(): ?string
+    {
+        return match ($this->condition_result) {
+            'working' => 'Working',
+            'needs_repair' => 'Needs Repair',
+            default => null,
+        };
     }
 
     public function getPerformedByNameAttribute(): ?string

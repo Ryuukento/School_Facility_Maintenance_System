@@ -40,7 +40,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
                  carries the full system name, so removing the header's two
                  title lines did not cost screen-reader users the branding. */ ?>
         <div class="sidebar-brand">
-            <img src="<?php echo htmlspecialchars(public_url('/frontend/assets/images/logo.png')); ?>"
+            <img src="<?php echo htmlspecialchars(public_url('/frontend/assets/images/logo-seal.svg')); ?>"
                  alt="PHILCST Centralized School Facility Maintenance Reporting System"
                  class="sidebar-brand-logo" />
         </div>

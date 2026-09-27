@@ -26,7 +26,8 @@ if (isset($_SESSION['auth_user']) || isset($_SESSION['user'])) {
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="<?php echo htmlspecialchars(public_url('/frontend/assets/css/styles.css?v=20260921-2')); ?>">
     <link rel="stylesheet" href="<?php echo htmlspecialchars(public_url('/frontend/assets/css/color-scheme.css?v=20260921-2')); ?>">
-    <link rel="stylesheet" href="<?php echo htmlspecialchars(public_url('/frontend/assets/css/login.css?v=20260923-1')); ?>">
+    <link rel="stylesheet" href="<?php echo htmlspecialchars(public_url('/frontend/assets/css/login.css?v=20260927-8')); ?>">
+    <link rel="stylesheet" href="<?php echo htmlspecialchars(public_url('/frontend/assets/css/ios-safari-fixes.css?v=20260926-1')); ?>">
 </head>
 <body>
 
@@ -235,17 +236,8 @@ if (isset($_SESSION['auth_user']) || isset($_SESSION['user'])) {
                     <span class="secure-access-line" aria-hidden="true"></span>
                 </div>
 
-                <!-- TASK #16B — small, muted footer at the bottom of the
-                     right panel. Sits outside all three forms so it stays
-                     visible regardless of which one is active; purely
-                     decorative, no functional element, no ARIA needed.
-                     TASK F (login redesign v2): no dynamic-year mechanism
-                     existed anywhere in this page prior to this task (this
-                     was verified before editing, per the brief's explicit
-                     instruction to preserve one if it existed) -- the year
-                     stays the same static "2026" it already was; only the
-                     trailing "All rights reserved." copy is new. -->
-                <p class="auth-footer">&copy; 2026 Philippine College of Science &amp; Technology. All rights reserved.</p>
+                <!-- The "© 2026 … All rights reserved." footer that sat here
+                     was removed from the sign-in page on request. -->
             </div>
         </section>
 
@@ -273,7 +265,7 @@ if (isset($_SESSION['auth_user']) || isset($_SESSION['user'])) {
                      (inert) elsewhere in that file. -->
                 <div class="pitch-brand-group">
                     <div class="form-brand">
-                        <img src="<?php echo htmlspecialchars(public_url('/frontend/assets/images/logo.png')); ?>" alt="School Logo">
+                        <img src="<?php echo htmlspecialchars(public_url('/frontend/assets/images/logo-seal.svg')); ?>" alt="School Logo">
                         <div class="form-brand-text">
                             <div class="form-brand-name">Philippine College of Science &amp; Technology</div>
                             <div class="form-brand-subtitle">Institutional Facility Management System</div>
@@ -283,13 +275,8 @@ if (isset($_SESSION['auth_user']) || isset($_SESSION['user'])) {
                     <p class="pitch-system-title">PHILCST CENTRALIZED SCHOOL FACILITY MAINTENANCE REPORT MANAGEMENT SYSTEM</p>
                 </div>
 
-                <!-- No existing project image was a suitable "campus/
-                     building" photo (see login.css's comment above
-                     .pitch-campus-text for the asset survey) -- per the
-                     brief's explicit instruction not to invent/download one,
-                     this is plain script-style text on the panel's own dark
-                     gradient rather than an image treatment. -->
-                <p class="pitch-campus-text">A Better Learning Environment</p>
+                <!-- The "A Better Learning Environment" script line that sat
+                     here was removed from the sign-in page on request. -->
             </div>
         </aside>
 
@@ -311,7 +298,7 @@ if (isset($_SESSION['auth_user']) || isset($_SESSION['user'])) {
     };
 </script>
 <script src="<?php echo htmlspecialchars(public_url('/frontend/assets/js/utils.js?v=20260816')); ?>"></script>
-<script src="<?php echo htmlspecialchars(public_url('/frontend/assets/js/api.js?v=20260820')); ?>"></script>
+<script src="<?php echo htmlspecialchars(public_url('/frontend/assets/js/api.js?v=20260926')); ?>"></script>
 
 <script>
 // Disable zoom and scroll jumping on all devices
@@ -594,7 +581,7 @@ function renderLoginLockAlert(countdown, progressPercent) {
                 <span class="login-lock-title">Login temporarily locked</span>
                 <span class="login-lock-timer">${countdown}</span>
             </div>
-            <div class="login-lock-message">Too many login attempts. Please wait before trying again.</div>
+            <div class="login-lock-message">Too many failed sign-in attempts. For security, sign-in is paused — you can try again when the countdown ends.</div>
             <div class="login-lock-progress" aria-hidden="true">
                 <span class="login-lock-progress-fill" style="width: ${progressPercent}%;"></span>
             </div>
@@ -814,12 +801,26 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
         console.error('Login error:', error);
 
         if (Number(error?.status) === 429) {
-            const retryAfterSeconds = Number(error?.data?.retry_after_seconds || 300);
-            startLoginLockTimer(retryAfterSeconds, retryAfterSeconds, normalizedUsername);
+            const retryAfterSeconds = Number(error?.data?.retry_after_seconds || 60);
+            // lockout_seconds is the full length of a lock that just started
+            // (drives the progress bar); a lock already running only reports
+            // the time left.
+            const lockoutSeconds = Number(error?.data?.lockout_seconds || retryAfterSeconds);
+            startLoginLockTimer(retryAfterSeconds, lockoutSeconds, normalizedUsername);
             return;
         }
 
-        alertContainer.innerHTML = `<div class="alert alert-danger">${error.message}</div>`;
+        const safeMessage = String(error?.message || 'Login failed')
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        // Spam protection warning: how many tries remain before the lock.
+        const attemptsRemaining = Number(error?.data?.attempts_remaining);
+        let attemptsWarning = '';
+        if (Number.isFinite(attemptsRemaining) && attemptsRemaining > 0 && attemptsRemaining <= 3) {
+            const nextLock = Number(error?.data?.next_lockout_seconds || 60);
+            const lockText = nextLock % 60 === 0 ? `${nextLock / 60} minute${nextLock === 60 ? '' : 's'}` : `${nextLock} seconds`;
+            attemptsWarning = `<div class="login-attempts-warning">${attemptsRemaining} attempt${attemptsRemaining === 1 ? '' : 's'} left before sign-in is locked for ${lockText}.</div>`;
+        }
+        alertContainer.innerHTML = `<div class="alert alert-danger">${safeMessage}${attemptsWarning}</div>`;
         if (loginBtn) {
             loginBtn.innerHTML = originalText;
             loginBtn.disabled = false;
@@ -828,6 +829,71 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
 });
 
 restoreLoginLockTimer();
+
+// ── Phones: keep the focused field visible above the on-screen keyboard ──
+// login.css already has a "keyboard open" mode (body.keyboard-open collapses
+// the logo panel and pads the form by --kb-offset), but nothing turned it
+// on, so the keyboard covered the password field. While a field in any of
+// the auth forms has focus (phone/tablet widths only), this switches that
+// mode on and scrolls the field into the part of the screen the keyboard
+// leaves visible. visualViewport gives the visible height on both Android
+// and iPhone (iOS keeps the layout viewport full height under the keyboard).
+(function keepFocusedFieldAboveKeyboard() {
+    const isPhoneLayout = () => window.matchMedia('(max-width: 900px)').matches;
+    const vv = window.visualViewport;
+    const FIELD_SELECTOR = '#login-form input, #forgot-password-form input, #register-form input, #register-form select';
+    let activeField = null;
+    let blurTimer = null;
+
+    function keyboardHeight() {
+        if (!vv) return 0;
+        // Part of the layout viewport currently hidden behind the keyboard.
+        return Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
+    }
+
+    function revealField() {
+        if (!activeField || !isPhoneLayout()) return;
+        document.body.style.setProperty('--kb-offset', keyboardHeight() + 'px');
+
+        const visibleTop = vv ? vv.offsetTop : 0;
+        const visibleHeight = vv ? vv.height : window.innerHeight;
+        const rect = activeField.getBoundingClientRect();
+        // Aim to place the field about a quarter of the way down the visible
+        // area, so the fields below it and the Sign In button show too.
+        const target = visibleTop + visibleHeight * 0.25;
+        const outOfView = rect.top < visibleTop + 12 || rect.bottom > visibleTop + visibleHeight - 12;
+        if (outOfView || rect.top > target + 40) {
+            window.scrollBy({ top: rect.top - target, behavior: 'smooth' });
+        }
+    }
+
+    document.addEventListener('focusin', (event) => {
+        const field = event.target.closest && event.target.closest(FIELD_SELECTOR);
+        if (!field || !isPhoneLayout()) return;
+        clearTimeout(blurTimer);
+        activeField = field;
+        document.body.classList.add('keyboard-open');
+        // Wait for the keyboard animation and the panel collapse to settle.
+        setTimeout(revealField, 320);
+    });
+
+    document.addEventListener('focusout', (event) => {
+        if (!event.target.closest || !event.target.closest(FIELD_SELECTOR)) return;
+        // Moving between fields fires focusout then focusin; only leave the
+        // mode when focus has really left the forms.
+        blurTimer = setTimeout(() => {
+            if (document.activeElement && document.activeElement.closest && document.activeElement.closest(FIELD_SELECTOR)) return;
+            activeField = null;
+            document.body.classList.remove('keyboard-open');
+            document.body.style.removeProperty('--kb-offset');
+        }, 150);
+    });
+
+    // The keyboard can finish opening (or change height) after focus.
+    if (vv) {
+        vv.addEventListener('resize', () => { if (activeField) revealField(); });
+    }
+})();
 
 // Validation helper functions
 function isValidEmail(email) {

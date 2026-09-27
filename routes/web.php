@@ -148,7 +148,6 @@ Route::prefix('api')->group(function (): void {
         Route::post('login', [AuthController::class, 'login']);
         Route::post('register', [AuthController::class, 'register']);
         Route::post('forgot_password_request', [AuthController::class, 'forgotPasswordRequest']);
-        Route::post('forgot_password_reset', [AuthController::class, 'forgotPasswordReset']);
         Route::post('logout', [AuthController::class, 'logout'])->middleware(EnsureApiAuthenticated::class);
         Route::get('check', [AuthController::class, 'check'])->middleware(EnsureApiAuthenticated::class);
     });
@@ -165,6 +164,13 @@ Route::prefix('api')->group(function (): void {
         Route::patch('reports/{report}', [ReportController::class, 'update']);
         Route::delete('reports/{report}', [ReportController::class, 'destroy']);
 
+        // Report Archive — only the Administrator may reopen a view-only
+        // past-term report, or make a reopened one view-only again.
+        Route::post('reports/{report}/archive-reopen', [ReportController::class, 'archiveReopen'])
+            ->middleware(EnsureRole::class . ':super_admin');
+        Route::post('reports/{report}/archive-lock', [ReportController::class, 'archiveLock'])
+            ->middleware(EnsureRole::class . ':super_admin');
+
         // TASK 16 — single-row global School Settings (school_year /
         // current_semester) used to scope dashboard KPI statistics to the
         // current semester. Any authenticated user may read it; only
@@ -172,6 +178,8 @@ Route::prefix('api')->group(function (): void {
         Route::get('school-settings', [SchoolSettingsController::class, 'show']);
         Route::put('school-settings', [SchoolSettingsController::class, 'update'])
             ->middleware(EnsureRole::class . ':super_admin');
+        // Report Archive — recorded School Years / semesters (read-only).
+        Route::get('academic-sessions', [SchoolSettingsController::class, 'sessions']);
 
         Route::prefix('dashboard')->group(function (): void {
             Route::get('stats', [DashboardController::class, 'stats']);
@@ -420,6 +428,10 @@ Route::prefix('api')->group(function (): void {
             ->middleware(EnsureRole::class . ':super_admin,maintenance_admin,maintenance_staff');
         Route::post('purchase-receipts/{id}/items', [PurchaseReceiptController::class, 'addItem'])
             ->middleware(EnsureRole::class . ':super_admin,maintenance_admin,maintenance_staff');
+        // Remove a mistaken line — draft receipts only (no stock effect yet).
+        Route::delete('purchase-receipts/{id}/items/{lineId}', [PurchaseReceiptController::class, 'removeItem'])
+            ->whereNumber(['id', 'lineId'])
+            ->middleware(EnsureRole::class . ':super_admin,maintenance_admin,maintenance_staff');
         Route::post('purchase-receipts/{id}/post',  [PurchaseReceiptController::class, 'postReceipt'])
             ->middleware(EnsureRole::class . ':super_admin,maintenance_admin,maintenance_staff');
 
@@ -433,12 +445,13 @@ Route::prefix('api')->group(function (): void {
                 ->middleware(EnsureRole::class . ':super_admin,maintenance_admin');
             Route::delete('{id}',           [InventoryStockController::class, 'destroy'])
                 ->middleware(EnsureRole::class . ':super_admin,maintenance_admin');
-            Route::post('{id}/adjust',      [InventoryStockController::class, 'adjust'])
-                ->middleware(EnsureRole::class . ':super_admin,maintenance_admin');
         });
 
         // Preventive Maintenance module. RBAC per the confirmed plan:
-        // create/archive/activate are Administrator/Head Maintenance only;
+        // create/archive/activate/assign are Head Maintenance only (2026-09-27:
+        // the Administrator is view/monitor only for PM — PM is performed by
+        // Head Maintenance and Staff, so super_admin was removed from every
+        // write route below; the read routes stay open to all roles);
         // index/show/summary/options/history are open to any authenticated
         // role (Maintenance Staff sees the full list, per "view all, edit
         // only own"); update/complete carry the broader role gate here and
@@ -465,18 +478,25 @@ Route::prefix('api')->group(function (): void {
             // binding as if "schedule-grid"/"checklist" were a task id.
             Route::get('schedule-grid', [PreventiveMaintenanceController::class, 'scheduleGrid']);
             Route::get('checklist', [PreventiveMaintenanceController::class, 'checklist']);
+            // Bulk assign (Head Maintenance) and "raise repair report" for a
+            // Needs Repair inspection — literal segments, so registered ahead
+            // of the {preventiveMaintenanceTask} routes.
+            Route::post('assign', [PreventiveMaintenanceController::class, 'assign'])
+                ->middleware(EnsureRole::class . ':maintenance_admin');
+            Route::post('history/{history}/repair-report', [PreventiveMaintenanceController::class, 'repairReport'])
+                ->middleware(EnsureRole::class . ':maintenance_admin,maintenance_staff');
             Route::get('', [PreventiveMaintenanceController::class, 'index']);
             Route::post('', [PreventiveMaintenanceController::class, 'store'])
-                ->middleware(EnsureRole::class . ':super_admin,maintenance_admin');
+                ->middleware(EnsureRole::class . ':maintenance_admin');
             Route::get('{preventiveMaintenanceTask}', [PreventiveMaintenanceController::class, 'show']);
             Route::patch('{preventiveMaintenanceTask}', [PreventiveMaintenanceController::class, 'update'])
-                ->middleware(EnsureRole::class . ':super_admin,maintenance_admin,maintenance_staff');
+                ->middleware(EnsureRole::class . ':maintenance_admin,maintenance_staff');
             Route::post('{preventiveMaintenanceTask}/complete', [PreventiveMaintenanceController::class, 'complete'])
-                ->middleware(EnsureRole::class . ':super_admin,maintenance_admin,maintenance_staff');
+                ->middleware(EnsureRole::class . ':maintenance_admin,maintenance_staff');
             Route::post('{preventiveMaintenanceTask}/archive', [PreventiveMaintenanceController::class, 'archive'])
-                ->middleware(EnsureRole::class . ':super_admin,maintenance_admin');
+                ->middleware(EnsureRole::class . ':maintenance_admin');
             Route::post('{preventiveMaintenanceTask}/activate', [PreventiveMaintenanceController::class, 'activate'])
-                ->middleware(EnsureRole::class . ':super_admin,maintenance_admin');
+                ->middleware(EnsureRole::class . ':maintenance_admin');
             Route::get('{preventiveMaintenanceTask}/history', [PreventiveMaintenanceController::class, 'history']);
         });
 

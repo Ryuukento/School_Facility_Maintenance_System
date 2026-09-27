@@ -72,7 +72,7 @@ include __DIR__ . '/../includes/header.php';
     </section>
 </main>
 
-<link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/users.inline.css?v=20260921-2">
+<link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/users.inline.css?v=20260926-1">
 
 <script>
 window.API = window.API || {};
@@ -577,22 +577,24 @@ function openRegisterUserModal() {
                     <div id="register-username-error" class="users-modal-field-error"></div>
                 </div>
                 <!-- Email removed: system uses Username only for account creation -->
-                <div class="users-modal-field users-modal-field-inline" style="position:relative;">
+                <div class="users-modal-field users-modal-field-inline">
                     <label for="register-password" class="users-modal-label">Password</label>
-                    <input id="register-password" class="users-modal-input" type="password" placeholder="Minimum 8 characters" autocomplete="new-password" autocapitalize="off" autocorrect="off" spellcheck="false" style="padding-right:44px;height:44px;line-height:44px;">
-                    <button
-                        type="button"
-                        id="toggle-register-password"
-                        aria-label="Show password"
-                        aria-pressed="false"
-                        title="Show password"
-                        style="position:absolute;right:12px;top:38px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;padding:0;border:0;background:transparent;color:rgba(248,244,255,0.82);cursor:pointer;"
-                    >
-                        <svg id="register-password-eye" width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                            <path d="M2 12C3.8 7.9 7.5 5 12 5C16.5 5 20.2 7.9 22 12C20.2 16.1 16.5 19 12 19C7.5 19 3.8 16.1 2 12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                            <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
-                        </svg>
-                    </button>
+                    <div class="users-password-wrap">
+                        <input id="register-password" class="users-modal-input" type="password" placeholder="Minimum 8 characters" autocomplete="new-password" autocapitalize="off" autocorrect="off" spellcheck="false">
+                        <button
+                            type="button"
+                            id="toggle-register-password"
+                            class="users-password-toggle"
+                            aria-label="Show password"
+                            aria-pressed="false"
+                            title="Show password"
+                        >
+                            <svg id="register-password-eye" width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                <path d="M2 12C3.8 7.9 7.5 5 12 5C16.5 5 20.2 7.9 22 12C20.2 16.1 16.5 19 12 19C7.5 19 3.8 16.1 2 12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
+                            </svg>
+                        </button>
+                    </div>
                     <div id="register-password-error" class="users-modal-field-error"></div>
                 </div>
             </div>
@@ -848,6 +850,13 @@ function openApproveUserModal(userId, userName) {
                     <option value="maintenance_admin">Head</option>
                 </select>
             </div>
+            <div class="users-modal-field">
+                <label for="approve-user-department" class="users-modal-label">Department</label>
+                <select id="approve-user-department" class="users-modal-select">
+                    <option value="">Loading departments...</option>
+                </select>
+                <div id="approve-user-department-error" class="users-modal-field-error"></div>
+            </div>
             <div class="users-modal-actions">
                 <button type="button" id="cancel-approve-btn" class="users-modal-btn users-modal-btn-secondary">Cancel</button>
                 <button type="button" id="confirm-approve-btn" class="users-modal-btn users-modal-btn-primary">Approve</button>
@@ -861,11 +870,33 @@ function openApproveUserModal(userId, userName) {
         if (el) el.remove();
     };
 
+    // Department list for the approval (report and dispatch permissions are
+    // department-based, so the Administrator picks it here).
+    (async () => {
+        const select = document.getElementById('approve-user-department');
+        try {
+            const res = await fetch(window.SFMS_PUBLIC_URL('/api/departments'), { credentials: 'include' });
+            const data = await res.json();
+            const depts = data.departments || (data.data && data.data.departments) || [];
+            select.innerHTML = '<option value="">Select department</option>'
+                + depts.map((d) => `<option value="${escapeHtml(String(d.department_id))}">${escapeHtml(d.name)}</option>`).join('');
+        } catch (e) {
+            select.innerHTML = '<option value="">Could not load departments</option>';
+        }
+    })();
+
     document.getElementById('cancel-approve-btn')?.addEventListener('click', closeModal);
     document.getElementById('confirm-approve-btn')?.addEventListener('click', async () => {
         const role = document.getElementById('approve-user-role').value;
-        await approveUser(userId, role);
-        closeModal();
+        const departmentId = document.getElementById('approve-user-department').value;
+        const errorEl = document.getElementById('approve-user-department-error');
+        if (!departmentId) {
+            errorEl.textContent = 'Please choose the department this user belongs to.';
+            return;
+        }
+        errorEl.textContent = '';
+        const approved = await approveUser(userId, role, departmentId);
+        if (approved) closeModal();
     });
 
     modal.addEventListener('click', (event) => {
@@ -873,13 +904,13 @@ function openApproveUserModal(userId, userName) {
     });
 }
 
-async function approveUser(userId, role) {
+async function approveUser(userId, role, departmentId) {
     try {
         const response = await fetch(window.SFMS_PUBLIC_URL(`/api/users/${userId}/approve`), {
             method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
             credentials: 'include',
-            body: JSON.stringify({ role })
+            body: JSON.stringify({ role, department_id: departmentId ? Number(departmentId) : null })
         });
 
         const data = await response.json();
@@ -887,12 +918,15 @@ async function approveUser(userId, role) {
         if (data.success) {
             showPageAlert('User approved and role assigned successfully!', 'success');
             loadUsers();
-        } else {
-            showPageAlert('Error: ' + (data.message || 'Failed to approve user'), 'error');
+            return true;
         }
+        const firstError = data.errors ? Object.values(data.errors).flat()[0] : null;
+        showPageAlert('Error: ' + (firstError || data.message || 'Failed to approve user'), 'error');
+        return false;
     } catch (error) {
         console.error('Approve error:', error);
         showPageAlert('Failed to approve user: ' + error.message, 'error');
+        return false;
     }
 }
 
@@ -944,22 +978,24 @@ function openResetPasswordModal(userId, userName, userEmail) {
         <div class="users-modal-card">
             <h3 class="users-modal-title">Reset User Password</h3>
             <p class="users-modal-desc">Set a temporary password for <strong>${escapeHtml(userName || 'N/A')}</strong>${userEmail ? ` (${escapeHtml(userEmail)})` : ''}. The user will be required to update their password after signing in.</p>
-            <div class="users-modal-field" style="position:relative;">
+            <div class="users-modal-field">
                 <label for="reset-password-input" class="users-modal-label">Temporary Password</label>
-                <input id="reset-password-input" class="users-modal-input" type="password" placeholder="Enter temporary password" autocomplete="new-password" style="padding-right:44px;height:44px;line-height:44px;">
-                <button
-                    type="button"
-                    id="toggle-reset-password"
-                    aria-label="Show password"
-                    aria-pressed="false"
-                    title="Show password"
-                    style="position:absolute;right:12px;top:38px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;padding:0;border:0;background:transparent;color:rgba(248,244,255,0.82);cursor:pointer;"
-                >
-                    <svg id="reset-password-eye" width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                        <path d="M2 12C3.8 7.9 7.5 5 12 5C16.5 5 20.2 7.9 22 12C20.2 16.1 16.5 19 12 19C7.5 19 3.8 16.1 2 12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                        <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
-                    </svg>
-                </button>
+                <div class="users-password-wrap">
+                    <input id="reset-password-input" class="users-modal-input" type="password" placeholder="Enter temporary password" autocomplete="new-password">
+                    <button
+                        type="button"
+                        id="toggle-reset-password"
+                        class="users-password-toggle"
+                        aria-label="Show password"
+                        aria-pressed="false"
+                        title="Show password"
+                    >
+                        <svg id="reset-password-eye" width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                            <path d="M2 12C3.8 7.9 7.5 5 12 5C16.5 5 20.2 7.9 22 12C20.2 16.1 16.5 19 12 19C7.5 19 3.8 16.1 2 12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
+                        </svg>
+                    </button>
+                </div>
                 <div id="reset-password-error" class="users-modal-field-error"></div>
             </div>
             <div class="users-modal-actions">

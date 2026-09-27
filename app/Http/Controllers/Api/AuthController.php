@@ -8,7 +8,6 @@ use App\Models\User;
 use App\Services\ActivityLogService;
 use App\Services\RoleNormalizerService;
 use App\Support\ApiResponder;
-use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -21,9 +20,16 @@ class AuthController extends Controller
 {
     use ApiResponder;
 
-    private const MAX_LOGIN_ATTEMPTS = 3;
-    private const LOGIN_LOCKOUT_SECONDS = 300;
-    private const RESET_CODE_EXPIRY_MINUTES = 15;
+    // Login spam protection. MAX_LOGIN_ATTEMPTS failed sign-ins for the same
+    // username from the same IP (counted within LOGIN_ATTEMPT_WINDOW_SECONDS)
+    // lock that username+IP. Repeat lockouts within LOGIN_LOCKOUT_MEMORY_SECONDS
+    // escalate through LOGIN_LOCKOUT_STEPS (1 min -> 5 min -> 15 min), so a
+    // user who simply mistyped waits briefly while a script hammering the form
+    // is slowed down sharply. A successful sign-in resets all of it.
+    private const MAX_LOGIN_ATTEMPTS = 5;
+    private const LOGIN_ATTEMPT_WINDOW_SECONDS = 900;
+    private const LOGIN_LOCKOUT_STEPS = [60, 300, 900];
+    private const LOGIN_LOCKOUT_MEMORY_SECONDS = 3600;
     private const RESET_REQUEST_LOCKOUT_SECONDS = 60;
 
     public function __construct(
@@ -48,12 +54,12 @@ class AuthController extends Controller
         $identifier  = strtolower(trim($validated['username']));
         $throttleKey = $this->throttleKey($identifier, (string) $request->ip());
 
-        if (RateLimiter::tooManyAttempts($throttleKey, self::MAX_LOGIN_ATTEMPTS)) {
-            $retryAfterSeconds = RateLimiter::availableIn($throttleKey);
-
+        // While locked, even the correct password is refused until the
+        // countdown ends — otherwise the lock would not stop guessing.
+        if (RateLimiter::tooManyAttempts($this->lockKey($throttleKey), 1)) {
             return $this->fail('Too many login attempts. Please try again later.', 429, [
                 'max_attempts' => self::MAX_LOGIN_ATTEMPTS,
-                'retry_after_seconds' => $retryAfterSeconds,
+                'retry_after_seconds' => max(1, RateLimiter::availableIn($this->lockKey($throttleKey))),
             ]);
         }
 
@@ -76,6 +82,8 @@ class AuthController extends Controller
         }
 
         RateLimiter::clear($throttleKey);
+        RateLimiter::clear($this->lockKey($throttleKey));
+        RateLimiter::clear($this->lockoutCountKey($throttleKey));
 
         // Regenerate the session ID on successful login to prevent session fixation.
         $request->session()->regenerate();
@@ -261,60 +269,12 @@ class AuthController extends Controller
         }
     }
 
-    public function forgotPasswordReset(Request $request)
-    {
-        $validated = $request->validate([
-            'email' => ['required', 'email'],
-            'reset_code' => ['required', 'regex:/^\d{6}$/'],
-            'password' => ['required', 'string', 'min:8'],
-        ]);
-
-        $email = strtolower(trim($validated['email']));
-        $resetCode = trim((string)$validated['reset_code']);
-
-        $tokenRow = DB::table('password_reset_tokens')
-            ->where('email', $email)
-            ->first();
-
-        if (!$tokenRow) {
-            return $this->fail('Invalid or expired reset code.', 422);
-        }
-
-        $createdAt = Carbon::parse((string)$tokenRow->created_at);
-        if ($createdAt->lt(Carbon::now()->subMinutes(self::RESET_CODE_EXPIRY_MINUTES))) {
-            DB::table('password_reset_tokens')->where('email', $email)->delete();
-            return $this->fail('Reset code has expired. Please request a new one.', 422);
-        }
-
-        $expectedHash = (string)$tokenRow->token;
-        $providedHash = $this->hashResetCode($email, $resetCode);
-
-        if (!hash_equals($expectedHash, $providedHash)) {
-            return $this->fail('Invalid or expired reset code.', 422);
-        }
-
-        $user = User::query()->where('email', $email)->first();
-        if (!$user) {
-            return $this->fail('User account not found.', 404);
-        }
-
-        $user->password = Hash::make((string)$validated['password']);
-        $user->save();
-
-        DB::table('password_reset_tokens')->where('email', $email)->delete();
-
-        $this->activityLogService->log([
-            'user_id' => $user->user_id,
-            'user_role' => $this->normalizeRoleAlias((string) $user->role),
-            'action' => 'PASSWORD_RESET',
-            'module' => 'auth',
-            'entity_type' => 'user',
-            'entity_id' => $user->user_id,
-            'details' => 'Password reset completed through forgot password flow.',
-        ], $request);
-
-        return $this->ok('Password reset successful. You can now sign in with your new password.');
-    }
+    // 2026-09-27 — the self-service "reset code" endpoint (forgotPasswordReset)
+    // was removed. Nothing ever issued a code (no row was written to
+    // password_reset_tokens) and the sign-in page never called it. The real
+    // flow is forgotPasswordRequest() above: the user asks from the sign-in
+    // page, the Administrator is notified, and resets the password in User
+    // Management (UserController::resetPassword()).
 
     public function logout(Request $request)
     {
@@ -362,28 +322,76 @@ class AuthController extends Controller
         return strtolower($email) . '|' . $ipAddress;
     }
 
-    private function hashResetCode(string $email, string $resetCode): string
-    {
-        return hash('sha256', strtolower(trim($email)) . '|' . trim($resetCode) . '|sfms-reset-code');
-    }
-
     private function failedLoginResponse(string $throttleKey, string $message, int $status)
     {
-        RateLimiter::hit($throttleKey, self::LOGIN_LOCKOUT_SECONDS);
+        RateLimiter::hit($throttleKey, self::LOGIN_ATTEMPT_WINDOW_SECONDS);
 
         $attemptsUsed = RateLimiter::attempts($throttleKey);
         $attemptsRemaining = max(0, self::MAX_LOGIN_ATTEMPTS - $attemptsUsed);
 
         if ($attemptsUsed >= self::MAX_LOGIN_ATTEMPTS) {
+            // Start a lock whose length depends on how many times this
+            // username+IP has already been locked within the last hour.
+            RateLimiter::clear($throttleKey);
+            RateLimiter::hit($this->lockoutCountKey($throttleKey), self::LOGIN_LOCKOUT_MEMORY_SECONDS);
+            $lockoutNumber = RateLimiter::attempts($this->lockoutCountKey($throttleKey));
+            $lockoutSeconds = $this->lockoutSecondsFor($lockoutNumber);
+            RateLimiter::hit($this->lockKey($throttleKey), $lockoutSeconds);
+
+            [$username, $ipAddress] = array_pad(explode('|', $throttleKey, 2), 2, '');
+            $this->activityLogService->log([
+                'action'      => 'LOGIN_LOCKOUT',
+                'module'      => 'auth',
+                'entity_type' => 'user',
+                'details'     => sprintf(
+                    'Sign-in for "%s" from %s locked for %s after %d failed attempts (lockout #%d within an hour).',
+                    $username,
+                    $ipAddress !== '' ? $ipAddress : 'unknown IP',
+                    $this->describeSeconds($lockoutSeconds),
+                    self::MAX_LOGIN_ATTEMPTS,
+                    $lockoutNumber
+                ),
+                'dedupe_window_seconds' => 0,
+            ]);
+
             return $this->fail('Too many login attempts. Please try again later.', 429, [
                 'max_attempts' => self::MAX_LOGIN_ATTEMPTS,
-                'retry_after_seconds' => RateLimiter::availableIn($throttleKey),
+                'retry_after_seconds' => $lockoutSeconds,
+                'lockout_seconds' => $lockoutSeconds,
             ]);
         }
 
         return $this->fail($message, $status, [
             'max_attempts' => self::MAX_LOGIN_ATTEMPTS,
             'attempts_remaining' => $attemptsRemaining,
+            // So the sign-in form can warn how long the NEXT lock would be.
+            'next_lockout_seconds' => $this->lockoutSecondsFor(
+                RateLimiter::attempts($this->lockoutCountKey($throttleKey)) + 1
+            ),
         ]);
+    }
+
+    private function lockKey(string $throttleKey): string
+    {
+        return 'login-lock:' . $throttleKey;
+    }
+
+    private function lockoutCountKey(string $throttleKey): string
+    {
+        return 'login-lockouts:' . $throttleKey;
+    }
+
+    /** 1st lockout -> 60 s, 2nd -> 300 s, 3rd and later -> 900 s. */
+    private function lockoutSecondsFor(int $lockoutNumber): int
+    {
+        $steps = self::LOGIN_LOCKOUT_STEPS;
+        return $steps[min(max($lockoutNumber, 1), count($steps)) - 1];
+    }
+
+    private function describeSeconds(int $seconds): string
+    {
+        return $seconds % 60 === 0
+            ? ($seconds / 60) . ' minute' . ($seconds === 60 ? '' : 's')
+            : $seconds . ' seconds';
     }
 }

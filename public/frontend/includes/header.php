@@ -259,6 +259,10 @@ $headerTimeText = $headerNow->format('g:i A');
              its dashboard rules carry a leading :root for specificity —
              see the file's own header comment. */ ?>
     <link rel="stylesheet" href="<?php echo htmlspecialchars(public_url('/frontend/assets/css/redesign-2026.css?v=20260920-2')); ?>">
+    <?php /* Phones: wide data tables become one card per row (see mobile-table-cards.js). */ ?>
+    <link rel="stylesheet" href="<?php echo htmlspecialchars(public_url('/frontend/assets/css/mobile-table-cards.css?v=20260926-5')); ?>">
+    <?php /* iPhone/iPad Safari: no zoom on form fields, visible-height sidebar and pop-ups. */ ?>
+    <link rel="stylesheet" href="<?php echo htmlspecialchars(public_url('/frontend/assets/css/ios-safari-fixes.css?v=20260926-1')); ?>">
     <script src="<?php echo htmlspecialchars(public_url('/frontend/assets/js/chart-lite.js?v=20260504-5')); ?>"></script>
     <?php /* TASK 7 — the icon registry is serialised here so the JS renderer
              draws from the very same geometry as ui_icon(). Emitted before

@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Api;
 use App\Exceptions\DuplicateDamageReportException;
 use App\Http\Controllers\Controller;
 use App\Models\DamageReport;
+use App\Models\MaintenanceReport;
 use App\Services\DamageReportService;
+use App\Services\ReportArchiveService;
 use App\Services\ReportAuthorizationService;
 use App\Support\ApiResponder;
 use Illuminate\Http\Request;
@@ -18,7 +20,9 @@ class DamageReportController extends Controller
     public function __construct(
         private readonly DamageReportService $damageService,
         // TASK 10 (Security Audit) — see updateStatus().
-        private readonly ReportAuthorizationService $reportAuthorizationService
+        private readonly ReportAuthorizationService $reportAuthorizationService,
+        // Report Archive — see updateStatus().
+        private readonly ReportArchiveService $reportArchiveService
     ) {
     }
 
@@ -156,6 +160,24 @@ class DamageReportController extends Controller
         // truth; a legacy damage report with no linked report is unaffected.
         if (!$this->reportAuthorizationService->canModifyLinkedReport($authUser, $damageReport->report_id)) {
             return $this->fail('You are not authorized to modify this report', 403);
+        }
+
+        // 2026-09-27 — same rule as ReportController::update(): the
+        // Administrator approves and monitors, Head Maintenance runs the
+        // repair. The Administrator may only close (cancel) an asset report;
+        // moving it through the repair statuses would also move the linked
+        // maintenance report (e.g. under_review -> "assigned").
+        if (\App\Services\RoleNormalizerService::normalize((string) ($authUser['role'] ?? '')) === 'super_admin'
+            && $validated['status'] !== 'closed') {
+            return $this->fail('The Administrator can only close an asset report. Repair status updates are handled by Head Maintenance.', 403);
+        }
+
+        // Report Archive — this status change is synced onto the linked
+        // maintenance report, so it must respect that report's view-only
+        // (archived) state exactly like ReportController::update() does.
+        $linkedReport = $damageReport->report_id ? MaintenanceReport::query()->find($damageReport->report_id) : null;
+        if ($linkedReport && $this->reportArchiveService->isLocked($linkedReport)) {
+            return $this->fail(ReportArchiveService::LOCKED_MESSAGE, 423);
         }
 
         try {

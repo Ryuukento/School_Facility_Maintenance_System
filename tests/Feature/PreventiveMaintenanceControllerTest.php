@@ -99,12 +99,30 @@ class PreventiveMaintenanceControllerTest extends TestCase
         $this->assertSame(0, DB::table('preventive_maintenance_tasks')->count());
     }
 
-    public function test_super_admin_can_create_a_task(): void
+    public function test_administrator_is_view_only_and_cannot_create_a_task(): void
     {
+        // 2026-09-27: Preventive Maintenance is performed by Head Maintenance
+        // and Staff; the Administrator only views/monitors it.
         $adminId = $this->seedUser(['role' => 'super_admin']);
 
-        $response = $this
+        $this
             ->actingAsSessionUserWithFlatKeys($adminId, 'super_admin')
+            ->postJson('/api/preventive-maintenance', [
+                'category' => 'Computers',
+                'title' => 'Lab PCs Quarterly Check',
+                'frequency' => 'quarterly',
+            ])
+            ->assertStatus(403);
+
+        $this->assertSame(0, DB::table('preventive_maintenance_tasks')->count());
+    }
+
+    public function test_head_maintenance_can_create_a_task(): void
+    {
+        $headId = $this->seedUser(['role' => 'maintenance_admin']);
+
+        $response = $this
+            ->actingAsSessionUserWithFlatKeys($headId, 'maintenance_admin')
             ->postJson('/api/preventive-maintenance', [
                 'category' => 'Computers',
                 'title' => 'Lab PCs Quarterly Check',
@@ -113,12 +131,10 @@ class PreventiveMaintenanceControllerTest extends TestCase
 
         $response->assertStatus(201);
         $response->assertJsonPath('success', true);
-        $this->assertSame(1, DB::table('preventive_maintenance_tasks')->count());
-
         $row = DB::table('preventive_maintenance_tasks')->first();
         $this->assertSame('Computers', $row->category);
         $this->assertSame(1, (int) $row->is_active);
-        $this->assertSame($adminId, (int) $row->created_by);
+        $this->assertSame($headId, (int) $row->created_by);
     }
 
     public function test_store_derives_next_due_date_from_frequency_when_only_last_completed_date_given(): void
@@ -767,12 +783,234 @@ class PreventiveMaintenanceControllerTest extends TestCase
     // Schema builder + seed helpers
     // ---------------------------------------------------------------
 
+    // ---------------------------------------------------------------
+    // 2026-09-27 — Administrator view-only, Head assigns, inspection result
+    // ---------------------------------------------------------------
+
+    public function test_administrator_cannot_edit_complete_or_archive_a_task(): void
+    {
+        $adminId = $this->seedUser(['role' => 'super_admin']);
+        $taskId = $this->seedTask();
+        $session = fn () => $this->actingAsSessionUserWithFlatKeys($adminId, 'super_admin');
+
+        $session()->patchJson("/api/preventive-maintenance/{$taskId}", ['title' => 'Changed'])->assertStatus(403);
+        $session()->postJson("/api/preventive-maintenance/{$taskId}/complete", ['completed_date' => '2026-08-15'])->assertStatus(403);
+        $session()->postJson("/api/preventive-maintenance/{$taskId}/archive")->assertStatus(403);
+
+        $this->assertSame(0, DB::table('preventive_maintenance_history')->count());
+        $this->assertSame(1, (int) DB::table('preventive_maintenance_tasks')->where('id', $taskId)->value('is_active'));
+    }
+
+    public function test_administrator_can_still_view_the_schedule_and_history(): void
+    {
+        $adminId = $this->seedUser(['role' => 'super_admin']);
+        $taskId = $this->seedTask();
+
+        $this->actingAsSessionUserWithFlatKeys($adminId, 'super_admin')
+            ->getJson('/api/preventive-maintenance/schedule-grid')->assertStatus(200);
+        $this->actingAsSessionUserWithFlatKeys($adminId, 'super_admin')
+            ->getJson("/api/preventive-maintenance/{$taskId}/history")->assertStatus(200);
+    }
+
+    public function test_maintenance_staff_cannot_complete_an_unassigned_task(): void
+    {
+        $staffId = $this->seedUser(['role' => 'maintenance_staff']);
+        $taskId = $this->seedTask(['assigned_user_id' => null]);
+
+        $this->actingAsSessionUserWithFlatKeys($staffId, 'maintenance_staff')
+            ->postJson("/api/preventive-maintenance/{$taskId}/complete", ['completed_date' => '2026-08-15'])
+            ->assertStatus(403);
+
+        $this->assertSame(0, DB::table('preventive_maintenance_history')->count());
+    }
+
+    public function test_maintenance_staff_cannot_reassign_their_own_task(): void
+    {
+        $staffId = $this->seedUser(['role' => 'maintenance_staff']);
+        $otherStaffId = $this->seedUser(['role' => 'maintenance_staff']);
+        $taskId = $this->seedTask(['assigned_user_id' => $staffId]);
+
+        $this->actingAsSessionUserWithFlatKeys($staffId, 'maintenance_staff')
+            ->patchJson("/api/preventive-maintenance/{$taskId}", ['assigned_user_id' => $otherStaffId])
+            ->assertStatus(403);
+
+        $this->assertSame($staffId, (int) DB::table('preventive_maintenance_tasks')->where('id', $taskId)->value('assigned_user_id'));
+    }
+
+    public function test_head_can_bulk_assign_tasks_to_a_staff_member_who_is_notified(): void
+    {
+        $headId = $this->seedUser(['role' => 'maintenance_admin']);
+        $staffId = $this->seedUser(['role' => 'maintenance_staff']);
+        $taskA = $this->seedTask();
+        $taskB = $this->seedTask();
+
+        $this->actingAsSessionUserWithFlatKeys($headId, 'maintenance_admin')
+            ->postJson('/api/preventive-maintenance/assign', ['task_ids' => [$taskA, $taskB], 'assigned_user_id' => $staffId])
+            ->assertStatus(200)
+            ->assertJsonPath('data.updated', 2);
+
+        $this->assertSame(2, DB::table('preventive_maintenance_tasks')->where('assigned_user_id', $staffId)->count());
+        $this->assertSame(2, DB::table('notifications')->where('user_id', $staffId)->where('title', 'Preventive Maintenance Task Assigned')->count());
+    }
+
+    public function test_bulk_assign_is_head_only_and_only_accepts_active_staff(): void
+    {
+        $headId = $this->seedUser(['role' => 'maintenance_admin']);
+        $otherHeadId = $this->seedUser(['role' => 'maintenance_admin']);
+        $staffId = $this->seedUser(['role' => 'maintenance_staff']);
+        $inactiveStaffId = $this->seedUser(['role' => 'maintenance_staff', 'status' => 'inactive']);
+        $adminId = $this->seedUser(['role' => 'super_admin']);
+        $taskId = $this->seedTask();
+        $payload = ['task_ids' => [$taskId], 'assigned_user_id' => $staffId];
+
+        $this->actingAsSessionUserWithFlatKeys($staffId, 'maintenance_staff')
+            ->postJson('/api/preventive-maintenance/assign', $payload)->assertStatus(403);
+        $this->actingAsSessionUserWithFlatKeys($adminId, 'super_admin')
+            ->postJson('/api/preventive-maintenance/assign', $payload)->assertStatus(403);
+        $this->actingAsSessionUserWithFlatKeys($headId, 'maintenance_admin')
+            ->postJson('/api/preventive-maintenance/assign', ['task_ids' => [$taskId], 'assigned_user_id' => $otherHeadId])
+            ->assertStatus(422);
+        $this->actingAsSessionUserWithFlatKeys($headId, 'maintenance_admin')
+            ->postJson('/api/preventive-maintenance/assign', ['task_ids' => [$taskId], 'assigned_user_id' => $inactiveStaffId])
+            ->assertStatus(422);
+
+        $this->assertNull(DB::table('preventive_maintenance_tasks')->where('id', $taskId)->value('assigned_user_id'));
+    }
+
+    public function test_complete_records_a_working_result_without_raising_a_report(): void
+    {
+        $staffId = $this->seedUser(['role' => 'maintenance_staff']);
+        $taskId = $this->seedTask(['assigned_user_id' => $staffId]);
+
+        $this->actingAsSessionUserWithFlatKeys($staffId, 'maintenance_staff')
+            ->postJson("/api/preventive-maintenance/{$taskId}/complete", [
+                'completed_date' => '2026-09-10',
+                'condition_result' => 'working',
+                'create_repair_report' => true,
+            ])
+            ->assertStatus(200)
+            ->assertJsonPath('data.repair_report', null);
+
+        $this->assertSame('working', DB::table('preventive_maintenance_history')->value('condition_result'));
+        $this->assertSame(0, DB::table('maintenance_reports')->count());
+    }
+
+    public function test_needs_repair_requires_findings(): void
+    {
+        $staffId = $this->seedUser(['role' => 'maintenance_staff']);
+        $taskId = $this->seedTask(['assigned_user_id' => $staffId]);
+
+        $this->actingAsSessionUserWithFlatKeys($staffId, 'maintenance_staff')
+            ->postJson("/api/preventive-maintenance/{$taskId}/complete", [
+                'completed_date' => '2026-09-10',
+                'condition_result' => 'needs_repair',
+            ])
+            ->assertStatus(422);
+
+        $this->assertSame(0, DB::table('preventive_maintenance_history')->count());
+    }
+
+    public function test_needs_repair_raises_a_linked_submitted_report(): void
+    {
+        $headId = $this->seedUser(['role' => 'maintenance_admin']);
+        $staffId = $this->seedUser(['role' => 'maintenance_staff', 'full_name' => 'Staff One']);
+        $taskId = $this->seedTask([
+            'category' => 'AIR CONDITIONING UNIT (ACU)',
+            'title' => 'AIR CONDITIONING UNIT (ACU)',
+            'location_name' => 'Offices',
+            'assigned_user_id' => $staffId,
+        ]);
+
+        $response = $this->actingAsSessionUserWithFlatKeys($staffId, 'maintenance_staff')
+            ->postJson("/api/preventive-maintenance/{$taskId}/complete", [
+                'completed_date' => '2026-10-05',
+                'condition_result' => 'needs_repair',
+                'findings' => 'Unit in Registrar office not cooling; compressor noisy.',
+                'create_repair_report' => true,
+                'report_priority' => 'high',
+            ]);
+
+        $response->assertStatus(200);
+        $reportId = (int) $response->json('data.repair_report.report_id');
+        $this->assertGreaterThan(0, $reportId);
+
+        $report = DB::table('maintenance_reports')->where('report_id', $reportId)->first();
+        $this->assertSame('submitted', $report->status);
+        $this->assertNull($report->assigned_to);
+        $this->assertSame('high', $report->priority);
+        $this->assertSame('HVAC / Aircon', $report->problem_type);
+        $this->assertSame('Offices', $report->location);
+        $this->assertSame($staffId, (int) $report->created_by);
+        $this->assertStringContainsString('not cooling', $report->description);
+
+        $history = DB::table('preventive_maintenance_history')->first();
+        $this->assertSame('needs_repair', $history->condition_result);
+        $this->assertSame($reportId, (int) $history->maintenance_report_id);
+
+        // Head is told about the new report through the normal report path.
+        $this->assertSame(1, DB::table('notifications')->where('user_id', $headId)->where('entity_type', 'report')->where('entity_id', $reportId)->count());
+    }
+
+    public function test_repair_report_can_be_raised_later_but_only_once(): void
+    {
+        $headId = $this->seedUser(['role' => 'maintenance_admin']);
+        $taskId = $this->seedTask(['category' => 'COMPUTERS', 'location_name' => 'Printers']);
+
+        $this->actingAsSessionUserWithFlatKeys($headId, 'maintenance_admin')
+            ->postJson("/api/preventive-maintenance/{$taskId}/complete", [
+                'completed_date' => '2026-09-10',
+                'condition_result' => 'needs_repair',
+                'findings' => 'Printer 2 jams on every page.',
+                'create_repair_report' => false,
+            ])
+            ->assertStatus(200);
+
+        $historyId = (int) DB::table('preventive_maintenance_history')->value('id');
+        $this->assertSame(0, DB::table('maintenance_reports')->count());
+
+        $this->actingAsSessionUserWithFlatKeys($headId, 'maintenance_admin')
+            ->postJson("/api/preventive-maintenance/history/{$historyId}/repair-report", ['priority' => 'medium'])
+            ->assertStatus(201);
+
+        $report = DB::table('maintenance_reports')->first();
+        // No close match for COMPUTERS -> "Other" with the equipment name.
+        $this->assertSame('Other', $report->problem_type);
+        $this->assertSame('COMPUTERS', $report->problem_type_other);
+
+        $this->actingAsSessionUserWithFlatKeys($headId, 'maintenance_admin')
+            ->postJson("/api/preventive-maintenance/history/{$historyId}/repair-report")
+            ->assertStatus(422);
+        $this->assertSame(1, DB::table('maintenance_reports')->count());
+    }
+
+    public function test_repair_report_is_refused_for_a_working_inspection_and_for_other_staff(): void
+    {
+        $staffId = $this->seedUser(['role' => 'maintenance_staff']);
+        $otherStaffId = $this->seedUser(['role' => 'maintenance_staff']);
+        $taskId = $this->seedTask(['assigned_user_id' => $staffId]);
+
+        $this->actingAsSessionUserWithFlatKeys($staffId, 'maintenance_staff')
+            ->postJson("/api/preventive-maintenance/{$taskId}/complete", ['completed_date' => '2026-09-10', 'condition_result' => 'working'])
+            ->assertStatus(200);
+        $historyId = (int) DB::table('preventive_maintenance_history')->value('id');
+
+        $this->actingAsSessionUserWithFlatKeys($otherStaffId, 'maintenance_staff')
+            ->postJson("/api/preventive-maintenance/history/{$historyId}/repair-report")
+            ->assertStatus(403);
+        $this->actingAsSessionUserWithFlatKeys($staffId, 'maintenance_staff')
+            ->postJson("/api/preventive-maintenance/history/{$historyId}/repair-report")
+            ->assertStatus(422);
+
+        $this->assertSame(0, DB::table('maintenance_reports')->count());
+    }
+
     private function createTestSchema(): void
     {
         Schema::disableForeignKeyConstraints();
         Schema::dropIfExists('notifications');
         Schema::dropIfExists('preventive_maintenance_history');
         Schema::dropIfExists('preventive_maintenance_tasks');
+        Schema::dropIfExists('maintenance_reports');
         Schema::dropIfExists('activity_logs');
         Schema::dropIfExists('items');
         Schema::dropIfExists('rooms');
@@ -791,6 +1029,7 @@ class PreventiveMaintenanceControllerTest extends TestCase
         $this->createNotificationsTable();
         $this->createPreventiveMaintenanceTasksTable();
         $this->createPreventiveMaintenanceHistoryTable();
+        $this->createMaintenanceReportsTable();
 
         Schema::enableForeignKeyConstraints();
     }
@@ -875,6 +1114,9 @@ class PreventiveMaintenanceControllerTest extends TestCase
             $table->text('notes')->nullable();
             $table->text('findings')->nullable();
             $table->text('action_taken')->nullable();
+            // 2026_09_27_000100_add_inspection_result_to_preventive_maintenance_history
+            $table->string('condition_result', 20)->nullable();
+            $table->unsignedInteger('maintenance_report_id')->nullable();
             $table->string('completion_proof_path', 500)->nullable();
             $table->date('next_due_date_snapshot')->nullable();
             $table->timestamps();

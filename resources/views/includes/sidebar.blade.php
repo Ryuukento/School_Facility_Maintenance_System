@@ -22,7 +22,7 @@
          branding lived in includes/header.blade.php, which was deleted when the
          top bar was removed, leaving it with no branding at all. --}}
     <div class="sidebar-brand">
-        <img src="{{ asset('frontend/assets/images/logo.png') }}"
+        <img src="{{ asset('frontend/assets/images/logo-seal.svg') }}"
              alt="PHILCST Centralized School Facility Maintenance Reporting System"
              class="sidebar-brand-logo" />
     </div>

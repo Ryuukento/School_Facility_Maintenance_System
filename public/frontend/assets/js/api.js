@@ -33,14 +33,21 @@ const API = {
         });
         
         const data = await response.json();
-        
+
         if (!data.success) {
-            throw new Error(data.message);
+            // The HTTP status and the response's data travel with the error so
+            // the sign-in page can react to them: 429 starts the lock countdown
+            // (data.retry_after_seconds), and data.attempts_remaining drives the
+            // "N attempts left" warning. The message is unchanged.
+            const error = new Error(data.message);
+            error.status = response.status;
+            error.data = data.data || {};
+            throw error;
         }
-        
+
         return data;
     },
-    
+
     /**
      * Logout user
      */

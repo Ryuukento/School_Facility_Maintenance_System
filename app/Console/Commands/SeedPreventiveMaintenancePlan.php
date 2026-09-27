@@ -49,36 +49,56 @@ class SeedPreventiveMaintenancePlan extends Command
         $lourdesBuilding1 = (int) \DB::table('buildings')->where('name', 'Lourdes Building 1')->value('id');
         $lourdesBuilding2 = (int) \DB::table('buildings')->where('name', 'Lourdes Building 2')->value('id');
 
+        $lb1 = fn () => ['building_id' => $lourdesBuilding1 ?: null, 'location_name' => $lourdesBuilding1 ? null : 'Lourdes Building #1'];
+        $lb2 = fn () => ['building_id' => $lourdesBuilding2 ?: null, 'location_name' => $lourdesBuilding2 ? null : 'Lourdes Building #2'];
+        $aprOct = [4, 10];
+
+        // Transcribed row-by-row, top to bottom, from the manual's
+        // PREVENTIVE MAINTENANCE TABLE (page 13), re-checked 2026-09-27
+        // against the full-page photo. The order here IS the manual's order;
+        // scheduleGrid() keeps it within each equipment group.
         $rows = [
-            // Monthly — confidently readable as every month in the source photo.
+            // M — every month
             ['category' => 'ROOFTOP', 'frequency' => 'monthly', 'location_name' => 'All Buildings', 'scheduled_months' => $allMonths],
 
+            // SA — April + October
+            ['category' => 'WATER PUMP (JET MATIC)', 'frequency' => 'semi_annually', 'scheduled_months' => $aprOct] + $lb1(),
+            ['category' => 'WATER PUMP (JET MATIC)', 'frequency' => 'semi_annually', 'scheduled_months' => $aprOct] + $lb2(),
+
+            ['category' => 'FIRE EXTINGUISHER', 'frequency' => 'semi_annually', 'location_name' => 'Gymnasium', 'scheduled_months' => $aprOct],
+            ['category' => 'FIRE EXTINGUISHER', 'frequency' => 'semi_annually', 'location_name' => 'Offices', 'scheduled_months' => $aprOct],
+            ['category' => 'FIRE EXTINGUISHER', 'frequency' => 'semi_annually', 'location_name' => 'Hallways', 'scheduled_months' => $aprOct],
+            ['category' => 'FIRE EXTINGUISHER', 'frequency' => 'semi_annually', 'location_name' => 'Laboratory Rooms/Simulators', 'scheduled_months' => $aprOct],
+
+            ['category' => 'FIRE ALARM SYSTEM', 'frequency' => 'semi_annually', 'location_name' => 'Hallways', 'scheduled_months' => $aprOct],
+
+            // M — every month
             ['category' => 'COMPUTERS', 'frequency' => 'monthly', 'location_name' => 'Offices', 'scheduled_months' => $allMonths],
-            ['category' => 'COMPUTERS', 'frequency' => 'monthly', 'location_name' => 'Hallways', 'scheduled_months' => $allMonths],
-            ['category' => 'COMPUTERS', 'frequency' => 'monthly', 'location_name' => 'Laboratory Rooms/Simulators', 'scheduled_months' => $allMonths],
+            ['category' => 'COMPUTERS', 'frequency' => 'monthly', 'location_name' => 'Laboratory Rooms/Simulator Rooms', 'scheduled_months' => $allMonths],
             ['category' => 'COMPUTERS', 'frequency' => 'monthly', 'location_name' => 'INTERNET', 'scheduled_months' => $allMonths],
             ['category' => 'COMPUTERS', 'frequency' => 'monthly', 'location_name' => 'Local Area Network (LAN)', 'scheduled_months' => $allMonths],
             ['category' => 'COMPUTERS', 'frequency' => 'monthly', 'location_name' => 'Wi-Fi System', 'scheduled_months' => $allMonths],
             ['category' => 'COMPUTERS', 'frequency' => 'monthly', 'location_name' => 'Printers', 'scheduled_months' => $allMonths],
             ['category' => 'COMPUTERS', 'frequency' => 'monthly', 'location_name' => 'LCD Monitors', 'scheduled_months' => $allMonths],
 
-            // Semi-annual — every SA row in the manual marks April + October.
-            ['category' => 'WATER PUMP (JET MATIC)', 'frequency' => 'semi_annually', 'building_id' => $lourdesBuilding1 ?: null, 'location_name' => $lourdesBuilding1 ? null : 'Lourdes Building #1', 'scheduled_months' => [4, 10]],
-            ['category' => 'FIRE EXTINGUISHER', 'frequency' => 'semi_annually', 'building_id' => $lourdesBuilding2 ?: null, 'location_name' => $lourdesBuilding2 ? null : 'Lourdes Building #2', 'scheduled_months' => [4, 10]],
-            ['category' => 'FIRE ALARM SYSTEM', 'frequency' => 'semi_annually', 'location_name' => 'Gymnasium', 'scheduled_months' => [4, 10]],
-            ['category' => 'BOILER', 'frequency' => 'semi_annually', 'location_name' => 'Boiler Room', 'scheduled_months' => [4, 10]],
-            ['category' => 'DIESEL ENGINE', 'frequency' => 'semi_annually', 'location_name' => 'Engine Room', 'scheduled_months' => [4, 10]],
-            ['category' => 'HYDRAULICS AND PNEUMATIC EQUIPMENT', 'frequency' => 'semi_annually', 'building_id' => $lourdesBuilding2 ?: null, 'location_name' => $lourdesBuilding2 ? null : 'Lourdes Building #2', 'scheduled_months' => [4, 10]],
-            ['category' => 'REFRIGERATION TRAINING MODULE', 'frequency' => 'semi_annually', 'building_id' => $lourdesBuilding2 ?: null, 'location_name' => $lourdesBuilding2 ? null : 'Lourdes Building #2', 'scheduled_months' => [4, 10]],
-            ['category' => 'PROCESS CONTROL EQUIPMENT', 'frequency' => 'semi_annually', 'building_id' => $lourdesBuilding2 ?: null, 'location_name' => $lourdesBuilding2 ? null : 'Lourdes Building #2', 'scheduled_months' => [4, 10]],
-            ['category' => 'LAB-VOLT (TRAINING MODULE FOR ELECTRO-TECHNOLOGY COURSE)', 'frequency' => 'semi_annually', 'building_id' => $lourdesBuilding2 ?: null, 'location_name' => $lourdesBuilding2 ? null : 'Lourdes Building #2', 'scheduled_months' => [4, 10]],
-            ['category' => 'AIR CONDITIONING UNIT (ACU)', 'frequency' => 'semi_annually', 'location_name' => 'Offices', 'scheduled_months' => [4, 10]],
-            ['category' => 'AIR CONDITIONING UNIT (ACU)', 'frequency' => 'semi_annually', 'location_name' => 'Classrooms', 'scheduled_months' => [4, 10]],
-            ['category' => 'AIR CONDITIONING UNIT (ACU)', 'frequency' => 'semi_annually', 'location_name' => 'Simulator Rooms', 'scheduled_months' => [4, 10]],
-            ['category' => 'AIR CONDITIONING UNIT (ACU)', 'frequency' => 'semi_annually', 'location_name' => 'Laboratory Rooms', 'scheduled_months' => [4, 10]],
-            ['category' => 'GENERATOR', 'frequency' => 'semi_annually', 'location_name' => 'School Campus', 'scheduled_months' => [4, 10]],
-            // Quarterly — the manual's one Q row marks Jan/Apr/Jul/Oct.
+            // SA — April + October
+            ['category' => 'BOILER', 'frequency' => 'semi_annually', 'location_name' => 'Boiler Room', 'scheduled_months' => $aprOct],
+            ['category' => 'DIESEL ENGINE', 'frequency' => 'semi_annually', 'location_name' => 'Engine Room', 'scheduled_months' => $aprOct],
+            ['category' => 'HYDRAULICS AND PNEUMATIC EQUIPMENT', 'frequency' => 'semi_annually', 'scheduled_months' => $aprOct] + $lb2(),
+            ['category' => 'REFRIGERATION TRAINING MODULE', 'frequency' => 'semi_annually', 'scheduled_months' => $aprOct] + $lb2(),
+            ['category' => 'PROCESS CONTROL EQUIPMENT', 'frequency' => 'semi_annually', 'scheduled_months' => $aprOct] + $lb2(),
+            ['category' => 'LAB-VOLT (TRAINING MODULE FOR ELECTRO-TECHNOLOGY COURSE)', 'frequency' => 'semi_annually', 'scheduled_months' => $aprOct] + $lb2(),
+
+            ['category' => 'AIR CONDITIONING UNIT (ACU)', 'frequency' => 'semi_annually', 'location_name' => 'Offices', 'scheduled_months' => $aprOct],
+            ['category' => 'AIR CONDITIONING UNIT (ACU)', 'frequency' => 'semi_annually', 'location_name' => 'Classrooms', 'scheduled_months' => $aprOct],
+            ['category' => 'AIR CONDITIONING UNIT (ACU)', 'frequency' => 'semi_annually', 'location_name' => 'Simulator Rooms', 'scheduled_months' => $aprOct],
+
+            ['category' => 'GENERATOR', 'frequency' => 'semi_annually', 'location_name' => 'School Campus', 'scheduled_months' => $aprOct],
+
+            // Q — January, April, July, October
+            ['category' => 'ELECTRIC FANS/CEILING FANS', 'frequency' => 'quarterly', 'location_name' => 'Offices', 'scheduled_months' => [1, 4, 7, 10]],
             ['category' => 'ELECTRIC FANS/CEILING FANS', 'frequency' => 'quarterly', 'location_name' => 'Classrooms', 'scheduled_months' => [1, 4, 7, 10]],
+            ['category' => 'ELECTRIC FANS/CEILING FANS', 'frequency' => 'quarterly', 'location_name' => 'Laboratory Rooms', 'scheduled_months' => [1, 4, 7, 10]],
         ];
 
         $created = 0;

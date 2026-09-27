@@ -27,6 +27,22 @@ class InventoryAdjustmentTest extends TestCase
         $this->forceLocalTestUrl();
     }
 
+    public function test_the_duplicate_inventory_stock_adjust_endpoint_is_retired(): void
+    {
+        // 2026-09-27 — manual adjustment has one path only
+        // (POST /api/items/{item}/adjust-stock); the unused duplicate is gone.
+        $userId = $this->seedUser(['role' => 'maintenance_admin']);
+        $itemId = $this->seedItem(['name' => 'Whiteboard Marker', 'quantity' => 5, 'reorder_level' => 2, 'status' => 'available']);
+
+        $status = $this
+            ->actingAsSessionUserWithFlatKeys($userId, 'maintenance_admin')
+            ->postJson("/api/inventory-stock/{$itemId}/adjust", ['quantity_change' => 3, 'reason' => 'x'])
+            ->status();
+
+        $this->assertContains($status, [404, 405]);
+        $this->assertSame(5, (int) DB::table('items')->where('id', $itemId)->value('quantity'));
+    }
+
     public function test_maintenance_admin_can_increase_stock(): void
     {
         $userId = $this->seedUser(['role' => 'maintenance_admin']);

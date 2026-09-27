@@ -90,23 +90,35 @@ $pageStylesheets = [
         </button>
     </div>
 
-    <!-- ROW 2: Priority Overview -->
+    <!-- ROW 2: Priority Overview + Reports by Status -->
     <div class="hd-mid-grid">
         <div class="hd-card" id="priority-overview-card">
             <div class="hd-card-header">
                 <h2 class="hd-card-title">Priority Overview</h2>
-                <span class="hd-card-sub">Live breakdown of report priorities</span>
+                <span class="hd-card-sub" id="priority-overview-month">Reports filed this month</span>
             </div>
-            <div class="hd-priority-body">
-                <div class="hd-chart-wrap">
-                    <canvas id="todayPriorityChart" class="hd-chart-canvas"></canvas>
+            <div class="hd-overview-body">
+                <div class="hd-donut" id="priority-donut" role="img" aria-label="Priority breakdown">
+                    <svg class="hd-donut-svg" viewBox="0 0 120 120" aria-hidden="true">
+                        <circle class="hd-donut-track" cx="60" cy="60" r="48"></circle>
+                        <g class="hd-donut-segments"></g>
+                    </svg>
+                    <div class="hd-donut-center">
+                        <span class="hd-donut-total" id="priority-donut-total">0</span>
+                        <span class="hd-donut-caption">reports</span>
+                    </div>
                 </div>
-                <div class="hd-priority-right">
-                    <div class="hd-priority-legend">
-                        <div class="hd-legend-item"><span class="hd-legend-dot hd-dot-critical"></span><span class="hd-legend-label">Critical</span><strong id="legend-critical">0</strong></div>
-                        <div class="hd-legend-item"><span class="hd-legend-dot hd-dot-high"></span><span class="hd-legend-label">High</span><strong id="legend-high">0</strong></div>
-                        <div class="hd-legend-item"><span class="hd-legend-dot hd-dot-medium"></span><span class="hd-legend-label">Medium</span><strong id="legend-medium">0</strong></div>
-                        <div class="hd-legend-item"><span class="hd-legend-dot hd-dot-low"></span><span class="hd-legend-label">Low</span><strong id="legend-low">0</strong></div>
+                <div class="hd-overview-side">
+                    <div class="hd-breakdown">
+                        <?php foreach (['critical' => 'Critical', 'high' => 'High', 'medium' => 'Medium', 'low' => 'Low'] as $key => $label): ?>
+                        <a class="hd-breakdown-row" href="/School_Facility_Maintenance_System/frontend/pages/reports.php?priority=<?php echo $key; ?>">
+                            <span class="hd-breakdown-dot hd-dot-<?php echo $key; ?>"></span>
+                            <span class="hd-breakdown-label"><?php echo $label; ?></span>
+                            <strong class="hd-breakdown-count" id="legend-<?php echo $key; ?>">0</strong>
+                            <span class="hd-breakdown-pct" id="legend-<?php echo $key; ?>-pct">0%</span>
+                            <span class="hd-breakdown-track"><span class="hd-breakdown-fill hd-dot-<?php echo $key; ?>" id="legend-<?php echo $key; ?>-bar"></span></span>
+                        </a>
+                        <?php endforeach; ?>
                     </div>
                     <div class="hd-alert-panel" id="priority-recommendation-panel">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M10.29 3.86l-8 14A1 1 0 0 0 3.14 19h17.72a1 1 0 0 0 .85-1.5l-8-14a1 1 0 0 0-1.72 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
@@ -114,6 +126,48 @@ $pageStylesheets = [
                             <p class="hd-alert-heading" id="priority-recommendation-heading">Checking&hellip;</p>
                             <p class="hd-alert-body" id="priority-recommendation-text"></p>
                         </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Reports by Status — sits beside Priority Overview. Same buckets,
+             colors and click targets as the Administrator dashboard's
+             "Reports by Status" donut (dashboard.php), fed by the same
+             /api/reports list as the KPI cards and Priority Overview — see
+             loadDashboardData(). -->
+        <div class="hd-card" id="status-overview-card">
+            <div class="hd-card-header">
+                <h2 class="hd-card-title">Reports by Status</h2>
+                <span class="hd-card-sub" id="status-overview-month">Reports filed this month</span>
+            </div>
+            <div class="hd-overview-body">
+                <div class="hd-donut" id="status-donut" role="img" aria-label="Status breakdown">
+                    <svg class="hd-donut-svg" viewBox="0 0 120 120" aria-hidden="true">
+                        <circle class="hd-donut-track" cx="60" cy="60" r="48"></circle>
+                        <g class="hd-donut-segments"></g>
+                    </svg>
+                    <div class="hd-donut-center">
+                        <span class="hd-donut-total" id="status-donut-total">0</span>
+                        <span class="hd-donut-caption">reports</span>
+                    </div>
+                </div>
+                <div class="hd-overview-side">
+                    <div class="hd-breakdown">
+                        <?php foreach (['submitted' => 'Submitted', 'in_progress' => 'In Progress', 'completed' => 'Completed'] as $key => $label): $slug = str_replace('_', '-', $key); ?>
+                        <a class="hd-breakdown-row" href="/School_Facility_Maintenance_System/frontend/pages/reports.php?status=<?php echo $key; ?>">
+                            <span class="hd-breakdown-dot hd-dot-<?php echo $slug; ?>"></span>
+                            <span class="hd-breakdown-label"><?php echo $label; ?></span>
+                            <strong class="hd-breakdown-count" id="legend-status-<?php echo $slug; ?>">0</strong>
+                            <span class="hd-breakdown-pct" id="legend-status-<?php echo $slug; ?>-pct">0%</span>
+                            <span class="hd-breakdown-track"><span class="hd-breakdown-fill hd-dot-<?php echo $slug; ?>" id="legend-status-<?php echo $slug; ?>-bar"></span></span>
+                        </a>
+                        <?php endforeach; ?>
+                    </div>
+                    <div class="hd-summary-panel">
+                        <span class="hd-summary-label">Completion rate</span>
+                        <strong class="hd-summary-value" id="status-completion-rate">0%</strong>
+                        <span class="hd-summary-text" id="status-completion-text">No reports filed this month yet.</span>
                     </div>
                 </div>
             </div>
@@ -151,7 +205,10 @@ $pageStylesheets = [
 </main>
 
 <link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/maintenance-dashboard.inline.css?v=20260921-2">
-<link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/hd-dashboard.css?v=20260922-1">
+<link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/hd-dashboard.css?v=20260926-4">
+<!-- Priority Overview / Reports by Status ring + breakdown component, shared
+     with staff-dashboard.php. -->
+<link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/dashboard-overview.css?v=20260926-1">
 <!-- TASK — Subtle purple card-border accent. One shared stylesheet for all
      three dashboards; recolours existing 1px borders only, so no card
      changes size. Loaded last. -->
@@ -159,6 +216,8 @@ $pageStylesheets = [
 
 <?php include __DIR__ . '/../includes/footer.php'; ?>
 <!-- utils.js and api.js loaded by footer.php — do not load again here -->
+<!-- renderDonut() / setBreakdownRow() for the overview cards. -->
+<script src="/School_Facility_Maintenance_System/frontend/assets/js/dashboard-overview.js?v=20260926-1"></script>
 
 <script>
 // TASK 6D BUG FIX. `api.js` (loaded earlier via footer.php) ends with an
@@ -453,39 +512,88 @@ async function loadDashboardData() {
         }
 
         // Today's Work Summary ("Assigned Reports" / "Completed Today") and
-        // Section 3's "My Assigned Reports" cards all reuse this single
-        // already-role/department-scoped /api/reports fetch — no new
-        // backend query is introduced for the redesign.
+        // both donuts ("Priority Overview" / "Reports by Status") all reuse
+        // this single /api/reports fetch — the same report set the Head sees
+        // on the All Reports page the donut slices link to (TASK 9: Head
+        // Maintenance views reports from ALL departments). The donuts used to
+        // read /api/dashboard/maintenance/charts instead, which is limited to
+        // the Head's own department AND the current calendar month; this page
+        // has no month picker, so they silently showed 0 whenever no report
+        // had been filed yet this month, contradicting the KPI cards above.
         try {
             const today = new Date().toISOString().split('T')[0];
-            const respReports = await fetch(window.SFMS_PUBLIC_URL('/api/reports?per_page=200'), { credentials: 'include' });
-            const reportsData = await respReports.json();
+            const reportsList = await fetchAllVisibleReports();
 
-            if (reportsData.success && reportsData.data && Array.isArray(reportsData.data.reports)) {
-                const reportsList = reportsData.data.reports;
+            const assignedActive = reportsList.filter((r) => r.assigned_to && !['completed', 'closed', 'cancelled'].includes(String(r.status || '').toLowerCase()));
+            setTextById('today-assigned-reports', assignedActive.length);
 
-                const assignedActive = reportsList.filter((r) => r.assigned_to && !['completed', 'closed', 'cancelled'].includes(String(r.status || '').toLowerCase()));
-                setTextById('today-assigned-reports', assignedActive.length);
+            const completedTodayCount = reportsList.filter((r) => ['completed', 'closed'].includes(String(r.status || '').toLowerCase()) && r.updated_at && r.updated_at.startsWith(today)).length;
+            setTextById('today-completed', completedTodayCount);
 
-                const completedTodayCount = reportsList.filter((r) => ['completed', 'closed'].includes(String(r.status || '').toLowerCase()) && r.updated_at && r.updated_at.startsWith(today)).length;
-                setTextById('today-completed', completedTodayCount);
-            }
+            // Both donuts show only reports filed in the CURRENT calendar
+            // month (the KPI cards above stay all-time). Deliberately not
+            // selectedMonth: that value can be a stale month last picked on
+            // the Reports page (shared localStorage key), and this page has
+            // no picker of its own to show which month it is on. created_at
+            // is server-local 'YYYY-MM-DD HH:MM:SS', so a string-prefix match
+            // avoids any timezone re-parsing.
+            const now = new Date();
+            const currentMonthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+            const currentMonthLabel = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+            const currentMonthReports = reportsList.filter((r) => String(r.created_at || '').startsWith(currentMonthPrefix));
+
+            setTextById('priority-overview-month', `Reports filed in ${currentMonthLabel}`);
+            setTextById('status-overview-month', `Reports filed in ${currentMonthLabel}`);
+            initializeCharts(buildChartDataFromReports(currentMonthReports));
         } catch (err) {
             console.error('Error loading reports list', err);
-        }
-
-        // Chart data drives both the Section 2 "High Priority Reports" card
-        // and the Section 3 "Priority Overview" donut — same payload, no
-        // duplicate request.
-        const chartResponse = await fetch(window.SFMS_PUBLIC_URL(`/api/dashboard/maintenance/charts?year=${selectedYear}&month=${selectedMonth}`), { credentials: 'include' });
-        const chartData = await chartResponse.json();
-        if (chartData.success && chartData.data) {
-            initializeCharts(chartData.data);
         }
 
     } catch (error) {
         console.error('Error loading dashboard:', error);
     }
+}
+
+// GET /api/reports caps per_page at 200 (ReportController::index()), so page
+// through using its `total` until every visible report is loaded — otherwise
+// the KPI cards and donuts would silently undercount past 200 reports.
+async function fetchAllVisibleReports() {
+    const perPage = 200;
+    const reports = [];
+    for (let page = 1; page <= 50; page++) {
+        const response = await fetch(window.SFMS_PUBLIC_URL(`/api/reports?per_page=${perPage}&page=${page}`), { credentials: 'include' });
+        const payload = await response.json();
+        if (!payload.success || !payload.data || !Array.isArray(payload.data.reports)) {
+            throw new Error((payload && payload.message) || 'Unable to load reports');
+        }
+        reports.push(...payload.data.reports);
+        const total = Number(payload.data.total || 0);
+        if (payload.data.reports.length < perPage || reports.length >= total) {
+            break;
+        }
+    }
+    return reports;
+}
+
+// Shapes the report list into the same { priority_data, status_data }
+// payload initializeCharts() already consumes, so both donuts keep their
+// existing rendering code. Blank statuses count as 'submitted', matching
+// maintenanceCharts()'s own normalization.
+function buildChartDataFromReports(reports) {
+    const priorityCounts = {};
+    const statusCounts = {};
+    reports.forEach((report) => {
+        const priority = String(report.priority || '').trim().toLowerCase();
+        if (priority) {
+            priorityCounts[priority] = (priorityCounts[priority] || 0) + 1;
+        }
+        const status = String(report.status || '').trim().toLowerCase() || 'submitted';
+        statusCounts[status] = (statusCounts[status] || 0) + 1;
+    });
+    return {
+        priority_data: { labels: Object.keys(priorityCounts), values: Object.values(priorityCounts) },
+        status_data: { labels: Object.keys(statusCounts), values: Object.values(statusCounts) }
+    };
 }
 
 function setTextById(id, value) {
@@ -534,11 +642,6 @@ function navigateToReportsCard(cardKey) {
 }
 
 function initializeCharts(data) {
-    const isLightMode = document.documentElement.getAttribute('data-theme-resolved') === 'light';
-    const chartPrimaryText = isLightMode ? '#111827' : '#f8fafc';
-    const chartMutedText = isLightMode ? '#374151' : '#94a3b8';
-    const doughnutBorder = isLightMode ? '#ffffff' : '#0f172a';
-
     const priorityLabelsRaw = Array.isArray(data?.priority_data?.labels) ? data.priority_data.labels : [];
     const priorityValuesRaw = Array.isArray(data?.priority_data?.values) ? data.priority_data.values : [];
     const priorityTotals = { low: 0, medium: 0, high: 0, critical: 0 };
@@ -589,10 +692,11 @@ function initializeCharts(data) {
     // Critical always renders in the legend, even at 0 (per spec) — the
     // element simply isn't gated behind a > 0 check the way it would be in
     // an "only show if present" list.
-    setTextById('legend-critical', priorityCritical);
-    setTextById('legend-high', priorityHigh);
-    setTextById('legend-medium', priorityMedium);
-    setTextById('legend-low', priorityLow);
+    setBreakdownRow('legend-critical', priorityCritical, priorityTotal);
+    setBreakdownRow('legend-high', priorityHigh, priorityTotal);
+    setBreakdownRow('legend-medium', priorityMedium, priorityTotal);
+    setBreakdownRow('legend-low', priorityLow, priorityTotal);
+    setTextById('priority-donut-total', priorityTotal);
 
     // UI Polish Sprint — Task 2 heading/body structure, extended here so
     // Critical reports (the most severe bucket) drive "Attention Required"
@@ -614,85 +718,66 @@ function initializeCharts(data) {
                 urgentText = `${priorityHigh} High Priority Report${priorityHigh !== 1 ? 's' : ''}`;
             }
             const needCount = priorityCritical + priorityHigh;
-            recommendationEl.textContent = `${urgentText} need${needCount === 1 ? 's' : ''} immediate attention today.`;
+            recommendationEl.textContent = `${urgentText} this month need${needCount === 1 ? 's' : ''} immediate attention.`;
             if (recommendationPanelEl) recommendationPanelEl.classList.remove('hd-alert-clear');
         } else {
             if (recommendationHeadingEl) recommendationHeadingEl.textContent = priorityTotal > 0 ? 'All Clear' : 'No Reports Yet';
-            recommendationEl.textContent = priorityTotal > 0 ? 'No urgent reports.' : 'No reports to prioritize at the moment.';
+            recommendationEl.textContent = priorityTotal > 0 ? 'No urgent reports.' : 'No reports filed this month yet.';
             if (recommendationPanelEl) recommendationPanelEl.classList.add('hd-alert-clear');
         }
     }
 
-    const todayPriorityCanvas = document.getElementById('todayPriorityChart');
-    if (todayPriorityCanvas) {
-        const todayPriorityCenterTextPlugin = {
-            id: 'todayPriorityCenterTextPlugin',
-            afterDatasetsDraw(chart) {
-                const meta = chart.getDatasetMeta(0);
-                if (!meta || !meta.data || !meta.data.length) {
-                    return;
-                }
+    const priorityReportsUrl = '/School_Facility_Maintenance_System/frontend/pages/reports.php?priority=';
+    renderDonut('priority-donut', [
+        { key: 'critical', label: 'Critical', value: priorityCritical, href: priorityReportsUrl + 'critical' },
+        { key: 'high', label: 'High', value: priorityHigh, href: priorityReportsUrl + 'high' },
+        { key: 'medium', label: 'Medium', value: priorityMedium, href: priorityReportsUrl + 'medium' },
+        { key: 'low', label: 'Low', value: priorityLow, href: priorityReportsUrl + 'low' }
+    ]);
 
-                const point = meta.data[0];
-                const ctx = chart.ctx;
-                const totalValue = String(priorityTotal);
+    renderStatusChart(data);
+}
 
-                ctx.save();
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
+// ========== ROW 2 (RIGHT) — REPORTS BY STATUS ==========
+// Mirrors the Administrator dashboard's "Reports by Status" donut
+// (dashboard.php): Submitted folds in Assigned, then In Progress and
+// Completed, with the same colors and the same reports.php?status= click
+// targets. Labels are normalized to raw status keys ("In progress" →
+// in_progress) so either raw or display-formatted labels work.
+function renderStatusChart(data) {
+    const labelsRaw = Array.isArray(data?.status_data?.labels) ? data.status_data.labels : [];
+    const valuesRaw = Array.isArray(data?.status_data?.values) ? data.status_data.values : [];
+    const byStatus = {};
 
-                ctx.font = `700 ${totalValue.length >= 3 ? 17 : 20}px "Segoe UI", sans-serif`;
-                ctx.fillStyle = chartPrimaryText;
-                ctx.fillText(totalValue, point.x, point.y - 6);
+    labelsRaw.forEach((label, index) => {
+        const key = String(label || '').trim().toLowerCase().replace(/\s+/g, '_');
+        byStatus[key] = (byStatus[key] || 0) + Number(valuesRaw[index] || 0);
+    });
 
-                ctx.font = '500 11px "Segoe UI", sans-serif';
-                ctx.fillStyle = chartMutedText;
-                ctx.fillText('reports', point.x, point.y + 12);
-                ctx.restore();
-            }
-        };
+    const statusSubmitted = (byStatus.submitted || 0) + (byStatus.assigned || 0);
+    const statusInProgress = byStatus.in_progress || 0;
+    // 'closed' is a finished report too — the KPI cards above already treat
+    // completed/closed as one bucket.
+    const statusCompleted = (byStatus.completed || 0) + (byStatus.closed || 0);
+    const statusTotal = statusSubmitted + statusInProgress + statusCompleted;
 
-        if (window.todayPriorityChartInstance) {
-            window.todayPriorityChartInstance.destroy();
-        }
+    setBreakdownRow('legend-status-submitted', statusSubmitted, statusTotal);
+    setBreakdownRow('legend-status-in-progress', statusInProgress, statusTotal);
+    setBreakdownRow('legend-status-completed', statusCompleted, statusTotal);
+    setTextById('status-donut-total', statusTotal);
 
-        window.todayPriorityChartInstance = new Chart(todayPriorityCanvas.getContext('2d'), {
-            type: 'doughnut',
-            plugins: [todayPriorityCenterTextPlugin],
-            data: {
-                labels: ['Critical', 'High', 'Medium', 'Low'],
-                datasets: [{
-                    data: [priorityCritical, priorityHigh, priorityMedium, priorityLow],
-                    backgroundColor: ['#991b1b', '#f59e0b', '#3b82f6', '#94a3b8'],
-                    borderColor: doughnutBorder,
-                    borderWidth: 2,
-                    hoverOffset: 3,
-                    spacing: 2
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                cutout: '68%',
-                radiusScale: 1.15,
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        callbacks: {
-                            label: (context) => ` ${context.formattedValue} report${Number(context.formattedValue) !== 1 ? 's' : ''}`
-                        }
-                    }
-                },
-                onClick: function(evt, elements) {
-                    if (elements && elements.length > 0) {
-                        const idx = elements[0].index;
-                        const priorityMap = ['critical', 'high', 'medium', 'low'];
-                        window.location.href = '/School_Facility_Maintenance_System/frontend/pages/reports.php?priority=' + encodeURIComponent(priorityMap[idx]);
-                    }
-                }
-            }
-        });
-    }
+    const completionRate = statusTotal > 0 ? Math.round((statusCompleted / statusTotal) * 100) : 0;
+    setTextById('status-completion-rate', `${completionRate}%`);
+    setTextById('status-completion-text', statusTotal > 0
+        ? `${statusCompleted} of ${statusTotal} report${statusTotal !== 1 ? 's' : ''} completed this month.`
+        : 'No reports filed this month yet.');
+
+    const statusReportsUrl = '/School_Facility_Maintenance_System/frontend/pages/reports.php?status=';
+    renderDonut('status-donut', [
+        { key: 'submitted', label: 'Submitted', value: statusSubmitted, href: statusReportsUrl + 'submitted' },
+        { key: 'in-progress', label: 'In Progress', value: statusInProgress, href: statusReportsUrl + 'in_progress' },
+        { key: 'completed', label: 'Completed', value: statusCompleted, href: statusReportsUrl + 'completed' }
+    ]);
 }
 
 // ========== SECTION 4 — MAINTENANCE ACTIVITY TIMELINE ==========

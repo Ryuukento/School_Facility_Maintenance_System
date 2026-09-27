@@ -532,6 +532,78 @@ class PurchaseReceiptPostingTest extends TestCase
             ->assertJsonPath('message', 'item_name and quantity_received (> 0) are required');
     }
 
+    // ---------------------------------------------------------------
+    // 2026-09-27 — receipt validation + removing a mistaken draft line
+    // ---------------------------------------------------------------
+
+    public function test_a_line_can_be_removed_from_a_draft_receipt_without_touching_stock(): void
+    {
+        $userId = $this->seedUser();
+        $receiptId = $this->seedReceipt(['received_by' => $userId]);
+        $keepId = $this->seedReceiptItem($receiptId, ['item_name' => 'Keep Me']);
+        $wrongId = $this->seedReceiptItem($receiptId, ['item_name' => 'Wrong Line']);
+
+        $this->actingAsSessionUser($userId, 'maintenance_staff')
+            ->deleteJson("/api/purchase-receipts/{$receiptId}/items/{$wrongId}")
+            ->assertOk();
+
+        $this->assertFalse(DB::table('purchase_receipt_items')->where('id', $wrongId)->exists());
+        $this->assertTrue(DB::table('purchase_receipt_items')->where('id', $keepId)->exists());
+        $this->assertSame(0, DB::table('inventory_transactions')->count());
+    }
+
+    public function test_a_line_cannot_be_removed_from_a_posted_receipt_or_another_receipt(): void
+    {
+        $userId = $this->seedUser();
+        $postedId = $this->seedReceipt(['received_by' => $userId, 'status' => 'posted']);
+        $postedLine = $this->seedReceiptItem($postedId);
+        $draftId = $this->seedReceipt(['received_by' => $userId]);
+
+        $this->actingAsSessionUser($userId, 'maintenance_admin')
+            ->deleteJson("/api/purchase-receipts/{$postedId}/items/{$postedLine}")
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Cannot remove items from a posted receipt');
+
+        // A line id that belongs to a different receipt is not found here.
+        $this->actingAsSessionUser($userId, 'maintenance_admin')
+            ->deleteJson("/api/purchase-receipts/{$draftId}/items/{$postedLine}")
+            ->assertStatus(404);
+
+        $this->assertTrue(DB::table('purchase_receipt_items')->where('id', $postedLine)->exists());
+    }
+
+    public function test_receipt_date_cannot_be_in_the_future(): void
+    {
+        $userId = $this->seedUser();
+
+        $this->actingAsSessionUser($userId, 'maintenance_staff')
+            ->postJson('/api/purchase-receipts', [
+                'or_number' => 'OR-FUTURE-1',
+                'receipt_date' => now()->addDay()->toDateString(),
+                'supplier_name' => 'Test Supplier',
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Receipt date cannot be in the future');
+
+        $this->assertSame(0, DB::table('purchase_receipts')->count());
+    }
+
+    public function test_receipt_department_must_exist(): void
+    {
+        $userId = $this->seedUser();
+
+        $this->actingAsSessionUser($userId, 'maintenance_staff')
+            ->postJson('/api/purchase-receipts', [
+                'or_number' => 'OR-DEPT-1',
+                'receipt_date' => now()->toDateString(),
+                'supplier_name' => 'Test Supplier',
+                'department_id' => 9999,
+            ])
+            ->assertStatus(422);
+
+        $this->assertSame(0, DB::table('purchase_receipts')->count());
+    }
+
     private function createTestSchema(): void
     {
         Schema::disableForeignKeyConstraints();

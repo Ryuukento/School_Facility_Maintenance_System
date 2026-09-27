@@ -101,7 +101,7 @@ include __DIR__ . '/../includes/header.php';
                                     <path d="M16 2v4M8 2v4M3 10h18"/>
                                 </svg>
                             </span>
-                            <input type="date" id="nr-receipt-date" class="form-control" style="padding-left:32px;">
+                            <input type="date" id="nr-receipt-date" class="form-control" style="padding-left:32px;" max="<?php echo date('Y-m-d'); ?>">
                         </div>
                     </div>
                 </div>
@@ -620,7 +620,7 @@ async function loadReceipts() {
             return;
         }
 
-        let html = '<table class="table"><thead><tr>'
+        let html = '<table class="table purchase-receipts-table"><thead><tr>'
             + '<th>OR Number</th><th>Date</th><th>Supplier</th><th>Department</th>'
             + '<th>Received By</th><th>Items</th><th>Status</th><th>Action</th>'
             + '</tr></thead><tbody>';
@@ -802,6 +802,26 @@ document.addEventListener('DOMContentLoaded', initListView);
 // ---------------------------------------------------------------------------
 
 let prDropdownsLoaded = false;
+let prReceiptStatus = null;
+
+// Removes a mistaken line while the receipt is still a draft (a draft line has
+// not added any stock yet, so this has no inventory effect).
+async function prRemoveLine(lineId, itemName) {
+    if (!window.confirm(`Remove "${itemName}" from this receipt?`)) return;
+    try {
+        const { response, data: payload } = await prFetch(
+            `${PURCHASE_API}/${PR_RECEIPT_ID}/items/${lineId}`,
+            { method: 'DELETE', credentials: 'same-origin', headers: { 'Accept': 'application/json' } }
+        );
+        if (!response.ok || !payload.success) {
+            throw new Error(payload.message || 'Failed to remove item');
+        }
+        prNotify(payload.message || 'Item removed from receipt.', 'success');
+        await loadReceiptItems();
+    } catch (err) {
+        prNotify(err.message || 'Unable to remove item.');
+    }
+}
 
 async function loadReceiptDetail() {
     try {
@@ -836,6 +856,8 @@ async function loadReceiptDetail() {
                 ${receipt.remarks ? `<div style="grid-column:1/-1;"><strong>Remarks:</strong> ${prEscapeHtml(receipt.remarks)}</div>` : ''}
                 <div class="text-muted" style="grid-column:1/-1;font-size:12px;">Created: ${prEscapeHtml(createdAt)}</div>
             </div>`;
+
+        prReceiptStatus = receipt.status;
 
         // Show draft action buttons only when status is draft
         if (receipt.status === 'draft') {
@@ -875,8 +897,10 @@ async function loadReceiptItems(highlightIds) {
         // TASK 6B PHASE 2 — the "Bodega Room" column is gone: every posted line
         // now lands in the one centralized Inventory, so the column showed the
         // same value on every row and no longer told the reader anything.
-        let html = '<table class="table"><thead><tr>'
+        const isDraft = prReceiptStatus === 'draft';
+        let html = '<table class="table purchase-receipts-table"><thead><tr>'
             + '<th>#</th><th>Item Name</th><th>Category</th><th>Qty</th><th>Unit</th>'
+            + (isDraft ? '<th>Action</th>' : '')
             + '</tr></thead><tbody>';
 
         items.forEach((item, idx) => {
@@ -888,11 +912,17 @@ async function loadReceiptItems(highlightIds) {
             html += `<td>${prEscapeHtml(item.category_name || '—')}</td>`;
             html += `<td>${prEscapeHtml(item.quantity_received)}</td>`;
             html += `<td>${prEscapeHtml(item.unit)}</td>`;
+            if (isDraft) {
+                html += `<td><button type="button" class="btn btn-sm btn-secondary pr-remove-line" data-line-id="${Number(item.id)}" data-item-name="${prEscapeHtml(item.item_name)}">Remove</button></td>`;
+            }
             html += '</tr>';
         });
 
         html += '</tbody></table>';
         container.innerHTML = html;
+        container.querySelectorAll('.pr-remove-line').forEach((btn) => {
+            btn.addEventListener('click', () => prRemoveLine(btn.dataset.lineId, btn.dataset.itemName));
+        });
     } catch (err) {
         container.innerHTML = '<div class="ui-empty-state"><strong>Failed to load items.</strong></div>';
         prNotify(err.message || 'Unable to load line items.');

@@ -130,6 +130,32 @@ include __DIR__ . '/../includes/header.php';
                         </div>
                     </div>
                 </div>
+                <!-- Report Archive — past-term reports grouped by the School
+                     Years recorded in "Manage Academic Session". Filled from
+                     GET /api/academic-sessions by loadArchiveMenu(). Picking a
+                     term sets the From/To dates exactly like Browse by Month. -->
+                <div class="reports-archive-dropdown-wrap" style="position:relative;">
+                    <button type="button" id="archive-picker-btn" class="btn btn-secondary reports-header-btn reports-header-icon-btn" aria-haspopup="true" aria-expanded="false" style="display:inline-flex;align-items:center;gap:6px;">
+                        <?php echo ui_icon('archive', ['size' => 15]); ?> Report Archive
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M6 9l6 6 6-6"/></svg>
+                    </button>
+                    <div id="archive-picker-dropdown" class="report-archive-menu" role="menu" aria-label="Report Archive" hidden>
+                        <div class="ra-head">
+                            <span class="ra-head-icon"><?php echo ui_icon('archive', ['size' => 18]); ?></span>
+                            <div class="ra-head-text">
+                                <strong>Report Archive</strong>
+                                <span>Browse reports by school year or semester</span>
+                            </div>
+                        </div>
+                        <div id="archive-picker-list" class="ra-list">
+                            <div class="ra-empty">Loading school years…</div>
+                        </div>
+                        <div class="ra-foot">
+                            <?php echo ui_icon('lock', ['size' => 13]); ?>
+                            <span>Finished reports from past terms are view-only.</span>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
         
@@ -201,6 +227,16 @@ include __DIR__ . '/../includes/header.php';
                  a plain load in both the JS and the no-JS PHP path, "Clear Date" still
                  re-applies that same current month, ?last_month=1 and ?date_scope=today
                  still work, and date_from/date_to are still sent to /api/reports. -->
+
+            <!-- Report Archive — shown while a past term is being browsed. -->
+            <div id="report-archive-banner" class="report-archive-banner" role="status" hidden>
+                <span class="report-archive-banner-icon"><?php echo ui_icon('archive', ['size' => 18]); ?></span>
+                <div class="report-archive-banner-text">
+                    <strong>Viewing: <span id="report-archive-banner-label"></span></strong>
+                    <span>Finished reports from past terms are view-only. Unfinished ones are carried over and can still be worked on.</span>
+                </div>
+                <button type="button" id="report-archive-exit" class="btn btn-sm btn-secondary">Back to current reports</button>
+            </div>
 
             <div id="week-pagination" class="week-pagination reports-week-pagination"></div>
             
@@ -561,12 +597,149 @@ include __DIR__ . '/../includes/header.php';
      page or any other page — no shared stylesheet was involved in either
      direction. -->
 
+<!-- Report Archive — menu, banner and per-report tags. Dark is the default
+     theme here (matching the Browse by Month dropdown); light overrides below.
+     Selectors are anchored on IDs and the light-theme colors are !important
+     on purpose: reports.inline1.css forces every text element inside the
+     page's .card to #111827 !important in light mode, which would otherwise
+     flatten the menu's colored headings, chips and tags to plain black. -->
+<style>
+/* ── Menu ─────────────────────────────────────────────────────────────── */
+#archive-picker-dropdown.report-archive-menu {
+    position: absolute; top: calc(100% + 8px); right: 0; z-index: 999;
+    width: 340px; max-width: calc(100vw - 32px);
+    background: var(--card-color, #151b2b); border: 1px solid rgba(148,163,184,0.22); border-radius: 16px;
+    box-shadow: 0 22px 48px rgba(2,6,23,0.5); overflow: hidden;
+    animation: raMenuIn 0.14s ease-out;
+}
+#archive-picker-dropdown[hidden] { display: none; }
+@keyframes raMenuIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+
+#archive-picker-dropdown .ra-head {
+    display: flex; align-items: center; gap: 12px; padding: 14px 16px;
+    background: linear-gradient(135deg, rgba(139,92,246,0.22), rgba(99,102,241,0.08));
+    border-bottom: 1px solid rgba(148,163,184,0.16);
+}
+#archive-picker-dropdown .ra-head-icon {
+    width: 36px; height: 36px; flex-shrink: 0; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center;
+    background: rgba(139,92,246,0.28); color: #ddd6fe;
+}
+#archive-picker-dropdown .ra-head-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+#archive-picker-dropdown .ra-head-text strong { font-size: 14.5px; font-weight: 800; color: #f8fafc; }
+#archive-picker-dropdown .ra-head-text span { font-size: 12px; color: #a5b4cb; }
+
+#archive-picker-dropdown .ra-list { max-height: 380px; overflow-y: auto; padding: 6px 8px 8px; }
+#archive-picker-dropdown .ra-group + .ra-group { margin-top: 4px; padding-top: 6px; border-top: 1px dashed rgba(148,163,184,0.18); }
+#archive-picker-dropdown .ra-group-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px 6px; }
+#archive-picker-dropdown .ra-group-name { font-size: 11.5px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: #a78bfa; }
+
+#archive-picker-dropdown .ra-item {
+    display: flex; align-items: center; gap: 12px; width: 100%; padding: 9px 10px; margin: 1px 0;
+    background: none; border: 1px solid transparent; border-radius: 10px; color: inherit; cursor: pointer; text-align: left;
+    transition: background 0.14s ease, border-color 0.14s ease;
+}
+#archive-picker-dropdown .ra-item:hover:not(:disabled),
+#archive-picker-dropdown .ra-item:focus-visible { background: rgba(139,92,246,0.12); outline: none; }
+#archive-picker-dropdown .ra-item:disabled { cursor: not-allowed; opacity: 0.5; }
+#archive-picker-dropdown .ra-item-icon {
+    width: 32px; height: 32px; flex-shrink: 0; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center;
+    background: rgba(148,163,184,0.12); color: #c4b5fd;
+}
+#archive-picker-dropdown .ra-item-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+#archive-picker-dropdown .ra-item-title { font-size: 14px; font-weight: 700; color: #f1f5f9; }
+#archive-picker-dropdown .ra-item-dates { font-size: 12px; color: #94a3b8; }
+#archive-picker-dropdown .ra-item-check { display: none; color: #a78bfa; }
+#archive-picker-dropdown .ra-item.is-selected { background: rgba(139,92,246,0.16); border-color: rgba(139,92,246,0.45); }
+#archive-picker-dropdown .ra-item.is-selected .ra-item-icon { background: #7c3aed; color: #fff; }
+#archive-picker-dropdown .ra-item.is-selected .ra-item-check { display: inline-flex; }
+#archive-picker-dropdown .ra-item.is-selected .ra-chip { display: none; }
+
+#archive-picker-dropdown .ra-chip {
+    flex-shrink: 0; padding: 2px 8px; border-radius: 999px; font-size: 10.5px; font-weight: 800; letter-spacing: 0.03em; white-space: nowrap;
+}
+#archive-picker-dropdown .ra-chip-current  { background: rgba(16,185,129,0.16); color: #6ee7b7; border: 1px solid rgba(16,185,129,0.34); }
+#archive-picker-dropdown .ra-chip-upcoming { background: rgba(148,163,184,0.14); color: #cbd5e1; border: 1px solid rgba(148,163,184,0.28); }
+
+#archive-picker-dropdown .ra-empty { padding: 14px 12px; font-size: 13px; color: #94a3b8; }
+#archive-picker-dropdown .ra-foot {
+    display: flex; align-items: center; gap: 8px; padding: 10px 16px; font-size: 12px; color: #94a3b8;
+    border-top: 1px solid rgba(148,163,184,0.16); background: rgba(148,163,184,0.05);
+}
+
+#archive-picker-btn.is-active { border-color: #8b5cf6 !important; box-shadow: 0 0 0 3px rgba(139,92,246,0.18); }
+
+/* ── Banner ───────────────────────────────────────────────────────────── */
+#report-archive-banner.report-archive-banner {
+    display: flex; align-items: center; gap: 14px; margin: 0 0 14px; padding: 12px 16px; border-radius: 14px;
+    border: 1px solid rgba(139,92,246,0.35); background: linear-gradient(135deg, rgba(139,92,246,0.14), rgba(99,102,241,0.05));
+}
+#report-archive-banner[hidden] { display: none; }
+#report-archive-banner .report-archive-banner-icon {
+    width: 38px; height: 38px; flex-shrink: 0; border-radius: 11px; display: inline-flex; align-items: center; justify-content: center;
+    background: rgba(139,92,246,0.25); color: #ddd6fe;
+}
+#report-archive-banner .report-archive-banner-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; font-size: 13px; color: #cbd5e1; }
+#report-archive-banner .report-archive-banner-text strong { font-size: 14px; color: #f1f5f9; }
+
+/* ── Per-report tag (All Reports rows) ────────────────────────────────── */
+#reports-container .report-archive-tag {
+    display: flex; align-items: center; gap: 4px; margin-top: 5px; padding: 1px 8px; border-radius: 999px;
+    font-size: 11px; font-weight: 700; white-space: nowrap; width: fit-content;
+}
+#reports-container .report-archive-tag.is-locked   { background: rgba(148,163,184,0.16); color: #cbd5e1; border: 1px solid rgba(148,163,184,0.3); }
+#reports-container .report-archive-tag.is-carried  { background: rgba(245,158,11,0.14);  color: #fbbf24; border: 1px solid rgba(245,158,11,0.32); }
+#reports-container .report-archive-tag.is-reopened { background: rgba(139,92,246,0.14);  color: #c4b5fd; border: 1px solid rgba(139,92,246,0.34); }
+
+/* ── Light theme ──────────────────────────────────────────────────────── */
+:root[data-theme-resolved='light'] #archive-picker-dropdown.report-archive-menu { background: #ffffff; border-color: #e9e5f5; box-shadow: 0 22px 48px rgba(76,29,149,0.14), 0 2px 6px rgba(15,23,42,0.06); }
+:root[data-theme-resolved='light'] #archive-picker-dropdown .ra-head { background: linear-gradient(135deg, #f5f3ff, #eef2ff); border-bottom-color: #ede9fe; }
+:root[data-theme-resolved='light'] #archive-picker-dropdown .ra-head-icon { background: #7c3aed; color: #ffffff !important; }
+:root[data-theme-resolved='light'] #archive-picker-dropdown .ra-head-text strong { color: #1e1b4b !important; }
+:root[data-theme-resolved='light'] #archive-picker-dropdown .ra-head-text span { color: #6b7280 !important; }
+:root[data-theme-resolved='light'] #archive-picker-dropdown .ra-group + .ra-group { border-top-color: #ede9fe; }
+:root[data-theme-resolved='light'] #archive-picker-dropdown .ra-group-name { color: #6d28d9 !important; }
+:root[data-theme-resolved='light'] #archive-picker-dropdown .ra-item:hover:not(:disabled),
+:root[data-theme-resolved='light'] #archive-picker-dropdown .ra-item:focus-visible { background: #f5f3ff; }
+:root[data-theme-resolved='light'] #archive-picker-dropdown .ra-item-icon { background: #f3f0ff; color: #7c3aed !important; }
+:root[data-theme-resolved='light'] #archive-picker-dropdown .ra-item-title { color: #111827 !important; }
+:root[data-theme-resolved='light'] #archive-picker-dropdown .ra-item-dates { color: #6b7280 !important; }
+:root[data-theme-resolved='light'] #archive-picker-dropdown .ra-item-check { color: #7c3aed !important; }
+:root[data-theme-resolved='light'] #archive-picker-dropdown .ra-item.is-selected { background: #f5f3ff; border-color: #c4b5fd; }
+:root[data-theme-resolved='light'] #archive-picker-dropdown .ra-item.is-selected .ra-item-icon { background: #7c3aed; color: #ffffff !important; }
+:root[data-theme-resolved='light'] #archive-picker-dropdown .ra-chip-current  { background: #ecfdf5; color: #047857 !important; border-color: #a7f3d0; }
+:root[data-theme-resolved='light'] #archive-picker-dropdown .ra-chip-upcoming { background: #f1f5f9; color: #64748b !important; border-color: #e2e8f0; }
+:root[data-theme-resolved='light'] #archive-picker-dropdown .ra-empty { color: #6b7280 !important; }
+:root[data-theme-resolved='light'] #archive-picker-dropdown .ra-foot { background: #fafafa; border-top-color: #f1f0f7; color: #6b7280 !important; }
+:root[data-theme-resolved='light'] #archive-picker-dropdown .ra-foot span { color: #6b7280 !important; }
+
+:root[data-theme-resolved='light'] #report-archive-banner.report-archive-banner { background: linear-gradient(135deg, #f5f3ff, #eef2ff); border-color: #ddd6fe; }
+:root[data-theme-resolved='light'] #report-archive-banner .report-archive-banner-icon { background: #7c3aed; color: #ffffff !important; }
+:root[data-theme-resolved='light'] #report-archive-banner .report-archive-banner-text,
+:root[data-theme-resolved='light'] #report-archive-banner .report-archive-banner-text span { color: #4b5563 !important; }
+:root[data-theme-resolved='light'] #report-archive-banner .report-archive-banner-text strong,
+:root[data-theme-resolved='light'] #report-archive-banner .report-archive-banner-text strong span { color: #111827 !important; }
+
+:root[data-theme-resolved='light'] #reports-container .report-archive-tag.is-locked   { background: #f1f5f9; color: #475569 !important; border-color: #cbd5e1; }
+:root[data-theme-resolved='light'] #reports-container .report-archive-tag.is-carried  { background: #fffbeb; color: #92400e !important; border-color: #fde68a; }
+:root[data-theme-resolved='light'] #reports-container .report-archive-tag.is-reopened { background: #f5f3ff; color: #6d28d9 !important; border-color: #ddd6fe; }
+
+@media (max-width: 640px) {
+    #report-archive-banner.report-archive-banner { flex-wrap: wrap; }
+    #archive-picker-dropdown.report-archive-menu { right: auto; left: 0; }
+}
+</style>
+
 <?php include __DIR__ . '/../includes/footer.php'; ?>
+<!-- Shared branded printout (logo letterhead) used by renderPrintWindow(). -->
+<script src="/School_Facility_Maintenance_System/frontend/assets/js/sfms-print.js?v=20260927-1"></script>
 
 <script>
 let allReports = [];
 let currentPage = 1;
-let rowsPerPage = 20;
+let rowsPerPage = 10;
+// All Reports pagination appears only once the list has at least this many
+// reports (see renderPagination()).
+const PAGINATION_MIN_REPORTS = 10;
 let lastMonthOnly = false;
 let selectedWeek = 0;
 let statusGroupFilter = '';
@@ -579,6 +752,8 @@ let statusGroupFilter = '';
 // inputs and is read from them by filterReports() on every request.
 const CURRENT_USER_ID = <?php echo json_encode($currentUserId); ?>;
 const CURRENT_USER_ROLE = <?php echo json_encode($currentRole); ?>;
+// "Prepared by" line on the printed Maintenance Reports Summary.
+const CURRENT_USER_NAME = <?php echo json_encode((string)($currentUser['full_name'] ?? ''), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
 const CAN_CREATE_REPORT = <?php echo json_encode($canCreateReport); ?>;
 const CAN_EDIT_OWN_REPORTS = <?php echo json_encode($canEditOwnReports); ?>;
 // TASK 9 — Role + Department Based Authorization (frontend defense-in-depth).
@@ -610,12 +785,31 @@ function isSameDepartmentAsUser(report) {
  */
 function canEditReport(report) {
     if (!report || !isSameDepartmentAsUser(report)) return false;
+    // Report Archive — a finished report from a past academic term is
+    // view-only (the API refuses the edit too; this just hides the button).
+    if (report.archive && report.archive.is_locked) return false;
 
     const ownsReport = CAN_EDIT_OWN_REPORTS
         && CURRENT_USER_ID > 0
         && Number(report.created_by || 0) === Number(CURRENT_USER_ID);
 
     return ownsReport || CAN_EDIT_DEPARTMENT_REPORTS === true;
+}
+
+// Report Archive — small tag under a report's title in the list. The term
+// ("Second Semester 2025–2026") is in the tooltip.
+function archiveTagHtml(report) {
+    const archive = report && report.archive;
+    if (!archive || !archive.is_archived) return '';
+
+    const term = archive.term_label ? escapeHtml(archive.term_label) : 'a past academic term';
+    if (archive.is_locked) {
+        return `<span class="report-archive-tag is-locked" title="From ${term}. Finished reports from past terms are view-only.">${repIcon('lock')} Archived · View only</span>`;
+    }
+    if (archive.is_reopened) {
+        return `<span class="report-archive-tag is-reopened" title="From ${term}. Reopened by the Administrator for changes.">Reopened · ${term}</span>`;
+    }
+    return `<span class="report-archive-tag is-carried" title="Unfinished report from ${term}. It stays actionable until it is completed.">Carried over · ${term}</span>`;
 }
 
 const REPORTS_API = window.SFMS_PUBLIC_URL('/api/reports');
@@ -815,15 +1009,14 @@ function renderPagination(totalReports, totalPages, startIndex) {
     const container = document.getElementById('pagination-container');
     if (!container) return;
 
-    // ALL REPORTS PAGINATION VISIBILITY — hide the whole pagination/status bar
-    // (the "Showing X-Y of N reports" summary, the page buttons and the rows-per-page
-    // control) whenever every report already fits on a single page. Previously this
-    // only skipped rendering when the result set was empty, so a few reports still
-    // produced a summary line plus a single dead page button. One parent condition
-    // covers every small-result case (0, 1, 5, 6 ... up to rowsPerPage) and reuses the
-    // total-count/page state renderReportsView() already computed — no pagination
-    // logic is duplicated and the markup below is unchanged.
-    if (totalPages <= 1) {
+    // ALL REPORTS PAGINATION VISIBILITY — the whole pagination/status bar (the
+    // "Showing X-Y of N reports" summary, the page buttons and the rows-per-page
+    // control) appears only once the list reaches PAGINATION_MIN_REPORTS reports,
+    // and is hidden below that. The threshold is deliberately independent of the
+    // selected page size: the previous "hide when everything fits on one page"
+    // rule meant picking 20 rows on a 15-report list hid the bar — including the
+    // rows-per-page control itself — leaving no way to switch back.
+    if (totalReports < PAGINATION_MIN_REPORTS) {
         container.innerHTML = '';
         return;
     }
@@ -1151,7 +1344,7 @@ function displayReports(reports) {
         // unlabelled horizontally-scrolling table. creatorName is still
         // computed above (still used by the View Report detail page's own
         // data) even though it is no longer a column in this table.
-        html += `<td class="reports-cell-report" data-label="Report"><span class="reports-id">#${reportId}</span><span class="reports-title">${title}</span></td>`;
+        html += `<td class="reports-cell-report" data-label="Report"><span class="reports-id">#${reportId}</span><span class="reports-title">${title}</span>${archiveTagHtml(report)}</td>`;
         html += `<td data-label="Department">${deptName}</td>`;
         html += `<td data-label="Priority"><span class="badge ${priorityClass}">${priority.toUpperCase()}</span></td>`;
         html += `<td data-label="Status"><span class="badge ${statusClass}">${statusLabel}</span></td>`;
@@ -1997,7 +2190,9 @@ function openPrintReportModal() {
     const monthInput = document.getElementById('print-month-input');
     if (!modal || !modeEl) return;
 
-    modeEl.value = 'month';
+    // Report Archive — while a past term is browsed, default to printing
+    // exactly what is on screen (that term) rather than the current month.
+    modeEl.value = reportArchiveSelection ? 'current' : 'month';
     if (dateInput) dateInput.value = formatLocalDate(new Date());
     if (monthInput) {
         const now = new Date();
@@ -2027,11 +2222,13 @@ async function printSummaryReport() {
     const mode = modeEl.value;
 
     let printableReports;
+    let periodLabel = 'Current filtered results';
 
     if (mode === 'semester') {
         const result = await resolveSemesterExportData();
         if (!result) return; // message already shown to the user
         printableReports = result.reports;
+        periodLabel = result.label;
     } else {
         const weekEl = document.getElementById('print-week-select');
         const dateEl = document.getElementById('print-date-input');
@@ -2045,79 +2242,114 @@ async function printSummaryReport() {
             Components.alert('No reports available to print for the selected period.', 'warning');
             return;
         }
+
+        periodLabel = describePrintPeriod(mode, weekValue, dateValue, monthValue);
     }
 
-    renderPrintWindow(printableReports);
+    renderPrintWindow(printableReports, periodLabel);
 }
 
-function renderPrintWindow(printableReports) {
-    const rowsHtml = printableReports.map((report, index) => {
-        const reportId = escapeHtml(String(report.report_id || ''));
-        const title = escapeHtml(report.title || '');
-        const priority = escapeHtml(String((report.priority || 'N/A')).toUpperCase());
-        const status = escapeHtml(String((report.status || 'N/A')).replace(/_/g, ' ').toUpperCase());
-        const location = escapeHtml(report.location || '');
-        const createdBy = escapeHtml(report.creator_name || 'Unknown');
-        const createdAt = escapeHtml(formatDate(report.created_at));
+// Human-readable "Period" line for the printout, from the Print modal's own
+// selection. Month/date values are local calendar keys (YYYY-MM[-DD]), so they
+// are built with the local-time Date constructor to avoid a UTC day shift.
+function describePrintPeriod(mode, weekValue, dateValue, monthValue) {
+    const monthName = (year, month) => new Date(year, month - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
+    if (mode === 'month' && /^\d{4}-\d{2}$/.test(monthValue)) {
+        const [y, m] = monthValue.split('-').map(Number);
+        return `Month of ${monthName(y, m)}`;
+    }
+    if (mode === 'week' && weekValue) {
+        const ranges = { 1: '1–7', 2: '8–14', 3: '15–21', 4: '22–end' };
+        return `Week ${weekValue} (days ${ranges[weekValue] || ''} of the month)`;
+    }
+    if (mode === 'date' && /^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
+        const [y, m, d] = dateValue.split('-').map(Number);
+        return new Date(y, m - 1, d).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    }
+    // Report Archive — printing while a past term is browsed prints that term.
+    if (reportArchiveSelection) {
+        return reportArchiveSelection.label;
+    }
+    return 'Current filtered results';
+}
+
+// Printed "Maintenance Reports Summary" — drawn by the shared, branded
+// SfmsPrint layout (assets/js/sfms-print.js: PHILCST letterhead + logo,
+// coupon-bond landscape fit, repeated header, page numbers, sign-off), the
+// same one the Dispatches printout uses. This function only supplies the
+// report-specific title, summary counts, columns and rows.
+const PRINT_ROLE_LABELS = {
+    super_admin: 'Administrator',
+    maintenance_admin: 'Head Maintenance',
+    maintenance_staff: 'Maintenance Staff'
+};
+
+const PRINT_STATUS_TONES = {
+    submitted: 'blue', draft: 'blue', assigned: 'amber', in_progress: 'violet',
+    completed: 'green', closed: 'green', cancelled: 'red'
+};
+
+function renderPrintWindow(printableReports, periodLabel = 'Current filtered results') {
+    const norm = (value) => String(value || '').trim().toLowerCase();
+    const statusOf = (r) => norm(r.status).replace(/\s+/g, '_') || 'submitted';
+    const priorityOf = (r) => (norm(r.priority) === 'urgent' ? 'critical' : norm(r.priority));
+    const titleCase = (s) => s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+
+    const rowsHtml = printableReports.map((report, index) => {
+        const priorityKey = priorityOf(report);
+        const statusKey = statusOf(report);
         return `
             <tr>
-                <td>${index + 1}</td>
-                <td>#${reportId}</td>
-                <td>${title}</td>
+                <td class="c-no">${index + 1}</td>
+                <td class="c-key">#${escapeHtml(String(report.report_id || ''))}</td>
+                <td class="c-strong">${escapeHtml(report.title || '—')}</td>
                 <td>${escapeHtml(getReportTypeLabel(report))}</td>
-                <td>${priority}</td>
-                <td>${status}</td>
-                <td>${location}</td>
-                <td>${createdBy}</td>
-                <td>${createdAt}</td>
+                <td class="text-${escapeHtml(priorityKey || 'none')}">${escapeHtml(priorityKey ? titleCase(priorityKey) : 'N/A')}</td>
+                <td>${SfmsPrint.pill(titleCase(statusKey), PRINT_STATUS_TONES[statusKey] || 'gray')}</td>
+                <td>${escapeHtml(report.location || '—')}</td>
+                <td>${escapeHtml(report.creator_name || 'Unknown')}</td>
+                <td class="c-nowrap">${escapeHtml(formatDate(report.created_at))}</td>
             </tr>
         `;
     }).join('');
 
-    const printWindow = window.open('', '_blank', 'width=1200,height=900');
-    if (!printWindow) {
-        Components.alert('Unable to open print preview. Please allow pop-ups for this site.', 'warning');
-        return;
-    }
+    // Summary strip — counted from exactly the rows printed.
+    const count = (predicate) => printableReports.filter(predicate).length;
 
     closePrintReportModal();
 
-    printWindow.document.write(`
-        <!DOCTYPE html>
-        <html lang="en">
-        <head>
-            <meta charset="UTF-8" />
-            <title>Maintenance Reports Summary</title>
-            <link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/reports.inline2.css">
-        </head>
-        <body>
-            <h1>Maintenance Reports Summary</h1>
-            <table>
-                <thead>
-                    <tr>
-                        <th>No.</th>
-                        <th>Report ID</th>
-                        <th>Title</th>
-                        <th>Type</th>
-                        <th>Priority</th>
-                        <th>Status</th>
-                        <th>Location</th>
-                        <th>Created By</th>
-                        <th>Date</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${rowsHtml}
-                </tbody>
-            </table>
-        </body>
-        </html>
-    `);
+    const opened = SfmsPrint.open({
+        title: 'Maintenance Reports Summary',
+        subtitle: periodLabel,
+        preparedBy: CURRENT_USER_NAME,
+        preparedRole: PRINT_ROLE_LABELS[CURRENT_USER_ROLE] || '',
+        recordLabel: 'Records',
+        recordCount: printableReports.length,
+        stats: [
+            { label: 'Total Reports', value: printableReports.length, tone: 'purple' },
+            { label: 'Submitted / Assigned', value: count((r) => ['submitted', 'assigned', 'draft'].includes(statusOf(r))), tone: 'blue' },
+            { label: 'In Progress', value: count((r) => statusOf(r) === 'in_progress'), tone: 'violet' },
+            { label: 'Completed', value: count((r) => ['completed', 'closed'].includes(statusOf(r))), tone: 'green' },
+            { label: 'Critical / High', value: count((r) => ['critical', 'high'].includes(priorityOf(r))), tone: 'red' }
+        ],
+        columns: [
+            { label: 'No.', width: '4%' },
+            { label: 'Report ID', width: '7%' },
+            { label: 'Title', width: '16%' },
+            { label: 'Type', width: '10%' },
+            { label: 'Priority', width: '8%' },
+            { label: 'Status', width: '10%' },
+            { label: 'Location', width: '18%' },
+            { label: 'Created By', width: '16%' },
+            { label: 'Date', width: '11%' }
+        ],
+        rowsHtml
+    });
 
-    printWindow.document.close();
-    printWindow.focus();
-    printWindow.print();
+    if (!opened) {
+        Components.alert('Unable to open print preview. Please allow pop-ups for this site.', 'warning');
+    }
 }
 
 async function exportReportsToExcel() {
@@ -2294,6 +2526,7 @@ if (monthPickerBtn && monthPickerDropdown) {
             lastMonthOnly = false;
             selectedWeek = 0;
             currentPage = 1;
+            if (typeof setArchiveSelection === 'function') setArchiveSelection(null);
             monthPickerDropdown.style.display = 'none';
             filterReports();
             const nextUrl = new URL(window.location.href);
@@ -2323,8 +2556,183 @@ if (monthPickerBtn && monthPickerDropdown) {
     });
 }
 
+// ── Report Archive ───────────────────────────────────────────────────────
+// Past-term browsing by the School Years recorded in "Manage Academic
+// Session" (GET /api/academic-sessions). Choosing a term fills the same
+// From/To date inputs Browse by Month uses, so the list, the week tabs and
+// the printout all follow it with no second filter path. Which reports are
+// view-only is decided by the API (report.archive), never here.
+let reportArchiveSelection = null; // { label } while a past term is shown
+
+function formatArchiveDate(dateKey) {
+    const [y, m, d] = String(dateKey).split('-').map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function dayBefore(dateKey) {
+    const [y, m, d] = String(dateKey).split('-').map(Number);
+    return formatLocalDate(new Date(y, m - 1, d - 1));
+}
+
+function setArchiveSelection(selection) {
+    reportArchiveSelection = selection;
+    const banner = document.getElementById('report-archive-banner');
+    const label = document.getElementById('report-archive-banner-label');
+    if (banner) banner.hidden = !selection;
+    if (label) label.textContent = selection ? selection.label : '';
+    document.getElementById('archive-picker-btn')?.classList.toggle('is-active', Boolean(selection));
+
+    // Highlight the chosen term inside the menu (check mark + tint).
+    document.querySelectorAll('#archive-picker-list .ra-item').forEach((item) => {
+        const isSelected = Boolean(selection) && item.dataset.from === selection.from && item.dataset.to === selection.to;
+        item.classList.toggle('is-selected', isSelected);
+        item.setAttribute('aria-checked', String(isSelected));
+    });
+}
+
+function closeArchiveMenu() {
+    const menu = document.getElementById('archive-picker-dropdown');
+    if (menu) menu.hidden = true;
+    document.getElementById('archive-picker-btn')?.setAttribute('aria-expanded', 'false');
+}
+
+function applyArchiveTerm(from, to, label) {
+    document.getElementById('filter-date-from').value = from;
+    document.getElementById('filter-date-to').value = to;
+    lastMonthOnly = false;
+    selectedWeek = 0;
+    currentPage = 1;
+    setArchiveSelection({ label, from, to });
+    closeArchiveMenu();
+    filterReports();
+}
+
+// One menu row: icon · title + date range · status chip / check mark.
+// Upcoming terms are listed for context but disabled — they cannot hold
+// reports yet.
+function archiveMenuItemHtml({ from, to, label, title, dates, icon, chip, disabled }) {
+    const iconSvg = window.UIIcons ? window.UIIcons.svg(icon, { size: 16 }) : '';
+    const checkSvg = window.UIIcons ? window.UIIcons.svg('check', { size: 16 }) : '';
+    const chipHtml = chip ? `<span class="ra-chip ra-chip-${chip.tone}">${escapeHtml(chip.text)}</span>` : '';
+    return `
+        <button type="button" class="ra-item" role="menuitemradio" aria-checked="false"
+                data-from="${escapeHtml(from)}" data-to="${escapeHtml(to)}" data-label="${escapeHtml(label)}"
+                ${disabled ? 'disabled title="This term has not started yet."' : ''}>
+            <span class="ra-item-icon">${iconSvg}</span>
+            <span class="ra-item-body">
+                <span class="ra-item-title">${escapeHtml(title)}</span>
+                <span class="ra-item-dates">${escapeHtml(dates)}</span>
+            </span>
+            ${chipHtml}
+            <span class="ra-item-check">${checkSvg}</span>
+        </button>`;
+}
+
+async function loadArchiveMenu() {
+    const list = document.getElementById('archive-picker-list');
+    if (!list) return;
+
+    try {
+        const res = await fetch(window.SFMS_PUBLIC_URL('/api/academic-sessions'), { credentials: 'include' });
+        const payload = await res.json();
+        if (!payload.success || !payload.data) throw new Error(payload.message || 'Unable to load school years');
+
+        const { school_years: schoolYears = [], earliest_start: earliestStart, has_earlier_reports: hasEarlier } = payload.data;
+        const today = formatLocalDate(new Date());
+        const range = (from, to) => `${formatArchiveDate(from)} – ${formatArchiveDate(to)}`;
+        const termChip = (from, to) => {
+            if (from > today) return { text: 'Upcoming', tone: 'upcoming' };
+            if (from <= today && today <= to) return { text: 'Current', tone: 'current' };
+            return null;
+        };
+
+        let html = '';
+        schoolYears.forEach((sy) => {
+            const isCurrentYear = sy.start <= today && today <= sy.end;
+            html += `
+                <section class="ra-group">
+                    <div class="ra-group-head">
+                        <span class="ra-group-name">${escapeHtml(sy.label)}</span>
+                        ${isCurrentYear ? '<span class="ra-chip ra-chip-current">Current school year</span>' : ''}
+                    </div>`;
+            html += archiveMenuItemHtml({
+                from: sy.start, to: sy.end, label: `Whole ${sy.label}`,
+                title: 'Whole school year', dates: range(sy.start, sy.end), icon: 'calendar',
+                disabled: sy.start > today
+            });
+            (sy.semesters || []).forEach((sem) => {
+                const chip = termChip(sem.start, sem.end);
+                html += archiveMenuItemHtml({
+                    from: sem.start, to: sem.end, label: `${sem.semester} · ${sy.label}`,
+                    title: sem.semester, dates: range(sem.start, sem.end), icon: 'book',
+                    chip, disabled: chip && chip.tone === 'upcoming'
+                });
+            });
+            html += '</section>';
+        });
+
+        if (hasEarlier && earliestStart) {
+            const firstLabel = schoolYears.length ? schoolYears[schoolYears.length - 1].label : 'the first recorded school year';
+            html += `
+                <section class="ra-group">
+                    <div class="ra-group-head"><span class="ra-group-name">Before recorded school years</span></div>
+                    ${archiveMenuItemHtml({
+                        from: '2000-01-01', to: dayBefore(earliestStart), label: `Earlier records (before ${firstLabel})`,
+                        title: 'Earlier records', dates: `Filed before ${formatArchiveDate(earliestStart)}`, icon: 'clock'
+                    })}
+                </section>`;
+        }
+
+        list.innerHTML = html || '<div class="ra-empty">No school years recorded yet. They are added from Manage Academic Session.</div>';
+        setArchiveSelection(reportArchiveSelection); // re-apply the highlight
+    } catch (error) {
+        console.error('Unable to load the report archive menu', error);
+        list.innerHTML = '<div class="ra-empty">Unable to load school years right now.</div>';
+    }
+}
+
+(function initReportArchive() {
+    const button = document.getElementById('archive-picker-btn');
+    const menu = document.getElementById('archive-picker-dropdown');
+    const list = document.getElementById('archive-picker-list');
+    if (!button || !menu || !list) return;
+
+    button.addEventListener('click', (event) => {
+        event.stopPropagation();
+        const willOpen = menu.hidden;
+        menu.hidden = !willOpen;
+        button.setAttribute('aria-expanded', String(willOpen));
+    });
+
+    list.addEventListener('click', (event) => {
+        const choice = event.target.closest('.ra-item');
+        if (!choice || choice.disabled) return;
+        applyArchiveTerm(choice.dataset.from, choice.dataset.to, choice.dataset.label);
+    });
+
+    document.addEventListener('click', (event) => {
+        if (!event.target.closest('.reports-archive-dropdown-wrap')) closeArchiveMenu();
+    });
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') closeArchiveMenu();
+    });
+
+    // "Back to current reports" is exactly Clear Date (current month).
+    document.getElementById('report-archive-exit')?.addEventListener('click', () => {
+        document.getElementById('clear-date-filters').click();
+    });
+
+    // Typing a date by hand leaves the archive term, so drop its banner.
+    ['filter-date-from', 'filter-date-to'].forEach((id) => {
+        document.getElementById(id)?.addEventListener('change', () => setArchiveSelection(null));
+    });
+
+    loadArchiveMenu();
+})();
+
 document.getElementById('clear-date-filters').addEventListener('click', () => {
     const range = getCurrentMonthDateRange();
+    setArchiveSelection(null);
     document.getElementById('filter-date-from').value = formatLocalDate(range.start);
     document.getElementById('filter-date-to').value = formatLocalDate(range.end);
     lastMonthOnly = false;

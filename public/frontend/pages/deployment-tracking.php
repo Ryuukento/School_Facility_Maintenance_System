@@ -1087,7 +1087,13 @@ document.addEventListener('DOMContentLoaded', () => {
         align-items: stretch;
         flex-wrap: wrap;
     }
+}
 
+/* Tablets only: keep a real, horizontally scrollable table. On phones
+   (<= 640px) the table becomes one card per row instead — see
+   assets/css/mobile-table-cards.css, which now supplies the data-label
+   column names this block's comment below was guarding against. */
+@media (min-width: 641px) and (max-width: 768px) {
     .deployment-tracking-page .deployment-tracking-table {
         min-width: 980px;
     }

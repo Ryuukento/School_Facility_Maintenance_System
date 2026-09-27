@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Api;
 use App\Exceptions\DuplicateDamageReportException;
 use App\Http\Controllers\Controller;
 use App\Models\MaintenanceReport;
+use App\Services\ActivityLogService;
 use App\Services\NeedChangeService;
+use App\Services\ReportArchiveService;
 use App\Services\ReportAuthorizationService;
 use App\Services\ReportService;
 use App\Services\RoleNormalizerService;
@@ -43,7 +45,11 @@ class ReportController extends Controller
         // are the same three service instances, resolved through the same
         // container, just one layer down; no logging, notification or damage
         // report mechanism was added, removed or duplicated.
-        private readonly ReportService $reportService
+        private readonly ReportService $reportService,
+        // Report Archive — past-term reports: which are view-only, and the
+        // Administrator's reopen / lock-again actions below.
+        private readonly ReportArchiveService $reportArchiveService,
+        private readonly ActivityLogService $activityLogService
     ) {
     }
 
@@ -267,11 +273,28 @@ class ReportController extends Controller
 
         // ── flat response — frontend reads data.reports[] ─────────────────
         $total   = (clone $query)->count();
+
+        // Report Archive — the reopen marker is only selected where the
+        // column exists (it is absent from the isolated test schema).
+        $hasReopenColumn = Schema::hasColumn('maintenance_reports', 'archive_reopened_at');
+        if ($hasReopenColumn) {
+            $query->addSelect('maintenance_reports.archive_reopened_at');
+        }
+
         $reports = $query
             ->orderByDesc('maintenance_reports.created_at')
             ->skip(($page - 1) * $perPage)
             ->take($perPage)
             ->get();
+
+        // Report Archive — per-row term / view-only state for the list.
+        foreach ($reports as $row) {
+            $row->archive = $this->reportArchiveService->describe(
+                $row->created_at,
+                (string) $row->status,
+                $hasReopenColumn ? $row->archive_reopened_at : null
+            );
+        }
 
         return $this->ok('Reports retrieved', [
             'reports'  => $reports,
@@ -551,6 +574,13 @@ class ReportController extends Controller
             return $this->fail('Report not found', 404);
         }
 
+        // Report Archive — term / view-only state for the detail page.
+        $data->archive = $this->reportArchiveService->describe(
+            $report->created_at,
+            (string) $report->status,
+            $report->getAttribute('archive_reopened_at')
+        );
+
         return $this->ok('Report retrieved', ['report' => $data]);
     }
 
@@ -569,6 +599,13 @@ class ReportController extends Controller
         // frontend alone — see canModifyReport() for the exact rule.
         if (!$this->reportAuthorizationService->canModifyReport($authUser, $report)) {
             return $this->fail('You are not authorized to modify this report', 403);
+        }
+
+        // Report Archive — a finished report from a past academic term is
+        // view-only for everyone (including the Administrator) until the
+        // Administrator explicitly reopens it via archiveReopen().
+        if ($this->reportArchiveService->isLocked($report)) {
+            return $this->fail(ReportArchiveService::LOCKED_MESSAGE, 423);
         }
 
         $previousStatus = (string) $report->status;
@@ -669,7 +706,16 @@ class ReportController extends Controller
             $staffAllowed = ['in_progress', 'completed'];
             $adminAllowed = ['submitted', 'assigned', 'in_progress', 'completed', 'closed', 'cancelled'];
             if ($role === 'super_admin') {
-                // no restriction
+                // 2026-09-27 — the Administrator approves and monitors; Head
+                // Maintenance runs the work. The Administrator may only
+                // cancel a report (duplicate/invalid, or no Head available),
+                // never assign it or move it through the work statuses.
+                if ($newStatus !== 'cancelled' && $newStatus !== $fromStatus) {
+                    return $this->fail('The Administrator can only cancel a report. Assigning and status updates are handled by Head Maintenance.', 403);
+                }
+                if ($request->has('assigned_to') && (int) $request->input('assigned_to') !== (int) $report->assigned_to) {
+                    return $this->fail('Assigning maintenance staff is handled by Head Maintenance.', 403);
+                }
             } elseif (in_array($role, ['maintenance_admin', 'department_admin'], true)) {
                 if (!in_array($newStatus, $adminAllowed, true)) {
                     return $this->fail('You cannot set that status', 403);
@@ -686,6 +732,26 @@ class ReportController extends Controller
             } else {
                 return $this->fail('You are not allowed to change report status', 403);
             }
+            // Rules the detail page already enforced, now enforced here too
+            // so they cannot be skipped by calling the API directly:
+            //  - "Assigned" needs someone assigned (in this request or already
+            //    on the report);
+            //  - "Completed" needs a completion proof image (uploaded now or
+            //    already on the report).
+            if ($newStatus === 'assigned' && $newStatus !== $fromStatus) {
+                $assigneeAfter = array_key_exists('assigned_to', $caseBValidated)
+                    ? $caseBValidated['assigned_to']
+                    : $report->assigned_to;
+                if (empty($assigneeAfter)) {
+                    return $this->fail('Please select maintenance staff to assign before setting the status to Assigned.', 422);
+                }
+            }
+            if ($newStatus === 'completed' && $newStatus !== $fromStatus
+                && !$request->hasFile('completion_proof_image')
+                && empty($report->completion_proof_image)) {
+                return $this->fail('Please upload a completion proof image before marking this report as completed.', 422);
+            }
+
             $changes['status'] = $newStatus;
             if ($newStatus === 'assigned' && array_key_exists('assigned_to', $caseBValidated)) {
                 $at = $caseBValidated['assigned_to'];
@@ -884,12 +950,80 @@ class ReportController extends Controller
             }
         }
 
+        // Report Archive — archived records are never deleted while locked.
+        if ($this->reportArchiveService->isLocked($report)) {
+            return $this->fail(ReportArchiveService::LOCKED_MESSAGE, 423);
+        }
+
+        // Deletion is permanent, so it is limited to reports nobody has
+        // started working on. Once a report is assigned, in progress, or
+        // finished it carries work history (and possibly inventory
+        // movements), so it is cancelled instead of deleted.
+        if (strtolower((string) $report->status) !== 'submitted') {
+            return $this->fail('Only reports that are still Submitted can be deleted. Cancel the report instead.', 422);
+        }
+
         // TASK 50 — the delete and the DELETE_REPORT audit entry that must
         // accompany it moved to ReportService::deleteReport() as a pair, so
         // the row can never be removed without the entry being written.
         $this->reportService->deleteReport($report, $authUser);
 
         return $this->ok('Report deleted successfully');
+    }
+
+    /**
+     * Report Archive — Administrator reopens a view-only past-term report so
+     * it can be corrected. Route-gated to super_admin. Recorded in the
+     * Activity Log. The report locks again when finished again, or via
+     * archiveLock().
+     */
+    public function archiveReopen(Request $request, MaintenanceReport $report): JsonResponse
+    {
+        if (!$this->reportArchiveService->isLocked($report)) {
+            return $this->fail('Only a view-only archived report can be reopened.', 422);
+        }
+
+        $authUser = $request->session()->get('auth_user', []);
+        $report->forceFill([
+            'archive_reopened_at' => now(),
+            'archive_reopened_by' => (int) ($authUser['user_id'] ?? 0) ?: null,
+        ])->save();
+
+        $archive = $this->reportArchiveService->describe($report->created_at, (string) $report->status, $report->archive_reopened_at);
+        $this->activityLogService->log([
+            'action'      => 'REOPEN_ARCHIVED_REPORT',
+            'module'      => 'reports',
+            'entity_type' => 'maintenance_report',
+            'entity_id'   => (int) $report->report_id,
+            'details'     => sprintf('Reopened archived report #%d (%s) for changes.', (int) $report->report_id, $archive['term_label'] ?? 'past term'),
+        ], $request);
+
+        return $this->ok('Archived report reopened for changes', ['archive' => $archive]);
+    }
+
+    /**
+     * Report Archive — Administrator makes a reopened past-term report
+     * view-only again once the correction is done. Route-gated to super_admin.
+     */
+    public function archiveLock(Request $request, MaintenanceReport $report): JsonResponse
+    {
+        $archive = $this->reportArchiveService->describe($report->created_at, (string) $report->status, $report->getAttribute('archive_reopened_at'));
+        if (!$archive['is_reopened']) {
+            return $this->fail('This report is not a reopened archived report.', 422);
+        }
+
+        $report->forceFill(['archive_reopened_at' => null, 'archive_reopened_by' => null])->save();
+        $archive = $this->reportArchiveService->describe($report->created_at, (string) $report->status, null);
+
+        $this->activityLogService->log([
+            'action'      => 'LOCK_ARCHIVED_REPORT',
+            'module'      => 'reports',
+            'entity_type' => 'maintenance_report',
+            'entity_id'   => (int) $report->report_id,
+            'details'     => sprintf('Locked archived report #%d (%s) as view-only again.', (int) $report->report_id, $archive['term_label'] ?? 'past term'),
+        ], $request);
+
+        return $this->ok('Archived report is view-only again', ['archive' => $archive]);
     }
 
     /**

@@ -39,8 +39,11 @@ class ReportDepartmentAuthorizationTest extends TestCase
         $this->forceLocalTestUrl();
     }
 
-    public function test_administrator_can_modify_a_report_in_any_department(): void
+    public function test_administrator_can_cancel_a_report_in_any_department_but_not_assign_it(): void
     {
+        // 2026-09-27 — the Administrator keeps cross-department reach, but
+        // only to cancel; assigning and work statuses belong to Head
+        // Maintenance.
         $adminId = $this->seedUser(['role' => 'super_admin']);
         $deptA = $this->seedDepartment();
         $deptB = $this->seedDepartment();
@@ -53,9 +56,14 @@ class ReportDepartmentAuthorizationTest extends TestCase
                 'status' => 'assigned',
                 'assigned_to' => $staffInDeptB,
             ])
-            ->assertOk();
+            ->assertStatus(403);
+        $this->assertSame('submitted', DB::table('maintenance_reports')->where('report_id', $reportId)->value('status'));
 
-        $this->assertSame('assigned', DB::table('maintenance_reports')->where('report_id', $reportId)->value('status'));
+        $this
+            ->actingAsSessionUser($adminId, 'super_admin')
+            ->patchJson("/api/reports/{$reportId}", ['status' => 'cancelled'])
+            ->assertOk();
+        $this->assertSame('cancelled', DB::table('maintenance_reports')->where('report_id', $reportId)->value('status'));
     }
 
     public function test_head_maintenance_can_modify_a_report_in_their_own_department(): void
@@ -135,7 +143,8 @@ class ReportDepartmentAuthorizationTest extends TestCase
     {
         $deptId = $this->seedDepartment();
         $staffId = $this->seedUser(['role' => 'maintenance_staff', 'department_id' => $deptId]);
-        $reportId = $this->seedReport(['department_id' => $deptId, 'assigned_to' => $staffId, 'status' => 'in_progress']);
+        $reportId = $this->seedReport(['department_id' => $deptId, 'assigned_to' => $staffId, 'status' => 'in_progress', 'completion_proof_image' => '/frontend/uploads/completion-proofs/test-proof.jpg', // 2026-09-27: completing requires proof
+        ]);
 
         $this
             ->actingAsSessionUser($staffId, 'maintenance_staff')

@@ -166,17 +166,20 @@ class BuildingsOverviewNavigationAndHierarchicalSearchTest extends TestCase
 
     /**
      * The card removed from dashboard.php had no data in it — its value was the
-     * literal word "Open". The other three dashboards show a real building
-     * count, so they were intentionally preserved. This test stops a later
-     * cleanup from deleting those statistics on the assumption they were part
-     * of the same navigation change.
+     * literal word "Open". The other dashboards show a real building count, so
+     * they were intentionally preserved. This test stops a later cleanup from
+     * deleting those statistics on the assumption they were part of the same
+     * navigation change.
+     *
+     * staff-dashboard.php's buildings card was later removed on explicit
+     * request (Buildings Overview is in the sidebar) — see
+     * test_the_staff_dashboard_no_longer_shows_a_buildings_card() below.
      */
     public function test_the_dashboards_that_show_a_real_building_count_keep_their_stat_cards(): void
     {
         $expectations = [
             'super-admin-dashboard.php' => 'buildingsOverview',
             'maintenance-dashboard.php' => 'today-buildings-count',
-            'staff-dashboard.php'       => 'my-buildings',
         ];
 
         foreach ($expectations as $page => $countHook) {
@@ -189,6 +192,15 @@ class BuildingsOverviewNavigationAndHierarchicalSearchTest extends TestCase
                 "{$page}'s building-count statistic must be preserved; it displays data rather than merely linking."
             );
         }
+    }
+
+    public function test_the_staff_dashboard_no_longer_shows_a_buildings_card(): void
+    {
+        $markup = file_get_contents(base_path('public/frontend/pages/staff-dashboard.php'));
+        $this->assertNotFalse($markup);
+
+        $this->assertStringNotContainsString('id="my-buildings"', $markup, 'The Staff dashboard buildings stat card was removed on request.');
+        $this->assertStringNotContainsString('FROM buildings', $markup, 'Its now-unused buildings COUNT(*) query must go with it.');
     }
 
     public function test_no_duplicate_buildings_overview_navigation_entry_exists(): void

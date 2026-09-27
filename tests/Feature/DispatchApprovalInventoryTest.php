@@ -155,12 +155,16 @@ class DispatchApprovalInventoryTest extends TestCase
     {
         $adminId = $this->seedUser(['role' => 'super_admin']);
         $staffId = $this->seedUser(['role' => 'maintenance_staff']);
-        $itemId = $this->seedItem(['name' => 'Projector Lamp', 'quantity' => 3, 'reserved_quantity' => 0]);
+        $itemId = $this->seedItem(['name' => 'Projector Lamp', 'quantity' => 5, 'reserved_quantity' => 0]);
         $dispatchId = $this->seedDispatch($itemId, 5, ['release_assigned_to' => $staffId]);
 
         $this->actingAsSessionUserWithFlatKeys($adminId, 'super_admin')
             ->postJson("/api/dispatches/{$dispatchId}/approve", ['approved_by' => $adminId])
             ->assertOk();
+
+        // Stock drops after approval (e.g. another release), so the release-
+        // time re-check is what must stop this one.
+        DB::table('items')->where('id', $itemId)->update(['quantity' => 3]);
 
         $response = $this
             ->actingAsSessionUserWithFlatKeys($staffId, 'maintenance_staff')
@@ -254,13 +258,16 @@ class DispatchApprovalInventoryTest extends TestCase
     {
         $adminId = $this->seedUser(['role' => 'super_admin']);
         $staffId = $this->seedUser(['role' => 'maintenance_staff']);
-        $itemId = $this->seedItem(['name' => 'Projector Lamp', 'quantity' => 5, 'reserved_quantity' => 0]);
+        $itemId = $this->seedItem(['name' => 'Projector Lamp', 'quantity' => 7, 'reserved_quantity' => 0]);
         $dispatchId = $this->seedDispatch($itemId, 3, ['release_assigned_to' => $staffId]);
         $this->addDispatchItem($dispatchId, $itemId, 4);
 
         $this->actingAsSessionUserWithFlatKeys($adminId, 'super_admin')
             ->postJson("/api/dispatches/{$dispatchId}/approve", ['approved_by' => $adminId])
             ->assertOk();
+
+        // Stock drops after approval, so the release-time re-check applies.
+        DB::table('items')->where('id', $itemId)->update(['quantity' => 5]);
 
         $response = $this
             ->actingAsSessionUserWithFlatKeys($staffId, 'maintenance_staff')
@@ -281,6 +288,30 @@ class DispatchApprovalInventoryTest extends TestCase
         $dispatch = DB::table('dispatches')->where('id', $dispatchId)->first();
         $this->assertSame('approved', $dispatch->status);
         $this->assertNull($dispatch->released_by);
+    }
+
+    public function test_insufficient_inventory_blocks_approval(): void
+    {
+        // 2026-09-27 — "check stock at approval, deduct at hand-off": a
+        // dispatch the inventory cannot fulfil is refused at approval, with
+        // the same message release uses, and nothing changes.
+        $adminId = $this->seedUser(['role' => 'super_admin']);
+        $staffId = $this->seedUser(['role' => 'maintenance_staff']);
+        $itemId = $this->seedItem(['name' => 'Projector Lamp', 'quantity' => 3, 'reserved_quantity' => 0]);
+        $dispatchId = $this->seedDispatch($itemId, 5, ['release_assigned_to' => $staffId]);
+
+        $response = $this->actingAsSessionUserWithFlatKeys($adminId, 'super_admin')
+            ->postJson("/api/dispatches/{$dispatchId}/approve", ['approved_by' => $adminId]);
+
+        $response->assertStatus(400);
+        $response->assertJsonFragment([
+            'message' => 'Insufficient Inventory for Projector Lamp. Available Stock: 3. Requested: 5.',
+        ]);
+
+        $dispatch = DB::table('dispatches')->where('id', $dispatchId)->first();
+        $this->assertSame('pending', $dispatch->status);
+        $this->assertNull($dispatch->approved_by);
+        $this->assertSame(3, (int) DB::table('items')->where('id', $itemId)->value('quantity'));
     }
 
     private function seedDispatch(int $itemId, int $quantity, array $overrides = []): int

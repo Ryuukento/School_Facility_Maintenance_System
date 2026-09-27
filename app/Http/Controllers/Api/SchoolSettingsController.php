@@ -3,11 +3,15 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\AcademicSession;
 use App\Models\SchoolSetting;
+use App\Services\ReportArchiveService;
 use App\Support\ApiResponder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Validator;
 
 /**
@@ -117,7 +121,94 @@ class SchoolSettingsController extends Controller
 
         $settings->syncAutomatic();
 
+        $this->recordAcademicSession($validated);
+
         return $this->ok('School settings updated', $this->present($settings));
+    }
+
+    /**
+     * Report Archive — keep this School Year's schedule in academic_sessions
+     * (the history the Report Archive groups past-term reports by), since
+     * school_settings itself only ever holds the current one.
+     *
+     * One row per School Year: re-saving a School Year updates its row. When
+     * only the School Year label changed and the dates are identical to an
+     * existing row, that row is renamed instead — a typo fix in "2026-2027"
+     * must not leave a phantom School Year behind in the archive.
+     *
+     * @param  array<string, string>  $validated
+     */
+    private function recordAcademicSession(array $validated): void
+    {
+        if (!Schema::hasTable('academic_sessions')) {
+            return;
+        }
+
+        $dates = [
+            'first_sem_start'  => Carbon::parse($validated['first_sem_start'])->toDateString(),
+            'first_sem_end'    => Carbon::parse($validated['first_sem_end'])->toDateString(),
+            'second_sem_start' => Carbon::parse($validated['second_sem_start'])->toDateString(),
+            'second_sem_end'   => Carbon::parse($validated['second_sem_end'])->toDateString(),
+        ];
+
+        $existing = AcademicSession::query()->where('school_year', $validated['school_year'])->first();
+        if (!$existing) {
+            $existing = AcademicSession::query()
+                ->whereDate('first_sem_start', $dates['first_sem_start'])
+                ->whereDate('first_sem_end', $dates['first_sem_end'])
+                ->whereDate('second_sem_start', $dates['second_sem_start'])
+                ->whereDate('second_sem_end', $dates['second_sem_end'])
+                ->first();
+        }
+
+        ($existing ?? new AcademicSession())
+            ->fill(['school_year' => $validated['school_year']] + $dates)
+            ->save();
+    }
+
+    /**
+     * Report Archive — the recorded School Years and their semesters, for
+     * the All Reports archive picker. Any authenticated user (read-only).
+     */
+    public function sessions(ReportArchiveService $archive): JsonResponse
+    {
+        $terms = $archive->terms();
+
+        $schoolYears = [];
+        foreach ($terms as $term) {
+            $key = $term['school_year'];
+            $schoolYears[$key] ??= [
+                'school_year' => $key,
+                'label'       => 'SY ' . ReportArchiveService::formatSchoolYear($key),
+                'start'       => $term['start'],
+                'end'         => $term['end'],
+                'semesters'   => [],
+            ];
+            $schoolYears[$key]['start'] = min($schoolYears[$key]['start'], $term['start']);
+            $schoolYears[$key]['end'] = max($schoolYears[$key]['end'], $term['end']);
+            $schoolYears[$key]['semesters'][] = [
+                'semester' => $term['semester'],
+                'start'    => $term['start'],
+                'end'      => $term['end'],
+            ];
+        }
+
+        // Newest School Year first for the picker.
+        $schoolYears = array_reverse(array_values($schoolYears));
+
+        // Reports filed before the earliest recorded School Year have no term
+        // to belong to; the picker offers them as "Earlier records".
+        $earliestStart = $terms[0]['start'] ?? null;
+        $hasEarlierReports = $earliestStart !== null
+            && Schema::hasTable('maintenance_reports')
+            && DB::table('maintenance_reports')->whereDate('created_at', '<', $earliestStart)->exists();
+
+        return $this->ok('Academic sessions retrieved', [
+            'archive_cutoff'      => $archive->cutoff(),
+            'school_years'        => $schoolYears,
+            'earliest_start'      => $earliestStart,
+            'has_earlier_reports' => $hasEarlierReports,
+        ]);
     }
 
     /**

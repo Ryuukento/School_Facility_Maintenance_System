@@ -128,6 +128,24 @@ class ReportService
      * Same-status resubmission is always allowed (idempotent PATCH). Throws
      * ValidationException on any other unlisted from -> to jump.
      */
+    /**
+     * Status a new report starts in. Nobody can create a report that is
+     * already finished (completed/closed/cancelled) — that would skip the
+     * workflow and the completion-proof requirement. Head Maintenance may
+     * start it directly as in_progress, but only with someone assigned;
+     * anything else starts as submitted.
+     */
+    private function resolveCreationStatus(array $validated, bool $canAssignAtCreation): string
+    {
+        $requested = strtolower((string) ($validated['status'] ?? 'submitted'));
+
+        if ($canAssignAtCreation && $requested === 'in_progress' && !empty($validated['assigned_to'])) {
+            return 'in_progress';
+        }
+
+        return 'submitted';
+    }
+
     public function assertValidStatusTransition(string $fromStatus, string $newStatus): void
     {
         if ($newStatus === $fromStatus) {
@@ -335,7 +353,7 @@ class ReportService
             ),
             'location' => $validated['location'] ?? null,
             'priority' => $validated['priority'] ?? 'medium',
-            'status' => $canAssignAtCreation ? ($validated['status'] ?? 'submitted') : 'submitted',
+            'status' => $this->resolveCreationStatus($validated, $canAssignAtCreation),
             'created_by' => (int)($authUser['user_id'] ?? 0),
             'assigned_to' => $canAssignAtCreation ? ($validated['assigned_to'] ?? null) : null,
             'department_id' => $validated['department_id'] ?? ($authUser['department_id'] ?? null),

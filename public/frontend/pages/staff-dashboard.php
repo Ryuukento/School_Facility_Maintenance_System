@@ -41,28 +41,18 @@ if (($user['role'] ?? '') !== 'maintenance_staff') {
 }
 
 $assignedReportsCount = 0;
-// TASK 101 — "the three dashboards that show a real building COUNT keep
-// their stat cards" (BuildingsOverviewNavigationAndHierarchicalSearchTest).
-// Restored alongside the TASK 13.x dispatch stat cards below; this is the
-// same read-only COUNT(*) query every other dashboard already runs for its
-// own buildings stat (super-admin-dashboard.php's buildingsOverview,
-// maintenance-dashboard.php's today-buildings-count).
-$buildingsCount = 0;
+// The Buildings Overview stat card (and the buildings count query behind it) and
+// the "My Open Reports" card were removed from this dashboard on request —
+// Buildings Overview is in the sidebar, and My Open Reports repeated the
+// Pending + In Progress cards beside it.
 
 try {
     $assignedStmt = $pdo->prepare("SELECT COUNT(*) FROM maintenance_reports WHERE assigned_to = ?");
     $assignedStmt->execute([(int)($user['user_id'] ?? 0)]);
     $assignedReportsCount = (int)$assignedStmt->fetchColumn();
-
-    $buildingsStmt = $pdo->query("SELECT COUNT(*) FROM buildings");
-    $buildingsCount = (int)$buildingsStmt->fetchColumn();
 } catch (Throwable $e) {
     // Keep dashboard usable even if queries fail.
 }
-// Sprint 2 / Feature 1: "Total Reports" (system-wide) was repurposed into
-// "My Open Reports" (pending + in_progress among this user's own assigned
-// reports), computed client-side in loadStaffDashboardData() from data
-// already fetched there — no new query needed here.
 $pageTitle = 'Staff Dashboard - School Facility Maintenance System';
 $pageStylesheets = [
     '/School_Facility_Maintenance_System/frontend/assets/css/maintenance-dashboard.css',
@@ -92,22 +82,6 @@ $pageStylesheets = [
                 <p class="stat-meta text-muted">Reports waiting on your action</p>
             </div>
             <div class="stat-icon-chip"><?php echo ui_icon('file-text', ['size' => 22]); ?></div>
-        </div>
-
-        <!-- TASK 101 — "the three dashboards that show a real building COUNT
-             keep their stat cards" (BuildingsOverviewNavigationAndHierarchicalSearchTest).
-             This card displays data (a live COUNT(*) from buildings), rather
-             than merely linking to the Buildings Overview sidebar module, so
-             it was deliberately kept even after that module moved out of the
-             dashboards. Same component and click-delegation pattern as every
-             other card in this grid. -->
-        <div class="stat-card stat-card-total stat-card-clickable" role="button" tabindex="0" data-href="/School_Facility_Maintenance_System/frontend/pages/buildings-overview.php" aria-label="Open buildings overview">
-            <div class="stat-content">
-                <p class="stat-label">Buildings overview</p>
-                <h3 class="stat-value" id="my-buildings"><?php echo (int)$buildingsCount; ?></h3>
-                <p class="stat-meta text-muted">Tracked buildings in the system</p>
-            </div>
-            <div class="stat-icon-chip"><?php echo ui_icon('building', ['size' => 22]); ?></div>
         </div>
 
         <!-- TASK 13.1 §4 — "My Pending Releases". Reuses the existing stat-card
@@ -141,15 +115,6 @@ $pageStylesheets = [
             <div class="stat-icon-chip"><?php echo ui_icon('package', ['size' => 22]); ?></div>
         </div>
 
-        <div class="stat-card stat-card-total stat-card-clickable" role="button" tabindex="0" data-href="/School_Facility_Maintenance_System/frontend/pages/reports.php?status_group=assigned_to_me" aria-label="Open my open reports">
-            <div class="stat-content">
-                <p class="stat-label">My Open Reports</p>
-                <h3 class="stat-value" id="total-reports">0</h3>
-                <p class="stat-meta text-muted">Assigned to you, not yet completed</p>
-            </div>
-            <div class="stat-icon-chip"><?php echo ui_icon('bar-chart', ['size' => 22]); ?></div>
-        </div>
-
         <div class="stat-card stat-card-pending stat-card-clickable" role="button" tabindex="0" data-href="/School_Facility_Maintenance_System/frontend/pages/reports.php?status=submitted" aria-label="Open pending reports">
             <div class="stat-content">
                 <p class="stat-label">Pending</p>
@@ -178,29 +143,82 @@ $pageStylesheets = [
         </div>
     </div>
 
+    <!-- Reports by Status / Reports by Priority — the same SVG ring + breakdown
+         component as the Head dashboard's overview cards (shared
+         dashboard-overview.css / dashboard-overview.js). Every ring segment
+         and breakdown row links to All Reports filtered by its bucket, so the
+         cards themselves are no longer one big click target. -->
     <div class="charts-section">
-        <div class="card chart-card status-chart-card chart-card-clickable" role="button" tabindex="0" data-href="/School_Facility_Maintenance_System/frontend/pages/reports.php" aria-label="Open reports by status">
+        <div class="card chart-card overview-chart-card" id="staff-status-card">
             <div class="card-header">
-                <div class="status-chart-head-row">
-                    <h2>Reports by Status</h2>
-                </div>
-                <p class="text-muted mb-0">Current distribution of report statuses.</p>
+                <h2>Reports by Status</h2>
+                <p class="text-muted mb-0" id="staff-status-scope">Loading&hellip;</p>
             </div>
-            <div class="card-body status-chart-body">
-                <div style="position:relative;height:280px;">
-                    <canvas id="statusChart" class="chart-canvas" style="display:block;width:100%;height:280px;"></canvas>
+            <div class="hd-overview-body">
+                <div class="hd-donut" id="staff-status-donut" role="img" aria-label="Status breakdown">
+                    <svg class="hd-donut-svg" viewBox="0 0 120 120" aria-hidden="true">
+                        <circle class="hd-donut-track" cx="60" cy="60" r="48"></circle>
+                        <g class="hd-donut-segments"></g>
+                    </svg>
+                    <div class="hd-donut-center">
+                        <span class="hd-donut-total" id="staff-status-total">0</span>
+                        <span class="hd-donut-caption">reports</span>
+                    </div>
+                </div>
+                <div class="hd-overview-side">
+                    <div class="hd-breakdown">
+                        <?php foreach (['submitted' => 'Submitted', 'in_progress' => 'In Progress', 'completed' => 'Completed'] as $key => $label): $slug = str_replace('_', '-', $key); ?>
+                        <a class="hd-breakdown-row" href="/School_Facility_Maintenance_System/frontend/pages/reports.php?status=<?php echo $key; ?>">
+                            <span class="hd-breakdown-dot hd-dot-<?php echo $slug; ?>"></span>
+                            <span class="hd-breakdown-label"><?php echo $label; ?></span>
+                            <strong class="hd-breakdown-count" id="staff-status-<?php echo $slug; ?>">0</strong>
+                            <span class="hd-breakdown-pct" id="staff-status-<?php echo $slug; ?>-pct">0%</span>
+                            <span class="hd-breakdown-track"><span class="hd-breakdown-fill hd-dot-<?php echo $slug; ?>" id="staff-status-<?php echo $slug; ?>-bar"></span></span>
+                        </a>
+                        <?php endforeach; ?>
+                    </div>
+                    <div class="hd-summary-panel">
+                        <span class="hd-summary-label">Completion rate</span>
+                        <strong class="hd-summary-value" id="staff-completion-rate">0%</strong>
+                        <span class="hd-summary-text" id="staff-completion-text">No reports yet.</span>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <div class="card chart-card priority-chart-card chart-card-clickable" role="button" tabindex="0" data-href="/School_Facility_Maintenance_System/frontend/pages/reports.php" aria-label="Open reports by priority">
+        <div class="card chart-card overview-chart-card" id="staff-priority-card">
             <div class="card-header">
                 <h2>Reports by Priority</h2>
-                <p class="text-muted mb-0">Priority levels across assigned reports.</p>
+                <p class="text-muted mb-0" id="staff-priority-scope">Loading&hellip;</p>
             </div>
-            <div class="card-body">
-                <div style="position:relative;height:280px;">
-                    <canvas id="priorityChart" class="chart-canvas" style="display:block;width:100%;height:280px;"></canvas>
+            <div class="hd-overview-body">
+                <div class="hd-donut" id="staff-priority-donut" role="img" aria-label="Priority breakdown">
+                    <svg class="hd-donut-svg" viewBox="0 0 120 120" aria-hidden="true">
+                        <circle class="hd-donut-track" cx="60" cy="60" r="48"></circle>
+                        <g class="hd-donut-segments"></g>
+                    </svg>
+                    <div class="hd-donut-center">
+                        <span class="hd-donut-total" id="staff-priority-total">0</span>
+                        <span class="hd-donut-caption">reports</span>
+                    </div>
+                </div>
+                <div class="hd-overview-side">
+                    <div class="hd-breakdown">
+                        <?php foreach (['critical' => 'Critical', 'high' => 'High', 'medium' => 'Medium', 'low' => 'Low'] as $key => $label): ?>
+                        <a class="hd-breakdown-row" href="/School_Facility_Maintenance_System/frontend/pages/reports.php?priority=<?php echo $key; ?>">
+                            <span class="hd-breakdown-dot hd-dot-<?php echo $key; ?>"></span>
+                            <span class="hd-breakdown-label"><?php echo $label; ?></span>
+                            <strong class="hd-breakdown-count" id="staff-priority-<?php echo $key; ?>">0</strong>
+                            <span class="hd-breakdown-pct" id="staff-priority-<?php echo $key; ?>-pct">0%</span>
+                            <span class="hd-breakdown-track"><span class="hd-breakdown-fill hd-dot-<?php echo $key; ?>" id="staff-priority-<?php echo $key; ?>-bar"></span></span>
+                        </a>
+                        <?php endforeach; ?>
+                    </div>
+                    <div class="hd-summary-panel" id="staff-attention-panel">
+                        <span class="hd-summary-label" id="staff-attention-label">Needs attention</span>
+                        <strong class="hd-summary-value" id="staff-attention-value">0</strong>
+                        <span class="hd-summary-text" id="staff-attention-text">No reports yet.</span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -211,6 +229,9 @@ $pageStylesheets = [
 
 <link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/staff-dashboard.inline.css?v=20260921-2">
 <link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/enterprise-dashboard.css?v=20260726-1">
+<!-- Reports by Status / Priority ring + breakdown component, shared with
+     maintenance-dashboard.php. -->
+<link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/dashboard-overview.css?v=20260926-1">
 <!-- TASK — Subtle purple card-border accent. One shared stylesheet for all
      three dashboards; recolours existing 1px borders only, so no card
      changes size. Loaded last. -->
@@ -227,6 +248,13 @@ $pageStylesheets = [
     display: flex;
     flex-direction: column;
     gap: 1px;
+}
+
+/* The line is meant to stay hidden until there is an assignment code to show
+   (see loadStaffPendingReleases()); `display: flex` above was overriding the
+   `hidden` attribute, so "LATEST ASSIGNMENT" appeared with nothing under it. */
+.staff-dashboard-page .stat-meta-latest[hidden] {
+    display: none;
 }
 
 .staff-dashboard-page .stat-meta-latest-label {
@@ -253,9 +281,28 @@ $pageStylesheets = [
     outline: 2px solid rgba(167, 139, 250, 0.9);
     outline-offset: 2px;
 }
+
+/* Five stat cards now (Buildings Overview and My Open Reports were removed),
+   so one row of five on wide screens instead of 3 + 2. The existing
+   staff-dashboard.inline.css breakpoints still take over below 992px (two
+   columns) and 640px (one column). */
+@media (min-width: 1281px) {
+    .staff-dashboard-page .stats-grid {
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+    }
+}
+
+/* Overview cards: header on top, ring + breakdown filling the rest, so the
+   two cards stay the same height side by side. */
+.staff-dashboard-page .overview-chart-card {
+    display: flex;
+    flex-direction: column;
+}
 </style>
 
 <?php include __DIR__ . '/../includes/footer.php'; ?>
+<!-- renderDonut() / setBreakdownRow() for the Reports by Status / Priority cards. -->
+<script src="/School_Facility_Maintenance_System/frontend/assets/js/dashboard-overview.js?v=20260926-1"></script>
 
 <script>
 
@@ -331,8 +378,6 @@ function onDashboardMonthSelected(event) {
     loadStaffDashboardData();
 }
 
-let staffStatusChart = null;
-let staffPriorityChart = null;
 const currentStaffUserId = <?php echo $currentUserId; ?>;
 
 window.UI = window.UI || {
@@ -368,43 +413,6 @@ window.UI = window.UI || {
     }
 };
 
-function refreshStaffChartsForTheme() {
-    const isLightMode = document.documentElement.getAttribute('data-theme-resolved') === 'light';
-    const chartMutedText = isLightMode ? '#374151' : '#94a3b8';
-    const chartGridY = isLightMode ? 'rgba(17, 24, 39, 0.12)' : 'rgba(148, 163, 184, 0.35)';
-    const chartGridX = isLightMode ? 'rgba(17, 24, 39, 0.08)' : 'rgba(148, 163, 184, 0.25)';
-    const doughnutBorder = isLightMode ? '#ffffff' : '#0f172a';
-
-    if (staffStatusChart) {
-        const dataset = staffStatusChart.data?.datasets?.[0];
-        if (dataset) {
-            dataset.borderColor = doughnutBorder;
-        }
-        staffStatusChart.update('none');
-        requestAnimationFrame(() => {
-            if (!staffStatusChart) return;
-            staffStatusChart.render();
-            staffStatusChart.update('none');
-        });
-    }
-
-    if (staffPriorityChart) {
-        if (staffPriorityChart.options?.scales?.y?.ticks) {
-            staffPriorityChart.options.scales.y.ticks.color = chartMutedText;
-        }
-        if (staffPriorityChart.options?.scales?.y?.grid) {
-            staffPriorityChart.options.scales.y.grid.color = chartGridY;
-        }
-        if (staffPriorityChart.options?.scales?.x?.ticks) {
-            staffPriorityChart.options.scales.x.ticks.color = chartMutedText;
-        }
-        if (staffPriorityChart.options?.scales?.x?.grid) {
-            staffPriorityChart.options.scales.x.grid.color = chartGridX;
-        }
-        staffPriorityChart.update('none');
-    }
-}
-
 // ========== LOAD STAFF DASHBOARD DATA WITH MONTH/YEAR =============
 async function loadStaffDashboardData() {
     try {
@@ -423,11 +431,6 @@ async function loadStaffDashboardData() {
         document.getElementById('my-pending').textContent = pending;
         document.getElementById('my-in-progress').textContent = inProgress;
         document.getElementById('my-completed').textContent = completed;
-        // "My Open Reports" (Sprint 2 / Feature 1) = assigned-to-me reports not yet completed.
-        const openReportsEl = document.getElementById('total-reports');
-        if (openReportsEl) {
-            openReportsEl.textContent = pending + inProgress;
-        }
     } catch (error) {
         console.error('Failed to load staff dashboard data', error);
     }
@@ -477,6 +480,15 @@ async function loadStaffPendingReleases() {
 
 
 
+// Human-readable month for the card subtitles ("September 2026").
+function formatSelectedMonthLabel() {
+    return new Date(selectedYear, selectedMonth - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+}
+
+// Data sources are unchanged: the selected month's reports of this staff
+// member (created by or assigned to them — maintenanceCharts()' personal
+// scope), falling back to the all-reports list when that month is empty. The
+// card subtitles now say which of the two is on screen.
 async function loadStaffChartData() {
     try {
         const response = await fetch(
@@ -497,7 +509,7 @@ async function loadStaffChartData() {
             return;
         }
 
-        initializeStaffCharts(chartData.data);
+        initializeStaffCharts(chartData.data, `Your reports filed in ${formatSelectedMonthLabel()}`);
     } catch (error) {
         console.error('Failed to load staff chart data', error);
         await _loadStaffChartFromReports();
@@ -539,20 +551,23 @@ async function _loadStaffChartFromReports() {
                 labels: ['low', 'medium', 'high', 'critical'],
                 values: [priorities.low, priorities.medium, priorities.high, priorities.critical],
             },
-        });
+        }, `All reports — none of yours in ${formatSelectedMonthLabel()}`);
     } catch (e) {
         console.error('Failed to load all-time staff chart data', e);
     }
 }
 
-function initializeStaffCharts(data) {
-    const isLightMode = document.documentElement.getAttribute('data-theme-resolved') === 'light';
-    const chartPrimaryText = isLightMode ? '#111827' : '#f8fafc';
-    const chartMutedText = isLightMode ? '#374151' : '#94a3b8';
-    const chartGridY = isLightMode ? 'rgba(17, 24, 39, 0.12)' : 'rgba(148, 163, 184, 0.35)';
-    const chartGridX = isLightMode ? 'rgba(17, 24, 39, 0.08)' : 'rgba(148, 163, 184, 0.25)';
-    const doughnutBorder = isLightMode ? '#ffffff' : '#0f172a';
+function initializeStaffCharts(data, scopeLabel) {
+    const setText = (id, value) => {
+        const element = document.getElementById(id);
+        if (element) element.textContent = value;
+    };
 
+    setText('staff-status-scope', scopeLabel);
+    setText('staff-priority-scope', scopeLabel);
+
+    // -- Reports by Status: Submitted (incl. assigned/draft), In Progress,
+    //    Completed (incl. closed) — same buckets as before.
     const statusLabelsRaw = Array.isArray(data?.status_data?.labels) ? data.status_data.labels : [];
     const statusValuesRaw = Array.isArray(data?.status_data?.values) ? data.status_data.values : [];
     const statusTotals = { submitted: 0, in_progress: 0, completed: 0 };
@@ -563,106 +578,33 @@ function initializeStaffCharts(data) {
 
         if (normalized === 'submitted' || normalized === 'assigned' || normalized === 'draft') {
             statusTotals.submitted += value;
-            return;
-        }
-
-        if (normalized === 'in_progress') {
+        } else if (normalized === 'in_progress') {
             statusTotals.in_progress += value;
-            return;
-        }
-
-        if (normalized === 'completed' || normalized === 'closed') {
+        } else if (normalized === 'completed' || normalized === 'closed') {
             statusTotals.completed += value;
         }
     });
 
-    const statusDataset = [statusTotals.submitted, statusTotals.in_progress, statusTotals.completed];
-    const statusTotal = statusDataset.reduce((sum, value) => sum + value, 0);
+    const statusTotal = statusTotals.submitted + statusTotals.in_progress + statusTotals.completed;
+    setBreakdownRow('staff-status-submitted', statusTotals.submitted, statusTotal);
+    setBreakdownRow('staff-status-in-progress', statusTotals.in_progress, statusTotal);
+    setBreakdownRow('staff-status-completed', statusTotals.completed, statusTotal);
+    setText('staff-status-total', statusTotal);
 
-    const statusCenterTextPlugin = {
-        id: 'statusCenterTextPlugin',
-        afterDatasetsDraw(chart) {
-            const meta = chart.getDatasetMeta(0);
-            if (!meta || !meta.data || !meta.data.length) {
-                return;
-            }
+    const completionRate = statusTotal > 0 ? Math.round((statusTotals.completed / statusTotal) * 100) : 0;
+    setText('staff-completion-rate', `${completionRate}%`);
+    setText('staff-completion-text', statusTotal > 0
+        ? `${statusTotals.completed} of ${statusTotal} report${statusTotal !== 1 ? 's' : ''} completed.`
+        : 'No reports yet.');
 
-            const point = meta.data[0];
-            const x = point.x;
-            const y = point.y;
-            const ctx = chart.ctx;
-            const currentIsLightMode = document.documentElement.getAttribute('data-theme-resolved') === 'light';
-            const centerTextColor = currentIsLightMode ? '#111827' : '#f8fafc';
-            const centerMutedColor = currentIsLightMode ? '#374151' : '#94a3b8';
+    const statusUrl = '/School_Facility_Maintenance_System/frontend/pages/reports.php?status=';
+    renderDonut('staff-status-donut', [
+        { key: 'submitted', label: 'Submitted', value: statusTotals.submitted, href: statusUrl + 'submitted' },
+        { key: 'in-progress', label: 'In Progress', value: statusTotals.in_progress, href: statusUrl + 'in_progress' },
+        { key: 'completed', label: 'Completed', value: statusTotals.completed, href: statusUrl + 'completed' }
+    ]);
 
-            ctx.save();
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-
-            ctx.font = '700 28px "Segoe UI", sans-serif';
-            ctx.fillStyle = centerTextColor;
-            ctx.fillText(String(statusTotal), x, y - 7);
-
-            ctx.font = '500 13px "Segoe UI", sans-serif';
-            ctx.fillStyle = centerMutedColor;
-            ctx.fillText('total', x, y + 15);
-            ctx.restore();
-        }
-    };
-
-    const statusCanvas = document.getElementById('statusChart');
-    if (statusCanvas) {
-        const statusCtx = statusCanvas.getContext('2d');
-        if (staffStatusChart) {
-            staffStatusChart.destroy();
-        }
-
-        staffStatusChart = new Chart(statusCtx, {
-            type: 'doughnut',
-            plugins: [statusCenterTextPlugin],
-            data: {
-                labels: ['Submitted', 'In Progress', 'Completed'],
-                datasets: [{
-                    data: statusDataset,
-                    backgroundColor: ['#3b82f6', '#8b5cf6', '#10b981'],
-                    borderColor: doughnutBorder,
-                    borderWidth: 2,
-                    hoverOffset: 3,
-                    spacing: 2
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                cutout: '68%',
-                radiusScale: 1.15,
-                plugins: {
-                    legend: {
-                        position: 'right',
-                        align: 'center',
-                        labels: {
-                            color: chartMutedText,
-                            usePointStyle: true,
-                            pointStyle: 'circle',
-                            boxWidth: 10,
-                            boxHeight: 10,
-                            padding: 16,
-                            font: {
-                                size: 14,
-                                weight: '600'
-                            }
-                        }
-                    },
-                    tooltip: {
-                        callbacks: {
-                            label: (context) => ` ${context.formattedValue} report${Number(context.formattedValue) !== 1 ? 's' : ''}`
-                        }
-                    }
-                }
-            }
-        });
-    }
-
+    // -- Reports by Priority ('urgent' folds into Critical, as before).
     const priorityLabelsRaw = Array.isArray(data?.priority_data?.labels) ? data.priority_data.labels : [];
     const priorityValuesRaw = Array.isArray(data?.priority_data?.values) ? data.priority_data.values : [];
     const priorityTotals = { low: 0, medium: 0, high: 0, critical: 0 };
@@ -670,96 +612,38 @@ function initializeStaffCharts(data) {
     priorityLabelsRaw.forEach((label, index) => {
         const normalized = String(label || '').trim().toLowerCase();
         const value = Number(priorityValuesRaw[index] || 0);
-
-        if (normalized === 'low') {
-            priorityTotals.low += value;
-            return;
-        }
-
-        if (normalized === 'medium') {
-            priorityTotals.medium += value;
-            return;
-        }
-
-        if (normalized === 'high') {
-            priorityTotals.high += value;
-            return;
-        }
-
-        if (normalized === 'critical' || normalized === 'urgent') {
-            priorityTotals.critical += value;
+        const bucket = normalized === 'urgent' ? 'critical' : normalized;
+        if (priorityTotals[bucket] !== undefined) {
+            priorityTotals[bucket] += value;
         }
     });
 
-    const priorityCanvas = document.getElementById('priorityChart');
-    if (priorityCanvas) {
-        const priorityCtx = priorityCanvas.getContext('2d');
-        if (staffPriorityChart) {
-            staffPriorityChart.destroy();
-        }
+    const priorityTotal = priorityTotals.critical + priorityTotals.high + priorityTotals.medium + priorityTotals.low;
+    ['critical', 'high', 'medium', 'low'].forEach((key) => {
+        setBreakdownRow(`staff-priority-${key}`, priorityTotals[key], priorityTotal);
+    });
+    setText('staff-priority-total', priorityTotal);
 
-        staffPriorityChart = new Chart(priorityCtx, {
-            type: 'bar',
-            data: {
-                labels: ['Low', 'Medium', 'High', 'Critical'],
-                datasets: [{
-                    label: 'Reports',
-                    data: [priorityTotals.low, priorityTotals.medium, priorityTotals.high, priorityTotals.critical],
-                    backgroundColor: ['#94a3b8', '#3b82f6', '#f59e0b', '#991b1b'],
-                    borderRadius: 6,
-                    barThickness: 64,
-                    maxBarThickness: 72
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                onClick: (event, elements) => {
-                    if (!elements || !elements.length) {
-                        return;
-                    }
-
-                    const idx = elements[0].index;
-                    const priorities = ['low', 'medium', 'high', 'critical'];
-                    const priority = priorities[idx];
-                    if (!priority) {
-                        return;
-                    }
-
-                    window.location.href = `/School_Facility_Maintenance_System/frontend/pages/reports.php?priority=${encodeURIComponent(priority)}`;
-                },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        ticks: {
-                            precision: 0,
-                            stepSize: 2,
-                            color: chartMutedText
-                        },
-                        grid: {
-                            color: chartGridY,
-                            drawBorder: false
-                        }
-                    },
-                    x: {
-                        ticks: { color: chartMutedText },
-                        grid: {
-                            color: chartGridX,
-                            drawBorder: false
-                        }
-                    }
-                },
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        callbacks: {
-                            label: (context) => ` ${context.parsed.y} report${context.parsed.y !== 1 ? 's' : ''}`
-                        }
-                    }
-                }
-            }
-        });
+    // Footer: how many Critical + High reports should be handled first.
+    const urgentCount = priorityTotals.critical + priorityTotals.high;
+    const attentionPanel = document.getElementById('staff-attention-panel');
+    if (attentionPanel) {
+        attentionPanel.classList.toggle('hd-summary-panel--alert', urgentCount > 0);
+        attentionPanel.classList.toggle('hd-summary-panel--clear', urgentCount === 0 && priorityTotal > 0);
     }
+    setText('staff-attention-label', urgentCount > 0 ? 'Needs attention' : (priorityTotal > 0 ? 'All clear' : 'No reports'));
+    setText('staff-attention-value', urgentCount);
+    setText('staff-attention-text', urgentCount > 0
+        ? `${urgentCount} Critical/High report${urgentCount !== 1 ? 's' : ''} should be handled first.`
+        : (priorityTotal > 0 ? 'No Critical or High priority reports.' : 'No reports yet.'));
+
+    const priorityUrl = '/School_Facility_Maintenance_System/frontend/pages/reports.php?priority=';
+    renderDonut('staff-priority-donut', ['critical', 'high', 'medium', 'low'].map((key) => ({
+        key,
+        label: key.charAt(0).toUpperCase() + key.slice(1),
+        value: priorityTotals[key],
+        href: priorityUrl + key
+    })));
 }
 
 function initializeClickableCards() {
@@ -787,17 +671,6 @@ document.addEventListener('DOMContentLoaded', () => {
     loadStaffChartData();
     initializeClickableCards();
 
-    const root = document.documentElement;
-    const themeObserver = new MutationObserver((mutations) => {
-        const changedTheme = mutations.some((mutation) => mutation.type === 'attributes' && mutation.attributeName === 'data-theme-resolved');
-        if (changedTheme) {
-            refreshStaffChartsForTheme();
-            setTimeout(() => {
-                refreshStaffChartsForTheme();
-            }, 60);
-        }
-    });
-    themeObserver.observe(root, { attributes: true, attributeFilter: ['data-theme-resolved'] });
 });
 
 </script>

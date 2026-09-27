@@ -1143,3 +1143,57 @@
 :root:not([data-theme-resolved='light']) .users-card-designation-text {
     color: #f1f5f9;
 }
+
+/* Show/hide password eye (Add New User + Reset Password dialogs). The button
+   used to carry an inline near-white color (rgba(248,244,255,0.82)) meant for
+   the dark theme, which made it invisible on the white light-theme input, and
+   a hard-coded top offset that only lined up by coincidence with the label
+   height. It now sits in a wrapper around just the input, so it is always
+   vertically centred on it, and takes a color per theme. */
+.users-password-wrap {
+    position: relative;
+}
+
+.users-password-wrap .users-modal-input {
+    padding-right: 46px;
+}
+
+.users-password-toggle {
+    position: absolute;
+    top: 50%;
+    right: 8px;
+    transform: translateY(-50%);
+    width: 32px;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: #cbd5e1;
+    cursor: pointer;
+    transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.users-password-toggle:hover,
+.users-password-toggle[aria-pressed='true'] {
+    color: #c084fc;
+    background: rgba(192, 132, 252, 0.12);
+}
+
+.users-password-toggle:focus-visible {
+    outline: 2px solid #c084fc;
+    outline-offset: 1px;
+}
+
+:root[data-theme-resolved='light'] .users-password-toggle {
+    color: #6b7280;
+}
+
+:root[data-theme-resolved='light'] .users-password-toggle:hover,
+:root[data-theme-resolved='light'] .users-password-toggle[aria-pressed='true'] {
+    color: #7c3aed;
+    background: rgba(124, 58, 237, 0.08);
+}

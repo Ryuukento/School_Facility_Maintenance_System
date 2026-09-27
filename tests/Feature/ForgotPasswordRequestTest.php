@@ -310,6 +310,22 @@ class ForgotPasswordRequestTest extends TestCase
         $response->assertOk();
     }
 
+    /**
+     * 2026-09-27 — the self-service "reset code" endpoint was never usable
+     * (nothing issued a code) and was removed. Resetting a password is done
+     * by the Administrator after this request.
+     */
+    public function test_the_unused_reset_code_endpoint_is_gone(): void
+    {
+        $status = $this->postJson('/api/auth/forgot_password_reset', [
+            'email' => 'someone@example.com',
+            'reset_code' => '123456',
+            'password' => 'NewPassword123',
+        ])->status();
+
+        $this->assertContains($status, [404, 405]);
+    }
+
     // ---------------------------------------------------------------
     // Helpers.
     // ---------------------------------------------------------------

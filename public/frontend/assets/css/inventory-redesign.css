@@ -559,11 +559,22 @@ main.inventory-page .inventory-pagination-summary strong {
     color: var(--inventory-text);
 }
 
+/* list-style/margin/padding reset: the canonical .pagination-list rule that
+   normally removes the <ul>'s bullets lives in design-system-components.css,
+   which this page does not load — without it every page button showed a
+   stray bullet dot beside it. */
 main.inventory-page .inventory-pagination-controls {
     display: flex;
     align-items: center;
     gap: 8px;
     flex-wrap: wrap;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+main.inventory-page .inventory-pagination-controls > li {
+    list-style: none;
 }
 
 /* Self-contained button styling: inventory.php does not load

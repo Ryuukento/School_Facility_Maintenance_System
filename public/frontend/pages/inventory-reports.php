@@ -1286,6 +1286,23 @@ include __DIR__ . '/../includes/header.php';
     .ir-sem-filters .ir-field-action { width: 100%; }
     .ir-sem-filters .ir-field-action .btn { width: 100%; }
 }
+
+/* Phones: the section menu wraps into a 2-column grid so every section is
+   visible at once, instead of a sideways strip whose hidden scrollbar gave no
+   hint that more sections were off-screen. */
+@media (max-width: 640px) {
+    .ir-nav {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        overflow-x: visible;
+    }
+    .ir-menu-btn {
+        width: 100%;
+        white-space: normal;
+        justify-content: flex-start;
+        text-align: left;
+    }
+}
 </style>
 
 <main class="container ir-page">

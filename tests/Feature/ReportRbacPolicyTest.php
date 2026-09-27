@@ -119,7 +119,9 @@ class ReportRbacPolicyTest extends TestCase
     public function test_maintenance_staff_can_update_status_of_a_report_assigned_to_them(): void
     {
         $staffId = $this->seedUser(['role' => 'maintenance_staff']);
-        $reportId = $this->seedReport(['created_by' => $staffId, 'assigned_to' => $staffId, 'status' => 'in_progress']);
+        $reportId = $this->seedReport(['created_by' => $staffId, 'assigned_to' => $staffId, 'status' => 'in_progress',
+            'completion_proof_image' => '/frontend/uploads/completion-proofs/test-proof.jpg', // 2026-09-27: completing requires proof
+        ]);
 
         $this
             ->actingAsSessionUser($staffId, 'maintenance_staff')
@@ -141,6 +143,113 @@ class ReportRbacPolicyTest extends TestCase
             ->assertStatus(403);
 
         $this->assertSame('in_progress', DB::table('maintenance_reports')->where('report_id', $reportId)->value('status'));
+    }
+
+    // ---------------------------------------------------------------
+    // 2026-09-27 — rules the detail page enforced, now enforced by the API
+    // ---------------------------------------------------------------
+
+    public function test_completing_requires_a_completion_proof_image(): void
+    {
+        $staffId = $this->seedUser(['role' => 'maintenance_staff']);
+        $reportId = $this->seedReport(['assigned_to' => $staffId, 'status' => 'in_progress']);
+
+        $this
+            ->actingAsSessionUser($staffId, 'maintenance_staff')
+            ->patchJson("/api/reports/{$reportId}", ['status' => 'completed'])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Please upload a completion proof image before marking this report as completed.');
+
+        $this->assertSame('in_progress', DB::table('maintenance_reports')->where('report_id', $reportId)->value('status'));
+    }
+
+    public function test_assigned_status_requires_someone_assigned(): void
+    {
+        $headId = $this->seedUser(['role' => 'maintenance_admin']);
+        $reportId = $this->seedReport(['status' => 'submitted']);
+
+        $this
+            ->actingAsSessionUser($headId, 'maintenance_admin')
+            ->patchJson("/api/reports/{$reportId}", ['status' => 'assigned'])
+            ->assertStatus(422);
+
+        $this->assertSame('submitted', DB::table('maintenance_reports')->where('report_id', $reportId)->value('status'));
+    }
+
+    public function test_head_cannot_create_a_report_that_is_already_finished(): void
+    {
+        $headId = $this->seedUser(['role' => 'maintenance_admin']);
+
+        $this
+            ->actingAsSessionUser($headId, 'maintenance_admin')
+            ->postJson('/api/reports', [
+                'problem_type' => 'Electrical',
+                'title' => 'Already Fixed',
+                'description' => 'Skipping the workflow.',
+                'location' => 'Room 210',
+                'status' => 'completed',
+            ])
+            ->assertStatus(201);
+
+        $this->assertSame('submitted', DB::table('maintenance_reports')->where('created_by', $headId)->value('status'));
+    }
+
+    public function test_head_cannot_create_an_in_progress_report_without_an_assignee(): void
+    {
+        $headId = $this->seedUser(['role' => 'maintenance_admin']);
+
+        $this
+            ->actingAsSessionUser($headId, 'maintenance_admin')
+            ->postJson('/api/reports', [
+                'problem_type' => 'Electrical',
+                'title' => 'Nobody On It',
+                'description' => 'In progress with nobody assigned.',
+                'location' => 'Room 211',
+                'status' => 'in_progress',
+            ])
+            ->assertStatus(201);
+
+        $this->assertSame('submitted', DB::table('maintenance_reports')->where('created_by', $headId)->value('status'));
+    }
+
+    public function test_only_a_submitted_report_can_be_deleted(): void
+    {
+        $staffId = $this->seedUser(['role' => 'maintenance_staff']);
+        $startedId = $this->seedReport(['created_by' => $staffId, 'assigned_to' => $staffId, 'status' => 'in_progress']);
+        $freshId = $this->seedReport(['created_by' => $staffId, 'status' => 'submitted']);
+
+        $this
+            ->actingAsSessionUser($staffId, 'maintenance_staff')
+            ->deleteJson("/api/reports/{$startedId}")
+            ->assertStatus(422);
+        $this->assertTrue(DB::table('maintenance_reports')->where('report_id', $startedId)->exists());
+
+        $this
+            ->actingAsSessionUser($staffId, 'maintenance_staff')
+            ->deleteJson("/api/reports/{$freshId}")
+            ->assertOk();
+        $this->assertFalse(DB::table('maintenance_reports')->where('report_id', $freshId)->exists());
+    }
+
+    public function test_administrator_can_cancel_but_not_work_a_report(): void
+    {
+        $adminId = $this->seedUser(['role' => 'super_admin']);
+        $staffId = $this->seedUser(['role' => 'maintenance_staff']);
+        $reportId = $this->seedReport(['status' => 'submitted']);
+
+        foreach (['assigned', 'in_progress'] as $status) {
+            $this
+                ->actingAsSessionUser($adminId, 'super_admin')
+                ->patchJson("/api/reports/{$reportId}", ['status' => $status, 'assigned_to' => $staffId])
+                ->assertStatus(403);
+        }
+        $this->assertSame('submitted', DB::table('maintenance_reports')->where('report_id', $reportId)->value('status'));
+
+        $this
+            ->actingAsSessionUser($adminId, 'super_admin')
+            ->patchJson("/api/reports/{$reportId}", ['status' => 'cancelled'])
+            ->assertOk();
+        $this->assertSame('cancelled', DB::table('maintenance_reports')->where('report_id', $reportId)->value('status'));
     }
 
     private function createTestSchema(): void

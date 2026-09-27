@@ -114,10 +114,44 @@ class UserManagementAuthorizationTest extends TestCase
 
         $response = $this
             ->actingAsSessionUser($adminId, 'super_admin')
-            ->patchJson("/api/users/{$pendingId}/approve", ['role' => 'maintenance_admin']);
+            ->patchJson("/api/users/{$pendingId}/approve", ['role' => 'maintenance_admin', 'department_id' => $this->seedDepartment('Electrical')]);
 
         $response->assertOk();
         $this->assertSame('active', DB::table('users')->where('user_id', $pendingId)->value('status'));
+    }
+
+    public function test_approval_requires_choosing_a_department(): void
+    {
+        // 2026-09-27 — self-registration cannot know the department, and
+        // report/dispatch permissions are department-based, so the
+        // Administrator must choose it when approving.
+        $adminId = $this->seedUser(['role' => 'super_admin']);
+        $pendingId = $this->seedUser(['role' => 'user', 'status' => 'pending']);
+
+        $this
+            ->actingAsSessionUser($adminId, 'super_admin')
+            ->patchJson("/api/users/{$pendingId}/approve", ['role' => 'maintenance_staff'])
+            ->assertStatus(422);
+
+        $this->assertSame('pending', DB::table('users')->where('user_id', $pendingId)->value('status'));
+    }
+
+    public function test_approval_saves_the_chosen_department(): void
+    {
+        $adminId = $this->seedUser(['role' => 'super_admin']);
+        $computerId = $this->seedDepartment('Computer');
+        $plumbingId = $this->seedDepartment('Plumbing');
+        $pendingId = $this->seedUser(['role' => 'user', 'status' => 'pending', 'department_id' => $computerId]);
+
+        $this
+            ->actingAsSessionUser($adminId, 'super_admin')
+            ->patchJson("/api/users/{$pendingId}/approve", ['role' => 'maintenance_staff', 'department_id' => $plumbingId])
+            ->assertOk();
+
+        $row = DB::table('users')->where('user_id', $pendingId)->first();
+        $this->assertSame('active', $row->status);
+        $this->assertSame('maintenance_staff', $row->role);
+        $this->assertSame($plumbingId, (int) $row->department_id);
     }
 
     public function test_maintenance_admin_cannot_approve_a_pending_user(): void
@@ -636,7 +670,7 @@ class UserManagementAuthorizationTest extends TestCase
 
         $response = $this
             ->actingAsSessionUser($adminId, 'super_admin')
-            ->patchJson("/api/users/{$inactiveId}/approve", ['role' => 'maintenance_admin']);
+            ->patchJson("/api/users/{$inactiveId}/approve", ['role' => 'maintenance_admin', 'department_id' => $this->seedDepartment('Electrical')]);
 
         $response->assertStatus(400);
         $this->assertSame('inactive', DB::table('users')->where('user_id', $inactiveId)->value('status'));
@@ -658,7 +692,7 @@ class UserManagementAuthorizationTest extends TestCase
 
         $response = $this
             ->actingAsSessionUser($adminId, 'super_admin')
-            ->patchJson("/api/users/{$targetSuperAdminId}/approve", ['role' => 'maintenance_admin']);
+            ->patchJson("/api/users/{$targetSuperAdminId}/approve", ['role' => 'maintenance_admin', 'department_id' => $this->seedDepartment('Electrical')]);
 
         $response->assertStatus(400);
         $this->assertSame('super_admin', DB::table('users')->where('user_id', $targetSuperAdminId)->value('role'));

@@ -56,12 +56,12 @@ class CrossDepartmentAssignmentWarningTest extends TestCase
 
     public function test_same_department_assignment_still_succeeds(): void
     {
-        $adminId = $this->seedUser(['role' => 'super_admin']);
+        $adminId = $this->seedUser(['role' => 'maintenance_admin', 'department_id' => $this->electricalId]); // Head of the report's department assigns (2026-09-27)
         $staffId = $this->seedUser(['role' => 'maintenance_staff', 'department_id' => $this->electricalId]);
         $reportId = $this->seedReport(['department_id' => $this->electricalId]);
 
         $this
-            ->actingAsSessionUser($adminId, 'super_admin')
+            ->actingAsSessionUser($adminId, 'maintenance_admin')
             ->patchJson("/api/reports/{$reportId}", ['status' => 'assigned', 'assigned_to' => $staffId])
             ->assertOk();
 
@@ -70,12 +70,12 @@ class CrossDepartmentAssignmentWarningTest extends TestCase
 
     public function test_same_department_assignment_is_not_flagged_and_needs_no_confirmation(): void
     {
-        $adminId = $this->seedUser(['role' => 'super_admin']);
+        $adminId = $this->seedUser(['role' => 'maintenance_admin', 'department_id' => $this->electricalId]); // Head of the report's department assigns (2026-09-27)
         $staffId = $this->seedUser(['role' => 'maintenance_staff', 'department_id' => $this->electricalId]);
         $reportId = $this->seedReport(['department_id' => $this->electricalId]);
 
         $this
-            ->actingAsSessionUser($adminId, 'super_admin')
+            ->actingAsSessionUser($adminId, 'maintenance_admin')
             ->patchJson("/api/reports/{$reportId}", ['status' => 'assigned', 'assigned_to' => $staffId])
             ->assertOk();
 
@@ -99,7 +99,7 @@ class CrossDepartmentAssignmentWarningTest extends TestCase
 
     public function test_cross_department_assignment_is_allowed(): void
     {
-        $adminId = $this->seedUser(['role' => 'super_admin']);
+        $adminId = $this->seedUser(['role' => 'maintenance_admin', 'department_id' => $this->electricalId]); // Head of the report's department assigns (2026-09-27)
         $euclideId = $this->seedUser([
             'role' => 'maintenance_staff',
             'full_name' => 'Euclide',
@@ -108,7 +108,7 @@ class CrossDepartmentAssignmentWarningTest extends TestCase
         $reportId = $this->seedReport(['department_id' => $this->electricalId]);
 
         $this
-            ->actingAsSessionUser($adminId, 'super_admin')
+            ->actingAsSessionUser($adminId, 'maintenance_admin')
             ->patchJson("/api/reports/{$reportId}", ['status' => 'assigned', 'assigned_to' => $euclideId])
             ->assertOk();
 
@@ -267,11 +267,11 @@ class CrossDepartmentAssignmentWarningTest extends TestCase
 
     public function test_existing_assignment_validation_is_unchanged(): void
     {
-        $adminId = $this->seedUser(['role' => 'super_admin']);
+        $adminId = $this->seedUser(['role' => 'maintenance_admin', 'department_id' => $this->electricalId]); // Head of the report's department assigns (2026-09-27)
         $reportId = $this->seedReport(['department_id' => $this->electricalId]);
 
         $this
-            ->actingAsSessionUser($adminId, 'super_admin')
+            ->actingAsSessionUser($adminId, 'maintenance_admin')
             ->patchJson("/api/reports/{$reportId}", ['status' => 'assigned', 'assigned_to' => 999999])
             ->assertStatus(422);
 
@@ -297,7 +297,7 @@ class CrossDepartmentAssignmentWarningTest extends TestCase
 
     public function test_repeated_submissions_do_not_produce_a_duplicate_assignment(): void
     {
-        $adminId = $this->seedUser(['role' => 'super_admin']);
+        $adminId = $this->seedUser(['role' => 'maintenance_admin', 'department_id' => $this->electricalId]); // Head of the report's department assigns (2026-09-27)
         $euclideId = $this->seedUser([
             'role' => 'maintenance_staff',
             'full_name' => 'Euclide',
@@ -305,7 +305,7 @@ class CrossDepartmentAssignmentWarningTest extends TestCase
         ]);
         $reportId = $this->seedReport(['department_id' => $this->electricalId]);
 
-        $client = $this->actingAsSessionUser($adminId, 'super_admin');
+        $client = $this->actingAsSessionUser($adminId, 'maintenance_admin');
         $client->patchJson("/api/reports/{$reportId}", ['status' => 'assigned', 'assigned_to' => $euclideId])->assertOk();
         $client->patchJson("/api/reports/{$reportId}", ['status' => 'assigned', 'assigned_to' => $euclideId])->assertOk();
 
@@ -341,7 +341,7 @@ class CrossDepartmentAssignmentWarningTest extends TestCase
     /** Performs one Electrical-report -> Computer-personnel assignment. */
     private function assignAcrossDepartments(): int
     {
-        $adminId = $this->seedUser(['role' => 'super_admin']);
+        $adminId = $this->seedUser(['role' => 'maintenance_admin', 'department_id' => $this->electricalId]); // Head of the report's department assigns (2026-09-27)
         $euclideId = $this->seedUser([
             'role' => 'maintenance_staff',
             'full_name' => 'Euclide',
@@ -350,7 +350,7 @@ class CrossDepartmentAssignmentWarningTest extends TestCase
         $reportId = $this->seedReport(['department_id' => $this->electricalId]);
 
         $this
-            ->actingAsSessionUser($adminId, 'super_admin')
+            ->actingAsSessionUser($adminId, 'maintenance_admin')
             ->patchJson("/api/reports/{$reportId}", ['status' => 'assigned', 'assigned_to' => $euclideId])
             ->assertOk();
 

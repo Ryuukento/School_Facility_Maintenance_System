@@ -37,14 +37,14 @@ class ReportAssignmentNotificationTest extends TestCase
 
     public function test_assigning_a_report_notifies_only_the_assigned_user(): void
     {
-        $adminId = $this->seedUser(['role' => 'super_admin']);
+        $adminId = $this->seedUser(['role' => 'maintenance_admin']); // Head Maintenance assigns (2026-09-27: not the Administrator)
         $mariahId = $this->seedUser(['role' => 'maintenance_staff', 'full_name' => 'Mariah']);
         $euclideId = $this->seedUser(['role' => 'maintenance_staff', 'full_name' => 'Euclide']);
         $otherHeadId = $this->seedUser(['role' => 'maintenance_admin', 'full_name' => 'Other Head']);
         $reportId = $this->seedReport(['status' => 'submitted', 'title' => 'Broken Window', 'location' => 'Room 210']);
 
         $this
-            ->actingAsSessionUser($adminId, 'super_admin')
+            ->actingAsSessionUser($adminId, 'maintenance_admin')
             ->patchJson("/api/reports/{$reportId}", ['status' => 'assigned', 'assigned_to' => $mariahId])
             ->assertOk();
 
@@ -63,7 +63,7 @@ class ReportAssignmentNotificationTest extends TestCase
 
     public function test_reassigning_a_report_notifies_only_the_new_assignee(): void
     {
-        $adminId = $this->seedUser(['role' => 'super_admin']);
+        $adminId = $this->seedUser(['role' => 'maintenance_admin']); // Head Maintenance assigns (2026-09-27: not the Administrator)
         $mariahId = $this->seedUser(['role' => 'maintenance_staff']);
         $euclideId = $this->seedUser(['role' => 'maintenance_staff']);
         $reportId = $this->seedReport(['status' => 'assigned', 'assigned_to' => $mariahId]);
@@ -73,7 +73,7 @@ class ReportAssignmentNotificationTest extends TestCase
         $this->assertSame(0, DB::table('notifications')->where('user_id', $mariahId)->count());
 
         $this
-            ->actingAsSessionUser($adminId, 'super_admin')
+            ->actingAsSessionUser($adminId, 'maintenance_admin')
             ->patchJson("/api/reports/{$reportId}", ['status' => 'assigned', 'assigned_to' => $euclideId])
             ->assertOk();
 
@@ -83,11 +83,11 @@ class ReportAssignmentNotificationTest extends TestCase
 
     public function test_resubmitting_the_same_assignee_does_not_duplicate_the_notification(): void
     {
-        $adminId = $this->seedUser(['role' => 'super_admin']);
+        $adminId = $this->seedUser(['role' => 'maintenance_admin']); // Head Maintenance assigns (2026-09-27: not the Administrator)
         $mariahId = $this->seedUser(['role' => 'maintenance_staff']);
         $reportId = $this->seedReport(['status' => 'submitted']);
 
-        $client = $this->actingAsSessionUser($adminId, 'super_admin');
+        $client = $this->actingAsSessionUser($adminId, 'maintenance_admin');
 
         $client->patchJson("/api/reports/{$reportId}", ['status' => 'assigned', 'assigned_to' => $mariahId])->assertOk();
         // Idempotent resubmission of the same assignee/status must not re-notify.

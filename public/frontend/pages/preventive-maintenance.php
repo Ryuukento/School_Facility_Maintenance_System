@@ -20,8 +20,14 @@ $_pmUserId = (int)($_pmUser['user_id'] ?? 0);
 // restriction is mirrored client-side below (pmCanManageTask()) purely to
 // decide which buttons to render; the API re-checks regardless, so this is
 // presentation only, never the actual authorization boundary.
-$_pmCanCreate = in_array($_pmRole, ['super_admin', 'maintenance_admin'], true);
-$_pmCanArchive = in_array($_pmRole, ['super_admin', 'maintenance_admin'], true);
+//
+// 2026-09-27: Preventive Maintenance is performed by Head Maintenance and
+// Staff. The Administrator (super_admin) is view/monitor only; Head
+// Maintenance owns the plan and is the one who assigns tasks to staff.
+$_pmCanCreate = $_pmRole === 'maintenance_admin';
+$_pmCanArchive = $_pmRole === 'maintenance_admin';
+$_pmCanAssign = $_pmRole === 'maintenance_admin';
+$_pmIsViewOnly = $_pmRole === 'super_admin';
 
 $pageTitle = 'Preventive Maintenance - SFMS';
 include __DIR__ . '/../includes/header.php';
@@ -41,6 +47,18 @@ include __DIR__ . '/../includes/header.php';
             <?php endif; ?>
         </div>
     </section>
+
+    <?php if ($_pmIsViewOnly): ?>
+    <div class="pm-role-note" role="note">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>
+        <div><strong>Monitoring view.</strong> Preventive maintenance is carried out by Head Maintenance and Maintenance Staff. You can review the schedule, progress, inspection results, and history.</div>
+    </div>
+    <?php elseif ($_pmRole === 'maintenance_staff'): ?>
+    <div class="pm-role-note" role="note">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+        <div><strong>Your inspections.</strong> You can complete the tasks Head Maintenance assigned to you. Mark each one <em>Working</em> or <em>Needs Repair</em> &mdash; a Needs Repair result can raise a repair report.</div>
+    </div>
+    <?php endif; ?>
 
     <section class="pm-summary-cards" id="pm-summary-cards">
         <div class="pm-summary-card pm-summary-card--loading">
@@ -355,13 +373,49 @@ include __DIR__ . '/../includes/header.php';
                         <input type="text" id="pm-complete-performed-search" class="form-control" placeholder="Search maintenance personnel...">
                         <input type="hidden" id="pm-complete-performed-id">
                     </div>
+                    <fieldset class="form-group pm-result-group">
+                        <legend>Inspection Result *</legend>
+                        <div class="pm-result-options">
+                            <label class="pm-result-option pm-result-option--working">
+                                <input type="radio" name="pm-complete-result" value="working">
+                                <span class="pm-result-option__icon" aria-hidden="true">&#10003;</span>
+                                <span><strong>Working</strong><small>Equipment is in good condition</small></span>
+                            </label>
+                            <label class="pm-result-option pm-result-option--repair">
+                                <input type="radio" name="pm-complete-result" value="needs_repair">
+                                <span class="pm-result-option__icon" aria-hidden="true">!</span>
+                                <span><strong>Needs Repair</strong><small>Found damaged or not working</small></span>
+                            </label>
+                        </div>
+                    </fieldset>
                     <div class="form-group">
                         <label for="pm-complete-notes">Remarks</label>
                         <textarea id="pm-complete-notes" class="form-control" rows="2" placeholder="Optional remarks..."></textarea>
                     </div>
                     <div class="form-group">
-                        <label for="pm-complete-findings">Findings</label>
+                        <label for="pm-complete-findings" id="pm-complete-findings-label">Findings</label>
                         <textarea id="pm-complete-findings" class="form-control" rows="2" placeholder="Optional findings / observations..."></textarea>
+                    </div>
+                    <div class="pm-repair-box" id="pm-complete-repair-box" hidden>
+                        <label class="pm-repair-box__toggle">
+                            <input type="checkbox" id="pm-complete-create-report" checked>
+                            <span><strong>Create a repair report</strong><small>Sends it to the normal report workflow so Head Maintenance can assign the repair.</small></span>
+                        </label>
+                        <div class="pm-repair-box__fields" id="pm-complete-report-fields">
+                            <div class="form-group">
+                                <label for="pm-complete-report-priority">Priority</label>
+                                <select id="pm-complete-report-priority" class="form-control">
+                                    <option value="low">Low</option>
+                                    <option value="medium" selected>Medium</option>
+                                    <option value="high">High</option>
+                                    <option value="critical">Critical</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="pm-complete-report-type">Problem Type</label>
+                                <select id="pm-complete-report-type" class="form-control"></select>
+                            </div>
+                        </div>
                     </div>
                     <div class="form-group">
                         <label for="pm-complete-action-taken">Action Taken</label>
@@ -381,6 +435,33 @@ include __DIR__ . '/../includes/header.php';
             </div>
         </div>
     </div>
+
+    <?php if ($_pmCanAssign): ?>
+    <!-- Assign modal (Head Maintenance) -->
+    <div id="pm-assign-modal" class="modal" style="display:none;" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="pm-assign-modal-title">
+        <div class="modal-content pm-assign-modal">
+            <div class="modal-header">
+                <h3 class="modal-title" id="pm-assign-modal-title">Assign Maintenance Staff</h3>
+                <button type="button" class="modal-close" id="pm-assign-modal-close" aria-label="Close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="pm-assign-modal__intro" id="pm-assign-summary"></p>
+                <ul class="pm-assign-modal__tasks" id="pm-assign-task-list"></ul>
+                <div class="form-group">
+                    <label for="pm-assign-staff">Maintenance Staff</label>
+                    <select id="pm-assign-staff" class="form-control">
+                        <option value="">Loading staff...</option>
+                    </select>
+                    <small class="text-muted">Only the assigned staff member can complete these inspections.</small>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" id="pm-assign-cancel">Cancel</button>
+                <button type="button" class="btn btn-primary" id="pm-assign-save">Assign</button>
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
 
     <!-- View Details + History modal -->
     <div id="pm-history-modal" class="modal" style="display:none;" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="pm-history-modal-title">
@@ -408,7 +489,7 @@ include __DIR__ . '/../includes/header.php';
     <div id="pm-print-container" class="pm-print-only"></div>
 </main>
 
-<link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/preventive-maintenance.inline.css?v=20260923-1">
+<link rel="stylesheet" href="/School_Facility_Maintenance_System/frontend/assets/css/preventive-maintenance.inline.css?v=20260927-5">
 
 <script>
 const PM_CURRENT_USER = {
@@ -417,6 +498,7 @@ const PM_CURRENT_USER = {
 };
 const PM_CAN_CREATE = <?php echo $_pmCanCreate ? 'true' : 'false'; ?>;
 const PM_CAN_ARCHIVE = <?php echo $_pmCanArchive ? 'true' : 'false'; ?>;
+const PM_CAN_ASSIGN = <?php echo $_pmCanAssign ? 'true' : 'false'; ?>;
 
 const PM_API_BASE = window.SFMS_PUBLIC_URL ? window.SFMS_PUBLIC_URL('/api/preventive-maintenance') : '/api/preventive-maintenance';
 
@@ -525,7 +607,9 @@ function pmDaysUntilFromDate(date) {
 // only — the API is the real authorization boundary and re-checks this on
 // every update()/complete() call.
 function pmCanManageTask(row) {
-    if (PM_CURRENT_USER.role === 'super_admin' || PM_CURRENT_USER.role === 'maintenance_admin') return true;
+    // Mirrors PreventiveMaintenanceService::canManageTask(): Head manages all,
+    // Staff only their own assigned tasks, Administrator is view-only.
+    if (PM_CURRENT_USER.role === 'maintenance_admin') return true;
     if (PM_CURRENT_USER.role === 'maintenance_staff') {
         return Number(row.assigned_user_id) === Number(PM_CURRENT_USER.userId);
     }
@@ -855,26 +939,142 @@ function pmRenderOverview() {
 // Annual Schedule grid
 // ---------------------------------------------------------------------
 
-function pmScheduleActionsCell(row) {
+// Icon paths for the compact (Annual Schedule) action buttons.
+const PM_ACTION_ICONS = {
+    view: '<path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/>',
+    edit: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
+    complete: '<path d="M20 6 9 17l-5-5"/>',
+    archive: '<rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8"/><path d="M10 12h4"/>',
+    activate: '<path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/>',
+    assign: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6"/><path d="M22 11h-6"/>',
+};
+
+function pmScheduleActionsCell(row, options = {}) {
     const canManage = pmCanManageTask(row);
-    let html = `<button type="button" class="pm-action-btn pm-action-btn--view" data-action="view" data-id="${row.id}">View</button>`;
+    const button = (action, label) => {
+        if (!options.compact) {
+            return `<button type="button" class="pm-action-btn pm-action-btn--${action}" data-action="${action}" data-id="${row.id}">${label}</button>`;
+        }
+        return `<button type="button" class="pm-action-btn pm-action-btn--${action} pm-action-btn--icon" data-action="${action}" data-id="${row.id}" title="${label}" aria-label="${label}">`
+            + `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${PM_ACTION_ICONS[action]}</svg></button>`;
+    };
+
+    let html = button('view', 'View');
+
+    if (PM_CAN_ASSIGN && row.is_active) {
+        html += button('assign', row.assigned_user_id ? 'Reassign' : 'Assign');
+    }
 
     if (canManage) {
-        html += `<button type="button" class="pm-action-btn pm-action-btn--edit" data-action="edit" data-id="${row.id}">Edit</button>`;
+        html += button('edit', 'Edit');
         if (row.is_active) {
-            html += `<button type="button" class="pm-action-btn pm-action-btn--complete" data-action="complete" data-id="${row.id}">Complete</button>`;
+            html += button('complete', 'Complete');
         }
     }
 
     if (PM_CAN_ARCHIVE) {
-        if (row.is_active) {
-            html += `<button type="button" class="pm-action-btn pm-action-btn--archive" data-action="archive" data-id="${row.id}">Archive</button>`;
-        } else {
-            html += `<button type="button" class="pm-action-btn pm-action-btn--activate" data-action="activate" data-id="${row.id}">Reactivate</button>`;
-        }
+        html += row.is_active ? button('archive', 'Archive') : button('activate', 'Reactivate');
     }
 
-    return `<div class="pm-actions-cell">${html}</div>`;
+    return `<div class="pm-actions-cell${options.compact ? ' pm-actions-cell--compact' : ''}">${html}</div>`;
+}
+
+// Manual legend codes (the printed table's "A / SA / Q / M" legend).
+const PM_FREQUENCY_CODES = {
+    monthly: { code: 'M', label: 'Monthly' },
+    quarterly: { code: 'Q', label: 'Quarterly' },
+    semi_annually: { code: 'SA', label: 'Semi-annually' },
+    annually: { code: 'A', label: 'Annually' },
+};
+
+function pmFrequencyBadge(frequency, fallbackLabel) {
+    const info = PM_FREQUENCY_CODES[frequency] || { code: '?', label: fallbackLabel || 'Custom' };
+    return `<span class="pm-freq-badge pm-freq-badge--${pmEscapeHtml(frequency || 'other')}" title="${pmEscapeHtml(info.label)}">${info.code}</span>`
+        + `<span class="pm-freq-label">${pmEscapeHtml(fallbackLabel || info.label)}</span>`;
+}
+
+// Renders the Annual Schedule the way the manual's table reads: rows of the
+// same equipment are merged into one Frequency + Equipment block (rowspan),
+// each location keeps its own Jan-Dec marks, status, and actions.
+function pmBuildScheduleTable(rows) {
+    const currentMonth = new Date().getMonth() + 1;
+
+    // Consecutive rows with the same equipment form one group (the API
+    // already returns them in the manual's order).
+    const groups = [];
+    rows.forEach((row) => {
+        const last = groups[groups.length - 1];
+        if (last && last.category === row.category && last.frequency === row.frequency) {
+            last.rows.push(row);
+        } else {
+            groups.push({ category: row.category, frequency: row.frequency, frequencyLabel: row.frequency_label, rows: [row] });
+        }
+    });
+
+    const legend = Object.entries(PM_FREQUENCY_CODES).map(([key, info]) =>
+        `<span class="pm-legend__item"><span class="pm-freq-badge pm-freq-badge--${key}">${info.code}</span>${info.label}</span>`
+    ).join('');
+
+    const summary = `<div class="pm-schedule-summary ui-fade-in">
+        <div class="pm-schedule-summary__stats">
+            <span><strong>${groups.length}</strong> equipment</span>
+            <span><strong>${rows.length}</strong> scheduled locations</span>
+            <span class="pm-schedule-summary__now"><span class="pm-now-dot" aria-hidden="true"></span>${PM_MONTH_NAMES[currentMonth - 1]} is highlighted</span>
+        </div>
+        <div class="pm-legend" aria-label="Frequency legend">${legend}</div>
+    </div>`;
+
+    const monthHeaders = PM_MONTH_NAMES.map((name, i) => {
+        const isNow = (i + 1) === currentMonth;
+        return `<th class="pm-month-col${isNow ? ' pm-month-col--now' : ''}" scope="col">${name}${isNow ? '<span class="pm-month-now-tag">Now</span>' : ''}</th>`;
+    }).join('');
+
+    let html = '<table class="table pm-table pm-schedule-table ui-fade-in"><thead><tr>'
+        + '<th class="pm-sticky-col pm-sticky-col--freq" scope="col">Frequency</th>'
+        + '<th class="pm-sticky-col pm-sticky-col--equip" scope="col">Equipment</th>'
+        + '<th class="pm-sticky-col pm-sticky-col--loc" scope="col">Location</th>'
+        + monthHeaders
+        + '<th scope="col">Status</th><th class="pm-table__action-head" scope="col">Actions</th>'
+        + '</tr></thead>';
+
+    groups.forEach((group, gi) => {
+        const span = group.rows.length;
+        html += `<tbody class="pm-schedule-group${gi % 2 ? ' pm-schedule-group--alt' : ''}">`;
+        group.rows.forEach((row, ri) => {
+            html += '<tr>';
+            if (ri === 0) {
+                html += `<td class="pm-sticky-col pm-sticky-col--freq pm-group-cell" rowspan="${span}">${pmFrequencyBadge(group.frequency, group.frequencyLabel)}</td>`;
+                const subtitle = row.title && row.title !== row.category ? `<div class="pm-cell-secondary">${pmEscapeHtml(row.title)}</div>` : '';
+                const groupIds = group.rows.filter((r) => r.is_active).map((r) => r.id).join(',');
+                const assignAll = PM_CAN_ASSIGN && span > 1 && groupIds
+                    ? `<button type="button" class="pm-assign-all-btn" data-action="assign-group" data-ids="${groupIds}">Assign all ${span}</button>`
+                    : '';
+                html += `<td class="pm-sticky-col pm-sticky-col--equip pm-group-cell" rowspan="${span}">
+                    <div class="pm-cell-primary pm-equip-name">${pmEscapeHtml(group.category)}</div>
+                    ${subtitle}
+                    ${span > 1 ? `<div class="pm-equip-count">${span} locations</div>` : ''}
+                    ${assignAll}
+                </td>`;
+            }
+            const assignee = row.assigned_user_name
+                ? `<div class="pm-assignee"><span class="pm-assignee__dot" aria-hidden="true"></span>${pmEscapeHtml(row.assigned_user_name)}</div>`
+                : '<div class="pm-assignee pm-assignee--none">Unassigned</div>';
+            html += `<td class="pm-sticky-col pm-sticky-col--loc">${row.location_label ? pmEscapeHtml(row.location_label) : pmMutedDash()}${assignee}</td>`;
+            for (let m = 1; m <= 12; m++) {
+                const marked = !!(row.months && row.months[m]);
+                const isNow = m === currentMonth;
+                const cls = 'pm-month-col' + (marked ? ' pm-month-col--marked' : '') + (isNow ? ' pm-month-col--now' : '');
+                html += `<td class="${cls}">${marked ? `<span class="pm-x-mark" title="${PM_MONTH_NAMES[m - 1]}: scheduled" aria-label="Scheduled"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></span>` : ''}</td>`;
+            }
+            html += `<td>${pmStatusBadge(row.status, row.status_label)}</td>`;
+            html += `<td class="pm-table__action-cell">${pmScheduleActionsCell(row, { compact: true })}</td>`;
+            html += '</tr>';
+        });
+        html += '</tbody>';
+    });
+
+    html += '</table>';
+    return summary + `<div class="pm-schedule-scroll">${html}</div>`;
 }
 
 async function pmLoadScheduleGrid() {
@@ -914,34 +1114,7 @@ async function pmLoadScheduleGrid() {
             return;
         }
 
-        const monthHeaders = PM_MONTH_NAMES.map((name) => `<th class="pm-month-col">${name}</th>`).join('');
-        let html = '<table class="table pm-table pm-schedule-table ui-fade-in"><thead><tr>'
-            + '<th class="pm-sticky-col pm-sticky-col--freq">Frequency</th>'
-            + '<th class="pm-sticky-col pm-sticky-col--equip">Equipment / Activity</th>'
-            + '<th class="pm-sticky-col pm-sticky-col--loc">Location</th>'
-            + monthHeaders
-            + '<th>Status</th><th class="pm-table__action-head">Actions</th>'
-            + '</tr></thead><tbody>';
-
-        rows.forEach((row) => {
-            html += '<tr>';
-            html += `<td class="pm-sticky-col pm-sticky-col--freq">${pmEscapeHtml(row.frequency_label)}</td>`;
-            html += `<td class="pm-sticky-col pm-sticky-col--equip pm-table__title-cell">
-                <div class="pm-cell-primary">${pmEscapeHtml(row.category)}</div>
-                <div class="pm-cell-secondary">${pmEscapeHtml(row.title)}</div>
-            </td>`;
-            html += `<td class="pm-sticky-col pm-sticky-col--loc">${row.location_label ? pmEscapeHtml(row.location_label) : pmMutedDash()}</td>`;
-            for (let m = 1; m <= 12; m++) {
-                const marked = !!(row.months && row.months[m]);
-                html += `<td class="pm-month-col${marked ? ' pm-month-col--marked' : ''}">${marked ? '<span class="pm-x-mark">X</span>' : ''}</td>`;
-            }
-            html += `<td>${pmStatusBadge(row.status, row.status_label)}</td>`;
-            html += `<td class="pm-table__action-cell">${pmScheduleActionsCell(row)}</td>`;
-            html += '</tr>';
-        });
-
-        html += '</tbody></table>';
-        container.innerHTML = html;
+        container.innerHTML = pmBuildScheduleTable(rows);
     } catch (error) {
         container.innerHTML = '<div class="ui-empty-state"><strong>Failed to load the annual schedule.</strong></div>';
         pmNotify(error.message || 'Unable to load the annual schedule.');
@@ -1002,8 +1175,13 @@ async function pmLoadChecklist() {
 
         items.forEach((item) => {
             const isCompleted = item.item_status === 'completed';
+            const reportLink = item.maintenance_report_id
+                ? `<div><a class="pm-report-link" href="maintenance-report-detail.php?id=${encodeURIComponent(item.maintenance_report_id)}">Report #${pmEscapeHtml(item.maintenance_report_id)} &rarr;</a></div>`
+                : '';
             const completedCell = isCompleted
                 ? `${pmFormatDate(item.completed_date) || pmMutedDash()}${item.performed_by_name ? `<div class="pm-cell-secondary">by ${pmEscapeHtml(item.performed_by_name)}</div>` : ''}`
+                    + (item.condition_result ? `<div class="pm-checklist-result">${pmResultBadge(item.condition_result)}</div>` : '')
+                    + reportLink
                 : '<span class="text-muted">Not yet completed</span>';
 
             html += '<tr>';
@@ -1257,6 +1435,12 @@ function pmOpenFormModal(mode, row) {
         title.textContent = 'New Preventive Maintenance Task';
     }
 
+    // Only Head Maintenance assigns PM tasks; a staff member editing their
+    // own task sees the assignee but cannot change it (the API enforces it).
+    const assigneeInput = document.getElementById('pm-form-assignee-search');
+    assigneeInput.disabled = !PM_CAN_ASSIGN;
+    assigneeInput.title = PM_CAN_ASSIGN ? '' : 'Only Head Maintenance can assign preventive maintenance tasks.';
+
     modal.style.display = 'flex';
     modal.removeAttribute('aria-hidden');
 }
@@ -1335,6 +1519,35 @@ async function pmSubmitForm() {
 // Mark Completed modal
 // ---------------------------------------------------------------------
 
+// Problem Type options for the Needs Repair report, pre-selected from the
+// equipment's configured default (config/preventive_maintenance.php).
+function pmFillReportProblemTypes(category) {
+    const select = document.getElementById('pm-complete-report-type');
+    const types = Array.isArray(pmOptions.report_problem_types) && pmOptions.report_problem_types.length
+        ? pmOptions.report_problem_types
+        : ['Other'];
+    const defaults = pmOptions.report_problem_type_defaults || {};
+    const preferred = defaults[category] && types.includes(defaults[category]) ? defaults[category] : (types.includes('Other') ? 'Other' : types[0]);
+    select.innerHTML = types.map((t) => `<option value="${pmEscapeHtml(t)}"${t === preferred ? ' selected' : ''}>${pmEscapeHtml(t)}</option>`).join('');
+}
+
+function pmSelectedCompleteResult() {
+    const checked = document.querySelector('input[name="pm-complete-result"]:checked');
+    return checked ? checked.value : '';
+}
+
+function pmSyncCompleteResult() {
+    const needsRepair = pmSelectedCompleteResult() === 'needs_repair';
+    document.getElementById('pm-complete-repair-box').hidden = !needsRepair;
+    document.getElementById('pm-complete-findings-label').textContent = needsRepair ? 'Findings * (what needs repair)' : 'Findings';
+    document.getElementById('pm-complete-findings').placeholder = needsRepair
+        ? 'Describe the damage or problem found...'
+        : 'Optional findings / observations...';
+    const createReport = document.getElementById('pm-complete-create-report').checked;
+    document.getElementById('pm-complete-report-fields').hidden = !(needsRepair && createReport);
+    document.getElementById('pm-complete-save').textContent = needsRepair && createReport ? 'Save & Create Report' : 'Save Completion';
+}
+
 function pmOpenCompleteModal(row) {
     pmInitPersonnelSelects();
     document.getElementById('pm-complete-form').reset();
@@ -1342,7 +1555,11 @@ function pmOpenCompleteModal(row) {
     document.getElementById('pm-complete-performed-id').value = '';
     document.getElementById('pm-complete-proof-preview').innerHTML = '';
     document.getElementById('pm-complete-date').value = new Date().toISOString().slice(0, 10);
-    document.getElementById('pm-complete-modal-title').textContent = `Mark as Completed — ${row.title || ''}`;
+    document.getElementById('pm-complete-modal-title').textContent = `Mark as Completed — ${row.title || ''}${row.location_label ? ' · ' + row.location_label : ''}`;
+    document.getElementById('pm-complete-create-report').checked = true;
+    document.getElementById('pm-complete-report-priority').value = 'medium';
+    pmFillReportProblemTypes(row.category);
+    pmSyncCompleteResult();
 
     const modal = document.getElementById('pm-complete-modal');
     modal.style.display = 'flex';
@@ -1384,8 +1601,28 @@ async function pmSubmitComplete() {
         return;
     }
 
+    const result = pmSelectedCompleteResult();
+    if (!result) {
+        pmNotify('Please choose the inspection result: Working or Needs Repair.', 'warning');
+        return;
+    }
+    if (result === 'needs_repair' && !document.getElementById('pm-complete-findings').value.trim()) {
+        pmNotify('Please describe what needs repair in the Findings field.', 'warning');
+        document.getElementById('pm-complete-findings').focus();
+        return;
+    }
+
     const formData = new FormData();
     formData.append('completed_date', completedDate);
+    formData.append('condition_result', result);
+    if (result === 'needs_repair') {
+        const createReport = document.getElementById('pm-complete-create-report').checked;
+        formData.append('create_repair_report', createReport ? '1' : '0');
+        if (createReport) {
+            formData.append('report_priority', document.getElementById('pm-complete-report-priority').value);
+            formData.append('report_problem_type', document.getElementById('pm-complete-report-type').value);
+        }
+    }
     const performedBy = document.getElementById('pm-complete-performed-id').value;
     if (performedBy) formData.append('performed_by', performedBy);
     const notes = document.getElementById('pm-complete-notes').value.trim();
@@ -1412,7 +1649,12 @@ async function pmSubmitComplete() {
             throw new Error(payload.message || 'Failed to record completion');
         }
 
-        Components.toast(payload.message || 'Preventive maintenance task marked completed.', 'success');
+        // A Needs Repair completion whose report failed still saved the
+        // inspection; the message says so, shown as a warning.
+        const reportFailed = result === 'needs_repair'
+            && formData.get('create_repair_report') === '1'
+            && !payload.data?.repair_report;
+        Components.toast(payload.message || 'Preventive maintenance task marked completed.', reportFailed ? 'warning' : 'success');
         pmCloseCompleteModal();
         pmReloadActiveTab();
         pmLoadSummary();
@@ -1432,10 +1674,28 @@ function pmHistoryRowMarkup(h) {
         ? (window.SFMS_PUBLIC_URL ? window.SFMS_PUBLIC_URL('/' + String(h.completion_proof_path).replace(/^\/+/, '')) : '/' + String(h.completion_proof_path).replace(/^\/+/, ''))
         : null;
 
+    const resultBadge = pmResultBadge(h.condition_result);
+    let reportLine = '';
+    if (h.condition_result === 'needs_repair') {
+        if (h.maintenance_report_id) {
+            const report = h.maintenance_report || {};
+            const status = report.status ? ` · ${pmEscapeHtml(String(report.status).replace(/_/g, ' '))}` : '';
+            reportLine = `<a class="pm-report-link" href="maintenance-report-detail.php?id=${encodeURIComponent(h.maintenance_report_id)}">Repair report #${pmEscapeHtml(h.maintenance_report_id)}${status} &rarr;</a>`;
+        } else if (pmHistoryRow && pmCanManageTask(pmHistoryRow)) {
+            reportLine = `<button type="button" class="pm-action-btn pm-action-btn--complete" data-action="create-repair-report" data-history-id="${h.id}">Create repair report</button>`;
+        } else {
+            reportLine = '<span class="pm-cell-secondary">No repair report raised yet.</span>';
+        }
+    }
+
     return `
         <div class="pm-history-row">
             <div class="pm-history-row__main">
-                <div class="pm-cell-primary">${pmEscapeHtml(pmFormatDate(h.completed_date) || h.completed_date)}</div>
+                <div class="pm-history-row__head">
+                    <span class="pm-cell-primary">${pmEscapeHtml(pmFormatDate(h.completed_date) || h.completed_date)}</span>
+                    ${resultBadge}
+                </div>
+                ${reportLine ? `<div class="pm-history-row__report">${reportLine}</div>` : ''}
                 <div class="pm-cell-secondary">Performed by: ${h.performed_by_name ? pmEscapeHtml(h.performed_by_name) : 'Not recorded'}</div>
                 <div class="pm-cell-secondary">Recorded by: ${h.recorded_by_name ? pmEscapeHtml(h.recorded_by_name) : 'Unknown'}</div>
                 ${h.notes ? `<div class="pm-history-row__notes"><strong>Remarks:</strong> ${pmEscapeHtml(h.notes)}</div>` : ''}
@@ -1448,6 +1708,120 @@ function pmHistoryRowMarkup(h) {
     `;
 }
 
+function pmResultBadge(result) {
+    if (result === 'working') return '<span class="pm-result-badge pm-result-badge--working">Working</span>';
+    if (result === 'needs_repair') return '<span class="pm-result-badge pm-result-badge--repair">Needs Repair</span>';
+    return '';
+}
+
+async function pmCreateRepairReportFromHistory(btn) {
+    const historyId = btn.dataset.historyId;
+    if (!historyId || !window.confirm('Create a repair report from this inspection? It will go to the normal report workflow.')) return;
+
+    try {
+        Components.setLoading(btn, true);
+        const { response, data: payload } = await Components.fetchJson(`${PM_API_BASE}/history/${historyId}/repair-report`, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            body: JSON.stringify({}),
+        });
+        if (!response.ok || !payload.success) throw new Error(payload.message || 'Failed to create the repair report');
+
+        Components.toast(payload.message || 'Repair report created.', 'success');
+        if (pmHistoryRow) pmOpenHistoryModal(pmHistoryRow);
+    } catch (error) {
+        pmNotify(error.message || 'Unable to create the repair report.');
+        Components.setLoading(btn, false);
+    }
+}
+
+// ---------------------------------------------------------------------
+// Assign modal (Head Maintenance)
+// ---------------------------------------------------------------------
+
+let pmAssignTaskIds = [];
+let pmStaffListLoaded = false;
+
+async function pmLoadStaffOptions(selectedId) {
+    const select = document.getElementById('pm-assign-staff');
+    if (!pmStaffListLoaded) {
+        try {
+            const endpoint = window.SFMS_PUBLIC_URL ? window.SFMS_PUBLIC_URL('/api/preventive-maintenance/support/personnel') : '/api/preventive-maintenance/support/personnel';
+            const { response, data: payload } = await Components.fetchJson(`${endpoint}?per_page=100`, {
+                credentials: 'same-origin',
+                headers: { Accept: 'application/json' },
+            });
+            if (!response.ok || !payload.success) throw new Error(payload.message || 'Failed to load staff');
+            // Only Maintenance Staff can be assigned PM tasks.
+            const users = (payload.data?.users || []).filter((u) => String(u.role).toLowerCase() === 'maintenance_staff');
+            select.innerHTML = users.length
+                ? '<option value="">Select a staff member</option>' + users.map((u) => `<option value="${u.user_id}">${pmEscapeHtml(u.full_name)}</option>`).join('')
+                : '<option value="">No active Maintenance Staff found</option>';
+            pmStaffListLoaded = users.length > 0;
+        } catch (error) {
+            select.innerHTML = '<option value="">Unable to load staff</option>';
+            pmNotify(error.message || 'Unable to load maintenance staff.');
+        }
+    }
+    select.value = selectedId ? String(selectedId) : '';
+}
+
+function pmOpenAssignModal(rows) {
+    pmAssignTaskIds = rows.map((r) => r.id);
+    const first = rows[0];
+    document.getElementById('pm-assign-modal-title').textContent = rows.length > 1 ? `Assign ${rows.length} Inspections` : (first.assigned_user_id ? 'Reassign Inspection' : 'Assign Inspection');
+    document.getElementById('pm-assign-summary').textContent = rows.length > 1
+        ? `${first.category} — every location below will be assigned to the same staff member.`
+        : `${first.category}${first.location_label ? ' — ' + first.location_label : ''}`;
+    document.getElementById('pm-assign-task-list').innerHTML = rows.length > 1
+        ? rows.map((r) => `<li><span>${pmEscapeHtml(r.location_label || r.title)}</span><span class="pm-cell-secondary">${r.assigned_user_name ? pmEscapeHtml(r.assigned_user_name) : 'Unassigned'}</span></li>`).join('')
+        : '';
+
+    const sameAssignee = rows.every((r) => String(r.assigned_user_id || '') === String(first.assigned_user_id || ''));
+    pmLoadStaffOptions(sameAssignee ? first.assigned_user_id : null);
+
+    const modal = document.getElementById('pm-assign-modal');
+    modal.style.display = 'flex';
+    modal.removeAttribute('aria-hidden');
+}
+
+function pmCloseAssignModal() {
+    const modal = document.getElementById('pm-assign-modal');
+    if (!modal) return;
+    modal.style.display = 'none';
+    modal.setAttribute('aria-hidden', 'true');
+}
+
+async function pmSubmitAssign() {
+    const staffId = document.getElementById('pm-assign-staff').value;
+    if (!staffId) {
+        pmNotify('Please select a Maintenance Staff member.', 'warning');
+        return;
+    }
+
+    const saveBtn = document.getElementById('pm-assign-save');
+    try {
+        Components.setLoading(saveBtn, true);
+        const { response, data: payload } = await Components.fetchJson(`${PM_API_BASE}/assign`, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            body: JSON.stringify({ task_ids: pmAssignTaskIds, assigned_user_id: Number(staffId) }),
+        });
+        if (!response.ok || !payload.success) throw new Error(payload.message || 'Failed to assign tasks');
+
+        Components.toast(payload.message || 'Tasks assigned.', 'success');
+        pmCloseAssignModal();
+        pmReloadActiveTab();
+        pmLoadSummary();
+    } catch (error) {
+        pmNotify(error.message || 'Unable to assign tasks.');
+    } finally {
+        Components.setLoading(saveBtn, false);
+    }
+}
+
 function pmScheduledMonthsLabel(row) {
     if (row.scheduled_months_label) return row.scheduled_months_label;
     if (Array.isArray(row.scheduled_months) && row.scheduled_months.length) {
@@ -1456,7 +1830,10 @@ function pmScheduledMonthsLabel(row) {
     return null;
 }
 
+let pmHistoryRow = null;
+
 async function pmOpenHistoryModal(row) {
+    pmHistoryRow = row;
     const modal = document.getElementById('pm-history-modal');
     const summary = document.getElementById('pm-history-task-summary');
     const listContainer = document.getElementById('pm-history-list-container');
@@ -1714,6 +2091,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Event delegation: table rows are re-rendered on every load.
     document.getElementById('pm-schedule-container').addEventListener('click', (e) => {
+        const groupBtn = e.target.closest('.pm-assign-all-btn');
+        if (groupBtn) {
+            const rows = String(groupBtn.dataset.ids || '').split(',').map((id) => pmScheduleRowsById[id]).filter(Boolean);
+            if (rows.length) pmOpenAssignModal(rows);
+            return;
+        }
+
         const btn = e.target.closest('.pm-action-btn');
         if (!btn) return;
         const row = pmScheduleRowsById[btn.dataset.id];
@@ -1721,6 +2105,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const action = btn.dataset.action;
         if (action === 'view') pmOpenHistoryModal(row);
+        else if (action === 'assign') pmOpenAssignModal([row]);
         else if (action === 'edit') pmOpenFormModal('edit', row);
         else if (action === 'complete') pmOpenCompleteModal(row);
         else if (action === 'archive') pmToggleActive(row, false);
@@ -1739,6 +2124,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const action = btn.dataset.action;
         if (action === 'view') pmOpenHistoryModal(row);
+        else if (action === 'assign') pmOpenAssignModal([row]);
         else if (action === 'edit') pmOpenFormModal('edit', row);
         else if (action === 'complete') pmOpenCompleteModal(row);
         else if (action === 'archive') pmToggleActive(row, false);
@@ -1755,6 +2141,28 @@ document.addEventListener('DOMContentLoaded', () => {
         if (action === 'view') pmOpenHistoryModal(item);
         else if (action === 'complete') pmOpenCompleteModal(item);
     });
+
+    // Inspection result (Working / Needs Repair) in the Complete modal.
+    document.querySelectorAll('input[name="pm-complete-result"]').forEach((radio) => {
+        radio.addEventListener('change', pmSyncCompleteResult);
+    });
+    document.getElementById('pm-complete-create-report').addEventListener('change', pmSyncCompleteResult);
+
+    // "Create repair report" for a Needs Repair inspection recorded without one.
+    document.getElementById('pm-history-list-container').addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-action="create-repair-report"]');
+        if (btn) pmCreateRepairReportFromHistory(btn);
+    });
+
+    if (PM_CAN_ASSIGN) {
+        document.getElementById('pm-assign-modal-close').addEventListener('click', pmCloseAssignModal);
+        document.getElementById('pm-assign-cancel').addEventListener('click', pmCloseAssignModal);
+        document.getElementById('pm-assign-modal').addEventListener('click', (e) => {
+            if (e.target === document.getElementById('pm-assign-modal')) pmCloseAssignModal();
+        });
+        document.getElementById('pm-assign-save').addEventListener('click', pmSubmitAssign);
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape') pmCloseAssignModal(); });
+    }
 });
 </script>
 

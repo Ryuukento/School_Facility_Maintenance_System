@@ -33,6 +33,23 @@ return [
         'Other',
     ],
 
+    // Default Problem Type for a repair report raised from a "Needs Repair"
+    // PM inspection, keyed by PM equipment category. Values must come from
+    // config('maintenance_reports.problem_types'); equipment without a close
+    // match uses 'Other' with the equipment name as the specified type. The
+    // Head/Staff can still pick a different type in the Complete modal.
+    'report_problem_types' => [
+        'ROOFTOP' => 'Roofing',
+        'WATER PUMP (JET MATIC)' => 'Plumbing',
+        'FIRE ALARM SYSTEM' => 'Electrical',
+        'PROCESS CONTROL EQUIPMENT' => 'Electrical',
+        'LAB-VOLT (TRAINING MODULE FOR ELECTRO-TECHNOLOGY COURSE)' => 'Electrical',
+        'GENERATOR' => 'Electrical',
+        'ELECTRIC FANS/CEILING FANS' => 'Electrical',
+        'AIR CONDITIONING UNIT (ACU)' => 'HVAC / Aircon',
+        'REFRIGERATION TRAINING MODULE' => 'HVAC / Aircon',
+    ],
+
     // Frequency options and their legend labels, matching the source table's
     // M / SA / Q / A codes.
     'frequencies' => [

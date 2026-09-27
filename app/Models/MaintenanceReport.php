@@ -59,7 +59,27 @@ class MaintenanceReport extends Model
             'completed_date' => 'date',
             'need_change_approved_at' => 'datetime',
             'need_change_deducted_at' => 'datetime',
+            'archive_reopened_at' => 'datetime',
         ];
+    }
+
+    /**
+     * Report Archive — a past-term report the Administrator reopened becomes
+     * view-only again the moment it is finished again (completed / closed /
+     * cancelled), whichever path changes the status. Only touches the
+     * columns when a reopen is actually recorded, so tables without them
+     * (the isolated test schema) are unaffected.
+     */
+    protected static function booted(): void
+    {
+        static::saving(function (self $report): void {
+            if ($report->isDirty('status')
+                && in_array(strtolower((string) $report->status), \App\Services\ReportArchiveService::FINAL_STATUSES, true)
+                && $report->getAttribute('archive_reopened_at') !== null) {
+                $report->archive_reopened_at = null;
+                $report->archive_reopened_by = null;
+            }
+        });
     }
 
     public function creator(): BelongsTo

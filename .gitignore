@@ -36,3 +36,4 @@ phpunit-results.xml
 # uploads from being added. See DEPLOYMENT.md Section 27.
 public/frontend/assets/uploads/
 public/frontend/uploads/
+.env*.bak
