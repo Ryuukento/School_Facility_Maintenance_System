@@ -317,6 +317,10 @@ include __DIR__ . '/../includes/header.php';
                 <?php /* TASK 7 — the 📄 and ← glyphs become registry icons. The
                          label text is unchanged, and both controls keep their
                          visible text, so the icons stay decorative. */ ?>
+                <?php /* Dispatch Code stickers for the deployed items; shown by
+                         loadDispatchDetail() only for approved/released
+                         dispatches. */ ?>
+                <button type="button" class="btn btn-primary" id="dd-print-labels-btn" style="display:none;"><?php echo ui_icon('file-text'); ?> Print Labels</button>
                 <button type="button" class="btn btn-secondary" id="dd-print-btn"><?php echo ui_icon('file-text'); ?> Print Dispatch Report</button>
                 <a href="<?php echo htmlspecialchars(public_url('/dispatches')); ?>" class="btn btn-secondary"><?php echo ui_icon('arrow-left'); ?> Back to Dispatches</a>
             </div>
@@ -554,6 +558,8 @@ include __DIR__ . '/../includes/header.php';
 
 </main>
 
+<script src="<?php echo htmlspecialchars(public_url('/frontend/assets/js/vendor/qrcode-generator.js?v=1.4.4')); ?>"></script>
+<script src="<?php echo htmlspecialchars(public_url('/frontend/assets/js/dispatch-labels.js?v=20260928')); ?>"></script>
 <script>
 const DSP_ID      = <?php echo $dispatchId; ?>;
 const DSP_CAN_ACT = <?php echo $canAct ? 'true' : 'false'; ?>;
@@ -1220,6 +1226,11 @@ async function loadDispatchDetail() {
         // second API call.
         DD_CURRENT_DISPATCH = dispatch;
 
+        const labelsBtn = document.getElementById('dd-print-labels-btn');
+        if (labelsBtn) {
+            labelsBtn.style.display = window.DispatchLabels && DispatchLabels.isPrintable(dispatch.status) ? '' : 'none';
+        }
+
         // --- Header card: per-field information cards in a responsive 2-col grid ---
         document.getElementById('dd-title').textContent   = dispatch.dispatch_code || 'Dispatch';
         // TASK 13.2 §5 — the identity strip replaces the old "Status: <badge>"
@@ -1695,6 +1706,10 @@ function ddWireModal(modalId, closeFn, confirmBtnId, confirmFn) {
 
 document.addEventListener('DOMContentLoaded', () => {
     loadDispatchDetail();
+
+    document.getElementById('dd-print-labels-btn').addEventListener('click', () => {
+        if (DD_CURRENT_DISPATCH && window.DispatchLabels) DispatchLabels.print(DD_CURRENT_DISPATCH);
+    });
 
     document.getElementById('dd-print-btn').addEventListener('click', () => {
         if (DSP_ID > 0) {

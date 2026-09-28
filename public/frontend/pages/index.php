@@ -298,7 +298,7 @@ if (isset($_SESSION['auth_user']) || isset($_SESSION['user'])) {
     };
 </script>
 <script src="<?php echo htmlspecialchars(public_url('/frontend/assets/js/utils.js?v=20260816')); ?>"></script>
-<script src="<?php echo htmlspecialchars(public_url('/frontend/assets/js/api.js?v=20260926')); ?>"></script>
+<script src="<?php echo htmlspecialchars(public_url('/frontend/assets/js/api.js?v=20260927')); ?>"></script>
 
 <script>
 // Disable zoom and scroll jumping on all devices

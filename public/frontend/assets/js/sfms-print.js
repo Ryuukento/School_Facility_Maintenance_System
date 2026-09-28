@@ -20,6 +20,11 @@
  *     rowsHtml: '<tr>…</tr>…',          // cells already HTML-escaped
  *     recordLabel: 'Records'
  *   });
+ * Optional (single-record printouts such as one Purchase Receipt):
+ *     details: [{ label: 'OR Number', value: 'OR-001' }, ...]  // key/value grid above the table
+ *     orientation: 'portrait'                                  // default 'landscape'
+ *     targetWindow: win   // a window already opened inside the click handler,
+ *                         // for callers that must fetch data first (pop-up blockers)
  * Cell helpers: SfmsPrint.pill(text, tone), SfmsPrint.escape(text).
  * Tones: purple, blue, violet, green, amber, red, gray.
  */
@@ -55,7 +60,7 @@
 
     const STYLES = `
         @page {
-            size: landscape;
+            size: __ORIENTATION__;
             margin: 12mm 11mm 14mm;
             @bottom-left  { content: "PHILCST · ${SYSTEM_NAME}"; font: 8pt Arial, sans-serif; color: #64748b; }
             @bottom-right { content: "Page " counter(page) " of " counter(pages); font: 8pt Arial, sans-serif; color: #64748b; }
@@ -92,6 +97,15 @@
         .stat.tone-amber  { border-left-color: #f59e0b; background: #fffbeb; }
         .stat.tone-red    { border-left-color: #dc2626; background: #fef2f2; }
         .stat.tone-gray   { border-left-color: #64748b; background: #f8fafc; }
+
+        /* Record details (optional key/value grid) */
+        .details { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid #e5e7eb; border-radius: 6px; overflow: hidden; margin: 0 0 12px; }
+        .detail { display: flex; border-bottom: 1px solid #e5e7eb; font-size: 9.5pt; }
+        .detail:nth-child(odd) { border-right: 1px solid #e5e7eb; }
+        .detail.wide { grid-column: 1 / -1; border-right: 0; }
+        .detail-label { flex: 0 0 34%; padding: 6px 8px; background: #faf5ff; color: #4c1d95; font-weight: 700; font-size: 8.5pt; text-transform: uppercase; letter-spacing: 0.03em; }
+        .detail-value { flex: 1; padding: 6px 8px; color: #111827; overflow-wrap: anywhere; }
+        .detail.wide .detail-label { flex-basis: 17%; }
 
         /* Table — fixed plan (table-layout: fixed + <colgroup>) so every
            column always fits the page width. */
@@ -150,12 +164,20 @@
             `).join('')}</section>`
             : '';
 
+        const details = Array.isArray(o.details) ? o.details : [];
+        const detailsHtml = details.length
+            ? `<section class="details">${details.map((d) => `
+                <div class="detail${d.wide ? ' wide' : ''}"><span class="detail-label">${escape(d.label)}</span><span class="detail-value">${escape(d.value ?? '—')}</span></div>
+            `).join('')}</section>`
+            : '';
+        const orientation = o.orientation === 'portrait' ? 'portrait' : 'landscape';
+
         return `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8" />
     <title>${escape(docTitle)}</title>
-    <style>${STYLES}</style>
+    <style>${STYLES.replace('__ORIENTATION__', orientation)}</style>
 </head>
 <body>
     <div class="sheet">
@@ -180,6 +202,8 @@
         </div>
 
         ${statsHtml}
+
+        ${detailsHtml}
 
         <table>
             <colgroup>${columns.map((c) => `<col style="width: ${escape(c.width || 'auto')};">`).join('')}</colgroup>
@@ -212,11 +236,13 @@
      * browser blocked the pop-up.
      */
     function open(options) {
-        const printWindow = global.open('', '_blank', 'width=1200,height=900');
+        const target = options && options.targetWindow;
+        const printWindow = target && !target.closed ? target : global.open('', '_blank', 'width=1200,height=900');
         if (!printWindow) {
             return false;
         }
 
+        printWindow.document.open();
         printWindow.document.write(buildDocument(options));
         printWindow.document.close();
         printWindow.focus();

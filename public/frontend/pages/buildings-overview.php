@@ -312,25 +312,24 @@ include __DIR__ . '/../includes/header.php';
 <div id="itemModal" class="modal">
     <div class="modal-content">
         <div class="modal-header">
-            <h2>Add New Item</h2>
+            <h2>Record Existing Item</h2>
             <span class="modal-close" onclick="closeItemModal()">&times;</span>
         </div>
         <div class="modal-body">
+            <p class="existing-item-note" style="margin:0 0 16px;padding:10px 12px;border-left:3px solid #7c3aed;border-radius:8px;background:rgba(124,58,237,0.08);font-size:13px;line-height:1.5;">
+                Use this only for equipment that was already in this room before the system was used.
+                New items should be sent through <strong>Dispatch Items Here</strong> so they are taken
+                from Inventory and approved.
+            </p>
             <form id="itemForm">
                 <div class="form-group">
                     <label for="itemNameInput">Item Name *</label>
                     <input type="text" id="itemNameInput" class="form-control" required>
                 </div>
-                <div class="form-group">
-                    <label for="itemStatusSelect">Status</label>
-                    <select id="itemStatusSelect" class="form-control">
-                        <option value="available">Available</option>
-                        <option value="damaged">Damaged</option>
-                        <option value="low_stock">Low Stock</option>
-                        <option value="out_of_stock">Out of Stock</option>
-                        <option value="maintenance">Maintenance</option>
-                    </select>
-                </div>
+                <!-- Status field removed (2026-09-27): an item placed in a room
+                     is in use, and the API derives the status from the
+                     quantity anyway (ItemController::store()), so the choice
+                     was never saved. -->
                 <div class="form-group">
                     <label for="itemQuantityInput">Quantity</label>
                     <input type="number" id="itemQuantityInput" class="form-control" min="1" value="1">
@@ -339,7 +338,7 @@ include __DIR__ . '/../includes/header.php';
         </div>
         <div class="modal-footer">
             <button class="btn btn-secondary" onclick="closeItemModal()">Cancel</button>
-            <button class="btn btn-primary" onclick="saveItemData()">Save Item</button>
+            <button class="btn btn-primary" onclick="saveItemData()">Record Item</button>
         </div>
     </div>
 </div>
@@ -1813,7 +1812,19 @@ async function loadItems(roomId, roomName) {
     document.getElementById('overviewTitle').textContent = 'Items in ' + roomName;
     document.getElementById('overviewSubtitle').textContent = 'Search items in this room';
     clearActions();
-    addActionButton('Add Item', () => openItemModal());
+    // New items reach a room through Dispatch (Inventory -> approval ->
+    // release), so that is the primary action. "Record Existing Item" is only
+    // for equipment already in the room before the system was used. Both are
+    // Head/Administrator actions (the same roles the API allows).
+    if (['super_admin', 'maintenance_admin'].includes(userRole)) {
+        addActionButton('Dispatch Items Here', () => {
+            const url = window.SFMS_PUBLIC_URL('/frontend/pages/dispatch-create.php')
+                + '?room_id=' + encodeURIComponent(roomId)
+                + '&room_name=' + encodeURIComponent(roomName || '');
+            window.location.href = url;
+        }, 'primary');
+        addActionButton('Record Existing Item', () => openItemModal());
+    }
     addActionButton('Back', () => loadRooms(currentFloorId, currentFloorName));
 
     const container = document.getElementById('overviewContainer');
@@ -2535,13 +2546,12 @@ function closeItemModal() {
 }
 async function saveItemData() {
     const name = document.getElementById('itemNameInput').value.trim();
-    const status = document.getElementById('itemStatusSelect').value;
     const quantity = document.getElementById('itemQuantityInput').value;
     if (!name) { Components.alert('Please enter item name', 'warning'); return; }
     const res = await fetch(window.SFMS_PUBLIC_URL('/api/items'), {
         method:'POST', headers:{'Content-Type':'application/json'},
         credentials: 'same-origin',
-        body: JSON.stringify({ room_id: currentRoomId, name, status, quantity })
+        body: JSON.stringify({ room_id: currentRoomId, name, quantity })
     });
     const data = await res.json();
     if (data.success) {

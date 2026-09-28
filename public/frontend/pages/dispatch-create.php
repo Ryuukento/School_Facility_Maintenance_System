@@ -273,6 +273,21 @@ async function loadRooms() {
             opt.textContent = r.name;
             sel.appendChild(opt);
         });
+
+        // "Dispatch Items Here" from Buildings Overview opens this page with
+        // ?room_id=…&room_name=… so the destination room is already chosen.
+        const params = new URLSearchParams(window.location.search);
+        const presetRoomId = params.get('room_id');
+        if (presetRoomId && /^\d+$/.test(presetRoomId)) {
+            let preset = Array.from(sel.options).find((o) => o.value === presetRoomId);
+            if (!preset && params.get('room_name')) {
+                preset = document.createElement('option');
+                preset.value = presetRoomId;
+                preset.textContent = params.get('room_name');
+                sel.appendChild(preset);
+            }
+            if (preset) sel.value = presetRoomId;
+        }
     } catch (_) {
         document.getElementById('dc-room').innerHTML = '<option value="">— Could not load —</option>';
     }

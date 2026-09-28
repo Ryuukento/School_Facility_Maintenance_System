@@ -29,7 +29,7 @@
          still appeared in systemConfirm()/systemAlert() dialogs until a forced
          refresh. Only the token changed; utils.js functionality is untouched. -->
     <script src="<?php echo htmlspecialchars(public_url('/frontend/assets/js/utils.js?v=20260913')); ?>"></script>
-    <script src="<?php echo htmlspecialchars(public_url('/frontend/assets/js/api.js?v=20260926')); ?>"></script>
+    <script src="<?php echo htmlspecialchars(public_url('/frontend/assets/js/api.js?v=20260927')); ?>"></script>
     <!-- TASK 98.2 — cache-buster bumped because api.js now assigns
          `window.API = API` at the bottom of the file (top-level `const`
          does not attach to window on its own). Without bumping this,

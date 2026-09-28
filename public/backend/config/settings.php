@@ -32,7 +32,13 @@ function sfms_detect_app_url() {
     if ($host !== '' && preg_match('/^(127\.0\.0\.1|localhost)(:\d+)?$/i', $host) && preg_match('/:(8000|8001|8080)$/', $host)) {
         $basePath = '';
     } else {
-        $basePath = '/School_Facility_Maintenance_System';
+        // 2026-09-27 — default to the domain root. The project folder name is
+        // used only when the request is actually served from that subfolder
+        // (local XAMPP: http://localhost/School_Facility_Maintenance_System/...).
+        // It used to be the default for every non-dev-server host, so a
+        // domain-root deployment (https://philcstmaintenance.com/) generated
+        // links and redirects under /School_Facility_Maintenance_System/.
+        $basePath = '';
 
         foreach ([$requestUri, $scriptName] as $candidate) {
             if (preg_match('#^(.*?/School_Facility_Maintenance_System)(?:/.*)?$#', (string)$candidate, $matches)) {

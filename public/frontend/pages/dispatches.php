@@ -36,6 +36,7 @@ include __DIR__ . '/../includes/header.php';
         </div>
         <div class="dispatches-page__actions">
             <button type="button" id="dispatch-print-btn" class="btn dispatches-page__secondary-action">Print</button>
+            <button type="button" id="dispatch-print-labels-btn" class="btn dispatches-page__secondary-action" title="Print Dispatch Code stickers for every approved/released dispatch matching the current filters">Print All Labels</button>
             <?php if ($canCreateDispatch): ?>
             <a href="<?php echo htmlspecialchars(public_url('/dispatches/create')); ?>" class="btn dispatches-page__primary-action">+ Create Dispatch</a>
             <?php endif; ?>
@@ -111,7 +112,10 @@ include __DIR__ . '/../includes/header.php';
 </main>
 
 <!-- Shared branded printout (logo letterhead) used by printDispatchReport(). -->
-<script src="/School_Facility_Maintenance_System/frontend/assets/js/sfms-print.js?v=20260927-1"></script>
+<script src="/School_Facility_Maintenance_System/frontend/assets/js/sfms-print.js?v=20260928-1"></script>
+<!-- Dispatch Code sticker labels (QR) used by the row "Labels" button. -->
+<script src="<?php echo htmlspecialchars(public_url('/frontend/assets/js/vendor/qrcode-generator.js?v=1.4.4')); ?>"></script>
+<script src="<?php echo htmlspecialchars(public_url('/frontend/assets/js/dispatch-labels.js?v=20260928-2')); ?>"></script>
 <script>
 // "Prepared by" line on the printed Dispatch Report.
 const DSP_CURRENT_USER_NAME = <?php echo json_encode((string)($_dspUser['full_name'] ?? ''), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
@@ -492,6 +496,22 @@ async function printDispatchReport() {
     }
 }
 
+// Bulk "Print All Labels": stickers for every approved/released dispatch that
+// matches the current Search/Status filters, so staff don't print one by one.
+async function printAllDispatchLabels() {
+    if (!window.DispatchLabels) return;
+    const button = document.getElementById('dispatch-print-labels-btn');
+    if (button) button.disabled = true;
+    try {
+        await DispatchLabels.printMany(async () => {
+            const { rows } = await fetchAllDispatchesForPrint();
+            return rows.filter((row) => DispatchLabels.isPrintable(row.status)).map((row) => row.id);
+        }, DISPATCH_API_BASE);
+    } finally {
+        if (button) button.disabled = false;
+    }
+}
+
 async function loadDispatches() {
     const search = document.getElementById('dispatch-search').value.trim();
     const status = document.getElementById('dispatch-status').value;
@@ -550,6 +570,12 @@ async function loadDispatches() {
                         <svg class="dispatches-table__view-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M1.5 12S5 5 12 5s10.5 7 10.5 7-3.5 7-10.5 7S1.5 12 1.5 12Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.8"/></svg>
                         <span>View</span>
                     </a>
+                    ${window.DispatchLabels && DispatchLabels.isPrintable(row.status)
+                        ? `<button type="button" class="dispatches-table__view-btn dispatches-table__labels-btn" data-print-labels="${dspEscapeHtml(row.id)}" title="Print Dispatch Code stickers for the deployed items">
+                               ${window.UIIcons ? window.UIIcons.svg('file-text', { size: 14 }) : ''}
+                               <span>Labels</span>
+                           </button>`
+                        : ''}
                 </td>`;
                 html += '</tr>';
             });
@@ -682,6 +708,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     document.getElementById('dispatch-print-btn').addEventListener('click', printDispatchReport);
+    document.getElementById('dispatch-print-labels-btn').addEventListener('click', printAllDispatchLabels);
 
     document.getElementById('dispatch-prev').addEventListener('click', () => {
         if (dispatchPage > 1) {
@@ -704,6 +731,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const btn = e.target.closest('.dispatches-view-items-btn');
         if (btn) {
             dspOpenItemsModal(btn.dataset.dispatchId, btn.dataset.dispatchCode);
+        }
+
+        const labelsBtn = e.target.closest('[data-print-labels]');
+        if (labelsBtn && window.DispatchLabels) {
+            DispatchLabels.printById(labelsBtn.dataset.printLabels, DISPATCH_API_BASE);
         }
     });
 
@@ -1188,6 +1220,13 @@ document.addEventListener('DOMContentLoaded', () => {
 /* Action column */
 .dispatches-table__action-cell {
     text-align: center;
+}
+
+/* View + Labels sit side by side; stack cleanly if the column is narrow. */
+.dispatches-table__labels-btn {
+    margin-left: 6px;
+    cursor: pointer;
+    font-family: inherit;
 }
 
 .dispatches-table__view-btn {

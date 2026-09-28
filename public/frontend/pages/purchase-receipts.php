@@ -39,9 +39,12 @@ include __DIR__ . '/../includes/header.php';
                 <h2>Purchase Receipts</h2>
                 <p class="text-muted mb-0">Record incoming stock with OR number and supplier</p>
             </div>
-            <?php if ($canPost): ?>
-            <button type="button" class="btn btn-primary" id="newReceiptBtn">+ New Receipt</button>
-            <?php endif; ?>
+            <div class="d-flex gap-sm">
+                <button type="button" class="btn btn-secondary" id="printReceiptListBtn" disabled><?php echo ui_icon('file-text'); ?> Print Receipts</button>
+                <?php if ($canPost): ?>
+                <button type="button" class="btn btn-primary" id="newReceiptBtn">+ New Receipt</button>
+                <?php endif; ?>
+            </div>
         </div>
         <div class="card-body">
             <div id="receipts-container" class="table-responsive">
@@ -194,7 +197,10 @@ include __DIR__ . '/../includes/header.php';
                 <h2 id="receipt-title">Purchase Receipt</h2>
                 <p class="text-muted mb-0" id="receipt-subtitle">Loading...</p>
             </div>
-            <a href="<?php echo htmlspecialchars(public_url('/frontend/pages/purchase-receipts.php')); ?>" class="btn btn-secondary"><?php echo ui_icon('arrow-left'); ?> Back to List</a>
+            <div class="d-flex gap-sm">
+                <button type="button" class="btn btn-primary" id="printReceiptBtn" disabled><?php echo ui_icon('file-text'); ?> Print Receipt</button>
+                <a href="<?php echo htmlspecialchars(public_url('/frontend/pages/purchase-receipts.php')); ?>" class="btn btn-secondary"><?php echo ui_icon('arrow-left'); ?> Back to List</a>
+            </div>
         </div>
         <div class="card-body" id="receipt-header-container">
             <div class="ui-empty-state"><strong>Loading receipt details...</strong></div>
@@ -528,6 +534,8 @@ include __DIR__ . '/../includes/header.php';
 </style>
 <?php endif; ?>
 
+<!-- Shared branded printout (logo letterhead), same as All Reports / Dispatches. -->
+<script src="<?php echo htmlspecialchars(public_url('/frontend/assets/js/sfms-print.js?v=20260928-1')); ?>"></script>
 <script>
 // ---------------------------------------------------------------------------
 // Shared constants (PHP → JS)
@@ -597,9 +605,172 @@ async function prFetch(url, options) {
 }
 
 // ---------------------------------------------------------------------------
+// PRINTING
+//
+// Uses the shared branded SfmsPrint layout (assets/js/sfms-print.js) — the
+// same PHILCST letterhead, table styling and sign-off as the All Reports and
+// Dispatches printouts, so every printed document in the system matches.
+// ---------------------------------------------------------------------------
+const PR_PRINT_ROLE_LABELS = {
+    super_admin: 'Administrator',
+    maintenance_admin: 'Head Maintenance',
+    maintenance_staff: 'Maintenance Staff',
+};
+const PR_PREPARED_ROLE = PR_PRINT_ROLE_LABELS[<?php echo json_encode($userRole); ?>] || '';
+
+function prPrintUnavailable() {
+    if (window.SfmsPrint) return false;
+    prNotify('The print layout failed to load. Please refresh the page and try again.');
+    return true;
+}
+
+function prPrintReceipt(receipt, items, openedWin) {
+    if (prPrintUnavailable()) return;
+    const esc = SfmsPrint.escape;
+    const lines = Array.isArray(items) ? items : [];
+    const totalQty = lines.reduce((sum, it) => sum + (Number(it.quantity_received) || 0), 0);
+    const isPosted = receipt.status === 'posted';
+
+    const rowsHtml = lines.length
+        ? lines.map((it, idx) => `
+            <tr>
+                <td class="c-no">${idx + 1}</td>
+                <td class="c-strong">${esc(it.item_name)}</td>
+                <td>${esc(it.category_name || '—')}</td>
+                <td>${esc(it.quantity_received)}</td>
+                <td>${esc(it.unit || '—')}</td>
+            </tr>`).join('')
+            + `<tr><td></td><td class="c-strong" colspan="2">Total</td><td class="c-strong">${esc(totalQty)}</td><td></td></tr>`
+        : '<tr><td colspan="5" class="muted" style="text-align:center;">No line items recorded.</td></tr>';
+
+    const details = [
+        { label: 'OR Number', value: receipt.or_number || '—' },
+        { label: 'Receipt Date', value: prFormatDate(receipt.receipt_date) },
+        { label: 'Supplier', value: receipt.supplier_name || '—' },
+        { label: 'Department', value: receipt.department_name || '—' },
+        { label: 'Received By', value: receipt.received_by_name || '—' },
+        { label: 'Status', value: isPosted ? 'Posted' : 'Draft' },
+    ];
+    if (receipt.remarks) details.push({ label: 'Remarks', value: receipt.remarks, wide: true });
+
+    const opened = SfmsPrint.open({
+        title: 'Purchase Receipt',
+        subtitle: `OR No. ${receipt.or_number || '—'}`,
+        preparedBy: PR_SESSION_USER_NAME,
+        preparedRole: PR_PREPARED_ROLE,
+        recordLabel: 'Line Items',
+        recordCount: lines.length,
+        orientation: 'portrait',
+        details,
+        columns: [
+            { label: 'No.', width: '7%' },
+            { label: 'Item Name', width: '43%' },
+            { label: 'Category', width: '24%' },
+            { label: 'Qty', width: '12%' },
+            { label: 'Unit', width: '14%' },
+        ],
+        rowsHtml,
+        targetWindow: openedWin,
+    });
+
+    if (!opened) {
+        prNotify('Unable to open print preview. Please allow pop-ups for this site.', 'warning');
+    }
+}
+
+async function prFetchReceipt(id) {
+    const { response, data: payload } = await prFetch(
+        `${PURCHASE_API}/${id}`,
+        { credentials: 'same-origin', headers: { 'Accept': 'application/json' } }
+    );
+    if (!response.ok || !payload.success || !payload.data?.receipt) {
+        throw new Error(payload.message || 'Failed to load receipt');
+    }
+    return {
+        receipt: payload.data.receipt,
+        items: Array.isArray(payload.data.items) ? payload.data.items : [],
+    };
+}
+
+// ---------------------------------------------------------------------------
 // LIST VIEW
 // ---------------------------------------------------------------------------
 <?php if (!$isDetail): ?>
+
+let prListReceipts = [];
+
+function prPrintReceiptList() {
+    if (prPrintUnavailable()) return;
+    if (!prListReceipts.length) {
+        prNotify('No purchase receipts to print.', 'warning');
+        return;
+    }
+
+    const esc = SfmsPrint.escape;
+    const posted = prListReceipts.filter((r) => r.status === 'posted').length;
+    const totalItems = prListReceipts.reduce((sum, r) => sum + (Number(r.item_count) || 0), 0);
+
+    const rowsHtml = prListReceipts.map((r, idx) => `
+        <tr>
+            <td class="c-no">${idx + 1}</td>
+            <td class="c-key">${esc(r.or_number)}</td>
+            <td class="c-nowrap">${esc(prFormatDate(r.receipt_date))}</td>
+            <td class="c-strong">${esc(r.supplier_name)}</td>
+            <td>${r.department_name ? esc(r.department_name) : '<span class="muted">—</span>'}</td>
+            <td>${esc(r.received_by_name || '—')}</td>
+            <td>${esc(r.item_count)}</td>
+            <td>${r.status === 'posted' ? SfmsPrint.pill('Posted', 'green') : SfmsPrint.pill('Draft', 'amber')}</td>
+        </tr>`).join('');
+
+    const opened = SfmsPrint.open({
+        title: 'Purchase Receipts Summary',
+        subtitle: 'Incoming stock recorded by OR number and supplier',
+        preparedBy: PR_SESSION_USER_NAME,
+        preparedRole: PR_PREPARED_ROLE,
+        recordLabel: 'Receipts',
+        recordCount: prListReceipts.length,
+        stats: [
+            { label: 'Total Receipts', value: prListReceipts.length, tone: 'purple' },
+            { label: 'Posted', value: posted, tone: 'green' },
+            { label: 'Draft', value: prListReceipts.length - posted, tone: 'amber' },
+            { label: 'Line Items', value: totalItems, tone: 'violet' },
+        ],
+        columns: [
+            { label: 'No.', width: '5%' },
+            { label: 'OR Number', width: '16%' },
+            { label: 'Date', width: '10%' },
+            { label: 'Supplier', width: '19%' },
+            { label: 'Department', width: '14%' },
+            { label: 'Received By', width: '18%' },
+            { label: 'Items', width: '7%' },
+            { label: 'Status', width: '11%' },
+        ],
+        rowsHtml,
+    });
+
+    if (!opened) {
+        prNotify('Unable to open print preview. Please allow pop-ups for this site.', 'warning');
+    }
+}
+
+async function prPrintReceiptById(id) {
+    if (prPrintUnavailable()) return;
+    // Open synchronously in the click handler so pop-up blockers allow it.
+    const win = window.open('', '_blank', 'width=1000,height=900');
+    if (!win) {
+        prNotify('Unable to open print preview. Please allow pop-ups for this site.', 'warning');
+        return;
+    }
+    win.document.write('<p style="font-family:Arial,sans-serif;padding:24px;">Preparing receipt…</p>');
+
+    try {
+        const { receipt, items } = await prFetchReceipt(id);
+        prPrintReceipt(receipt, items, win);
+    } catch (err) {
+        win.close();
+        prNotify(err.message || 'Unable to print receipt.');
+    }
+}
 
 async function loadReceipts() {
     try {
@@ -634,12 +805,18 @@ async function loadReceipts() {
             html += `<td>${prEscapeHtml(row.received_by_name)}</td>`;
             html += `<td>${prEscapeHtml(row.item_count)}</td>`;
             html += `<td>${prStatusBadge(row.status)}</td>`;
-            html += `<td><a class="btn btn-sm btn-primary" href="${prEscapeHtml(PURCHASE_PAGE)}?id=${row.id}">View</a></td>`;
+            html += '<td><div class="d-flex gap-sm">'
+                + `<a class="btn btn-sm btn-primary" href="${prEscapeHtml(PURCHASE_PAGE)}?id=${row.id}">View</a>`
+                + `<button type="button" class="btn btn-sm btn-secondary" data-print-receipt="${Number(row.id)}">Print</button>`
+                + '</div></td>';
             html += '</tr>';
         });
 
         html += '</tbody></table>';
         container.innerHTML = html;
+        prListReceipts = receipts;
+        const listPrintBtn = document.getElementById('printReceiptListBtn');
+        if (listPrintBtn) listPrintBtn.disabled = false;
     } catch (err) {
         document.getElementById('receipts-container').innerHTML =
             '<div class="ui-empty-state"><strong>Failed to load receipts.</strong></div>';
@@ -717,6 +894,15 @@ function initListView() {
     loadReceipts();
     loadDepartmentsIntoSelect('nr-department-id');
     loadUsersIntoReceivedBySelect();
+
+    const printListBtn = document.getElementById('printReceiptListBtn');
+    if (printListBtn) printListBtn.addEventListener('click', prPrintReceiptList);
+
+    // Row-level Print buttons are re-rendered on every load, so delegate.
+    document.getElementById('receipts-container').addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-print-receipt]');
+        if (btn) prPrintReceiptById(Number(btn.dataset.printReceipt));
+    });
 
     <?php if ($canPost): ?>
     const newReceiptBtn = document.getElementById('newReceiptBtn');
@@ -803,6 +989,10 @@ document.addEventListener('DOMContentLoaded', initListView);
 
 let prDropdownsLoaded = false;
 let prReceiptStatus = null;
+// Latest loaded receipt + line items, reused by the Print Receipt button so
+// the printout always matches what is on screen.
+let prCurrentReceipt = null;
+let prCurrentItems = [];
 
 // Removes a mistaken line while the receipt is still a draft (a draft line has
 // not added any stock yet, so this has no inventory effect).
@@ -836,6 +1026,9 @@ async function loadReceiptDetail() {
 
         const receipt = payload.data?.receipt;
         if (!receipt) throw new Error('Invalid receipt response.');
+        prCurrentReceipt = receipt;
+        const printBtn = document.getElementById('printReceiptBtn');
+        if (printBtn) printBtn.disabled = false;
 
         document.getElementById('receipt-title').textContent = 'OR# ' + (receipt.or_number || '—');
         document.getElementById('receipt-subtitle').textContent =
@@ -888,6 +1081,8 @@ async function loadReceiptItems(highlightIds) {
         }
 
         const items = Array.isArray(payload.data?.items) ? payload.data.items : [];
+        prCurrentItems = items;
+        if (payload.data?.receipt) prCurrentReceipt = payload.data.receipt;
 
         if (items.length === 0) {
             container.innerHTML = '<div class="ui-empty-state"><strong>No items added yet.</strong><span>Use the Add Items button to add line items.</span></div>';
@@ -1285,6 +1480,13 @@ function prMoveSuggestActive(delta) {
 
 function initDetailView() {
     loadReceiptDetail();
+
+    const printBtn = document.getElementById('printReceiptBtn');
+    if (printBtn) {
+        printBtn.addEventListener('click', () => {
+            if (prCurrentReceipt) prPrintReceipt(prCurrentReceipt, prCurrentItems);
+        });
+    }
 
     // --- Add Items modal ---------------------------------------------------
 

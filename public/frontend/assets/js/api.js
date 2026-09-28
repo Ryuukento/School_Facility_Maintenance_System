@@ -31,8 +31,24 @@ const API = {
             },
             body: JSON.stringify({ username, password })
         });
-        
-        const data = await response.json();
+
+        // Read as text first: if the server ever answers with an empty or
+        // non-JSON body (e.g. a crash before the API could respond), show a
+        // clear message instead of the browser's "Unexpected end of JSON
+        // input".
+        const raw = await response.text();
+        let data;
+        try {
+            data = JSON.parse(raw);
+        } catch (parseError) {
+            const error = new Error(
+                'The server could not process the sign-in request (HTTP ' + response.status + '). '
+                + 'Please try again in a moment or contact the Administrator.'
+            );
+            error.status = response.status;
+            error.data = {};
+            throw error;
+        }
 
         if (!data.success) {
             // The HTTP status and the response's data travel with the error so

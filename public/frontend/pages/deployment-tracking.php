@@ -23,7 +23,7 @@ include __DIR__ . '/../includes/header.php';
         <div class="deployment-tracking-page__title-group">
             <p class="deployment-tracking-page__eyebrow">Released Inventory Visibility</p>
             <h1 class="deployment-tracking-page__title">Deployment Tracking</h1>
-            <p class="deployment-tracking-page__description">Every deployed item — via Dispatch or Direct Room Deployment — with its source purchase receipt where available.</p>
+            <p class="deployment-tracking-page__description">Every item in a room — released through Dispatch, or recorded as existing equipment from before the system — with its source purchase receipt where available.</p>
         </div>
     </section>
 
@@ -240,7 +240,10 @@ function dtReceiptBadge(status) {
 function dtDeploymentSourceBadge(source) {
     const isDirect = source === 'direct';
     const variant = isDirect ? 'badge-info' : 'badge-primary';
-    const label = isDirect ? 'Direct Room Deployment' : 'Dispatch';
+    // Items placed in a room without a dispatch are the ones recorded with
+    // Buildings Overview "Record Existing Item" (equipment that was already
+    // in the room before the system was used).
+    const label = isDirect ? 'Existing (Pre-system)' : 'Dispatch';
     return `<span class="badge ${variant} deployment-status-badge" data-source="${dtEscapeHtml(source || 'dispatch')}">`
         + '<span class="deployment-status-dot" aria-hidden="true"></span>'
         + `${label}</span>`;
